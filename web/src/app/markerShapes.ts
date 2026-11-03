@@ -188,11 +188,19 @@ export function interiorElevation(c: Pt, angle: number, r: number, numbers: read
 export function detailCallout(centre: Pt, edge: Pt, r: number, number: string, sheet: string): MarkerDrawing | null {
   const R = dist(centre, edge);
   if (!(r > 0) || R < r) return null;
-  const u = { x: (edge.x - centre.x) / R, y: (edge.y - centre.y) / R };
+  const d = detailLeader(edge, { x: (edge.x - centre.x) / R, y: (edge.y - centre.y) / R }, r, number, sheet);
+  d.circles.unshift({ center: centre, radius: R });
+  return d;
+}
+
+/**
+ * A detail callout's leader alone, for a boundary already drawn: from `edge` on along the unit
+ * direction `u` to a bubble of radius `r` (View > Create Detail Viewport's, round its crop).
+ */
+export function detailLeader(edge: Pt, u: Pt, r: number, number: string, sheet: string): ReturnType<typeof empty> {
   const d = empty();
-  d.circles.push({ center: centre, radius: R });
-  d.lines.push([edge, add(centre, u, R + 2 * r)]);
-  bubble(d, add(centre, u, R + 3 * r), r, number, sheet);
+  d.lines.push([edge, add(edge, u, 2 * r)]);
+  bubble(d, add(edge, u, 3 * r), r, number, sheet);
   return d;
 }
 

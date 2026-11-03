@@ -722,7 +722,11 @@ its thumbnail, which can be placed in a drawing that takes pictures
   .webm where the browser can't make one). No animation path is kept in the
   drawing.
 - **Sheets**: View > Create Viewport… makes a plan viewport on a sheet, of the
-  design layers and at the scale chosen, in blank drawings too. Plan viewports
+  design layers and at the scale chosen, in blank drawings too; View > Create
+  Detail Viewport… makes one of a detail from a closed shape drawn round it, on
+  a design layer or on a sheet over a plan viewport, named by its drawing and
+  sheet numbers, with a callout round the crop and a drawing label under it.
+  Plan viewports
   draw the design layers they list, live (edits
   on a design layer show on every sheet), with the viewport's class overrides
   and grayed layers; section, elevation and detail viewports draw their cached

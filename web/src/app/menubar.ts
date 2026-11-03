@@ -691,6 +691,11 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           run: () => setViz({ clip: { ...store.viz3d.clip, on: !store.viz3d.clip.on } }),
         },
         { label: "Create Viewport…", enabled: canCreateViewport, run: () => void createViewportDialog() },
+        {
+          label: "Create Detail Viewport…",
+          enabled: () => canCreateViewport() && store.selection.size === 1,
+          run: () => void import("./detailViewport.ts").then((m) => m.createDetailViewportDialog()),
+        },
         { label: "Set Sun Position…", enabled: hasDoc, run: () => void setSunPosition() },
         { label: "Set Lighting Options…", enabled: hasDoc, run: () => void import("./lightingOptions.ts").then((m) => m.lightingOptionsDialog()) },
         "-",

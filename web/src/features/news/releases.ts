@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:10:00Z",
+    "detail-viewports",
+    "Create Detail Viewport",
+    `View > Create Detail Viewport… turns a closed shape drawn round part of a plan into a viewport of just that part, at its own scale.
+- Draw the shape on a design layer, or on a sheet over a plan viewport to blow up part of it.
+- The viewport is named by its drawing and sheet numbers and placed beside what's already on its sheet.
+- A callout bubble round the shape and a drawing label under the viewport are added for you.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:09:00Z",
     "simple-vectorscript-3d",
     "Export Simple VectorScript (3D only)",

@@ -64,13 +64,13 @@ import { ALT_KEY, BaseTool, strokeScreen, withPreview, type Painter, type Pointe
 import { addPieces, drawn, layerScale, PlaceTool, TwoPointTool, type Part } from "./detailing.ts";
 
 /** a bubble's diameter on paper, mm, until Preferences change it */
-const BUBBLE_MM = 10;
+export const BUBBLE_MM = 10;
 /** an interior elevation mark's diameter on paper, mm */
 const INTERIOR_MM = 12;
 /** a benchmark's circle on paper, mm */
 const BENCHMARK_MM = 4;
 /** a drawing label's line, at least, on paper, mm */
-const LABEL_LINE_MM = 50;
+export const LABEL_LINE_MM = 50;
 /** Vectorworks' justification values, and vertical centre */
 const JUSTIFY = { left: 1, centre: 2, right: 3 } as const;
 const V_CENTRE = 3;
