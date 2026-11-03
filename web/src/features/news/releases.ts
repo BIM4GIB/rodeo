@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:13:00Z",
+    "section-viewport",
+    "Create Section Viewport",
+    `View > Create Section Viewport… draws a section through the 3D model on a sheet.
+- Select a Section-Elevation Line, or a plain line, and pick the side to look at; a section line's arrows choose it for you.
+- What the line cuts is filled; what lies beyond is drawn in thin lines where nothing nearer hides it.
+- It is named by drawing and sheet number, with a drawing label, and one undo takes it back.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:12:00Z",
     "iges-export",
     "Export IGES",

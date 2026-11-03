@@ -12,6 +12,14 @@ This page covers viewports on sheets and their data visualisations, worksheets a
 
 **View › Create Detail Viewport…** makes a viewport of a detail from a closed shape drawn round it, on a design layer or on a sheet over a plan viewport. It is named by its drawing and sheet numbers, with a callout round the crop and a drawing label under it.
 
+### Create Section Viewport…
+
+**View › Create Section Viewport…** cuts the 3D model along a Section-Elevation Line, or a plain line or polyline, and draws what it sees on a sheet. Select the line first. The cut is filled in each object's colour with a heavier outline, and the edges beyond it are drawn where nothing nearer hides them.
+
+Look sets which side of the line, as drawn, the view faces; a section line's arrows set it for you. Display extents beyond cut plane draws what lies beyond, as far as the limit (0 for no limit); untick it to draw the cut alone. The viewport is named by its drawing and sheet numbers, with a drawing label under it.
+
+**Limits:** the drawing is made once, as the model is then, and isn't kept up to date. A line with corners is cut straight from its first point to its last. Only what lies across the line's length is drawn. The section line's bubbles aren't renumbered, and there are no render modes or section styles.
+
 ### How viewports draw
 
 Plan viewports draw the design layers they list, live (edits on a design layer show on every sheet), with the viewport's class overrides and grayed layers. Section, elevation and detail viewports draw their cached drawings, with a cached Renderworks render under their line work.
