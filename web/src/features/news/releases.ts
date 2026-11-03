@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:16:00Z",
+    "multiple-viewports",
+    "Create Multiple Viewports",
+    `View > Create Multiple Viewports… (⇧⌘M) draws the model's Front, Top, side, Bottom, Back and isometric views as viewports on a sheet.
+- Lay them out by first or third angle projection, lined up with Front.
+- Pick any of the seven views and one scale for all of them.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:15:00Z",
     "horizontal-section",
     "Create Horizontal Section Viewport",

@@ -34,6 +34,17 @@ Each elevation runs from the wall behind the look to the wall in front, across f
 
 **Limits:** the cut is drawn once and isn't kept up to date. Nothing above the cut plane is drawn, the height is measured from the active layer only, and 2D objects aren't cut.
 
+### Create Multiple Viewports…
+
+**View › Create Multiple Viewports…** (⇧⌘M) draws the 3D model's Front, Top, Right, Left, Bottom and Back views, and an isometric, as a set of viewports at one scale. Choose the views and the projection method:
+
+- **Third angle** puts Top above Front and Right to its right. It's the default for drawings in inches or feet.
+- **First angle** puts Top below Front and Left to its right. It's the default for metric drawings.
+
+The views line up with Front and are centred on the active sheet layer, or on a new sheet layer when a design layer is active. The isometric is Right Isometric in third angle and Left Isometric in first.
+
+**Limits:** the views are drawn once, hidden-line, and aren't kept up to date. There are no viewport styles.
+
 ### How viewports draw
 
 Plan viewports draw the design layers they list, live (edits on a design layer show on every sheet), with the viewport's class overrides and grayed layers. Section, elevation and detail viewports draw their cached drawings, with a cached Renderworks render under their line work.

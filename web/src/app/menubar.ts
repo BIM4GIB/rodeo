@@ -713,6 +713,12 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           enabled: () => canCreateViewport() && store.session?.doc.layers().find((l) => l.id === store.activeLayerId)?.kind === "design",
           run: () => void import("./sectionViewport.ts").then((m) => m.createHorizontalSectionDialog()),
         },
+        {
+          label: "Create Multiple Viewports…",
+          keys: "⇧⌘M",
+          enabled: canCreateViewport,
+          run: () => void import("./multipleViewports.ts").then((m) => m.createMultipleViewportsDialog()),
+        },
         { label: "Set Sun Position…", enabled: hasDoc, run: () => void setSunPosition() },
         { label: "Set Lighting Options…", enabled: hasDoc, run: () => void import("./lightingOptions.ts").then((m) => m.lightingOptionsDialog()) },
         "-",
