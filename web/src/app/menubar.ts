@@ -607,6 +607,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Export Collada (SketchUp)", enabled: hasDoc, run: () => actions.exportModel("dae") },
             { label: "Export PLY", enabled: hasDoc, run: () => actions.exportModel("ply") },
             { label: "Export STL…", enabled: hasDoc, run: () => actions.exportStl() },
+            { label: "Export STEP (3D only)…", enabled: hasDoc, run: () => void import("./stepExport.ts").then((m) => m.exportStepDialog()) },
             { label: "Export USD…", enabled: hasDoc, run: () => actions.exportUsd() },
             { label: "Export KML…", enabled: hasDoc, run: () => actions.exportKml() },
             { label: "Export Shapefile…", enabled: hasDoc, run: () => void exportShapefileDialog() },

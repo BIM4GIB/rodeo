@@ -2639,6 +2639,10 @@ its thumbnail, which can be placed in a drawing that takes pictures
   objects on the active layer (all of it when nothing there is selected), the
   active layer, or every visible design layer, binary or ASCII, in
   millimetres with z up, as the 3D view draws curved surfaces (no colours).
+  Export STEP (3D only)… writes it for mechanical CAD (AP214, millimetres):
+  each object a solid where its flat faces close round it, else surfaces, or
+  every face a body of its own (Export Solid as Trimmed Surfaces), coloured,
+  by layer; curved surfaces go flat-faceted.
   Export USD… writes the same model as Universal Scene Description, as
   Vectorworks' Export USD does: organized by layer or by texture (combining
   each texture's objects into one mesh, if asked), each object with its name,

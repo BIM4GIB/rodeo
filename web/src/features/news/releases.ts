@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:11:00Z",
+    "step-export",
+    "Export STEP",
+    `File > Export > Export STEP (3D only)… writes the 3D model for mechanical CAD programs.
+- Each object becomes a solid where its faces close round it, else a set of surfaces, named and coloured as in Rodeo.
+- Tick Export Solid as Trimmed Surfaces to make every face a body of its own.
+- Design layers carry over as layers, in millimetres; curved surfaces go faceted as the 3D view draws them.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:10:00Z",
     "detail-viewports",
     "Create Detail Viewport",

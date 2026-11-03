@@ -10,7 +10,7 @@ const M_PER_MM = 0.001;
 /**
  * The formats File > Export writes the 3D model in: OBJ and glTF here, IFC in export/ifc.ts, 3DS in
  * export/threeds.ts, Rhino 3DM in export/rhino.ts, FBX in export/fbx.ts, Collada in
- * export/collada.ts, PLY in export/ply.ts and SketchUp in export/skp.ts.
+ * export/collada.ts, PLY in export/ply.ts and SketchUp in export/skp.ts (STEP, which asks first, in export/step.ts).
  */
 export type ModelFormat = "obj" | "glb" | "ifc" | "3ds" | "3dm" | "fbx" | "dae" | "ply" | "skp";
 export const MODEL_FORMAT_NAMES: Record<ModelFormat, string> = {
