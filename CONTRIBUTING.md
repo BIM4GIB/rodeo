@@ -59,8 +59,13 @@ the problem, describe the bytes in the issue, or build a small file yourself
 - Format findings go in [FORMAT.md](FORMAT.md), with how sure we are
   (confirmed, likely, guess) and what confirmed it.
 - Feature progress against Vectorworks goes in [PARITY.md](PARITY.md).
-- The README's "Web editor" section describes what the editor does, for
-  people using it. Update it when behaviour changes.
+- The [user guide](docs/guide/README.md) describes what the editor does, for
+  people using it, one page per area. When behaviour changes, update the
+  section for that command or tool, or add one where it belongs, following
+  the page's format: a `###` per command, menu paths in bold as
+  **File › Import › Import DXF…**, shortcuts as `<kbd>⇧⌘J</kbd>`, short
+  paragraphs, and what it can't do yet under **Limits:**. Don't add user
+  documentation to the README.
 - A change people will notice also gets an entry in
   `web/src/features/news/releases.ts`, which feeds What's New.
 
