@@ -324,8 +324,10 @@ export function openContextMenu(rows: readonly Row[], x: number, y: number, owne
     if (owner && e.target instanceof Node && owner.contains(e.target)) return;
     close();
   };
-  // Escape closes the menu and is not passed on, so it does not also clear the selection
+  // Escape closes the menu and is not passed on, so it does not also clear the selection; a modifier
+  // pressed on its own leaves it open, for a Shift-click on a row
   const onKey = (e: KeyboardEvent): void => {
+    if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();

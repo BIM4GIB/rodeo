@@ -1,10 +1,13 @@
 // Joins the Stage menu's Lighting section with Convert To Lighting Device and Replace Lighting Devices
 // (devices.ts), and the Label Legend Manager, Assign Legend to Lighting Devices and Create Label
-// Legend from Lighting Device (legends.ts).
+// Legend from Lighting Device (legends.ts), Refresh Lighting Devices, and a lighting device's and a
+// hanging position's right-click commands (deviceMenu.ts).
 
+import { registerContextRows } from "../../../app/ext.ts";
 import { store } from "../../../app/state.ts";
 import { errorMessage, toast } from "../../../app/toast.ts";
 import { addStageRows } from "../registry.ts";
+import { deviceRows, refreshLightingDevices } from "./deviceMenu.ts";
 import { convertToLightingDevice, replaceLightingDevices } from "./devices.ts";
 import { assignLegend, createLegendFromDevice, labelLegendManager } from "./legends.ts";
 import "./devices.css";
@@ -18,4 +21,7 @@ addStageRows("Lighting", () => [
   { label: "Label Legend Manager…", enabled: open, run: run(labelLegendManager) },
   { label: "Assign Legend to Lighting Devices…", enabled: () => open() && store.selection.size > 0, run: run(assignLegend) },
   { label: "Create Label Legend from Lighting Device…", enabled: () => open() && store.selection.size === 1, run: run(createLegendFromDevice) },
+  { label: "Refresh Lighting Devices", keys: "⌘/", enabled: open, run: refreshLightingDevices },
 ]);
+
+registerContextRows(deviceRows);

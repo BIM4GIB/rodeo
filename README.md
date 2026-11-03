@@ -2304,6 +2304,11 @@ its thumbnail, which can be placed in a drawing that takes pictures
   what size; the active one goes on new devices, and Use Legend in Object Info
   changes one device's. Create Label Legend from Lighting Device makes a new
   legend from one device's labels.
+- **A lighting device's right-click menu**: select the devices of its type, at
+  its position, or its hanging position; take it off its position; swap two
+  selected devices (each takes the other's place, unit number and position,
+  and its circuit, dimmer and patch unless they're ticked to move with it); and
+  Refresh Lighting Devices (⌘/). A hanging position's selects the devices on it.
 - **Lighting Accessory** (Rigging): click a lighting device to add barn doors, a top
   hat, a color scroller or one of 9 other generic accessories, or Apply to Selection for
   all the selected devices. The device draws it in plan and carries its weight; Remove

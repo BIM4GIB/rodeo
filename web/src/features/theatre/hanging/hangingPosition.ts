@@ -100,6 +100,11 @@ function drawInto(s: EditSession, id: string, geometry?: string): void {
   s.setPluginDrawing(id, ids, geometry ? 0 : 1);
 }
 
+/** Draws hanging positions `ids` again, their weights from the devices on them and their labels, in the session's open batch. */
+export function redrawPositions(s: EditSession, ids: readonly string[]): void {
+  for (const id of ids) drawInto(s, id);
+}
+
 /** Where a label goes for geometry at `box` in the object's frame: above its middle. */
 function labelFor(s: EditSession, layerId: string, box: BBox | null): Pt {
   const gap = LABEL_MM * layerScale(s, layerId);

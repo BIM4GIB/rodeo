@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:08:00Z",
+    "lighting-device-menu",
+    "Lighting device right-click menu",
+    `Right-click a lighting device for Spotlight's own commands.
+- Select the devices of the same type, at the same position, or the hanging position it's on.
+- Swap two selected devices: they trade places, with the circuit, dimmer and patch staying or moving as you choose.
+- Remove from Hanging Position, and Refresh Lighting Devices (⌘/) to redraw every device and position.`,
+    "gears",
+  ),
+  release(
     "2026-11-03T13:07:00Z",
     "inventory-equipment-list",
     "Inventory and Equipment List",

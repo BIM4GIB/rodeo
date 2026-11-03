@@ -249,7 +249,7 @@ import { exitGroupOptionRows } from "./exitGroup.ts";
 import { dataBarOptionRows } from "./databar.ts";
 import { savePalettePositions, workspaceRows } from "./workspaces.ts";
 import { openSmartOptions } from "./smartOptions.ts";
-import { extensionMenus } from "./ext.ts";
+import { extensionContextRows, extensionMenus } from "./ext.ts";
 import { toast } from "./toast.ts";
 import { renderStyleRows } from "../features/render/styles.ts";
 import "./menubar.css";
@@ -1721,9 +1721,12 @@ function drawingRows(
           "-",
         ]
       : [];
+    const extra = extensionContextRows(null);
     return [
       ...vertexRows,
       ...forced,
+      ...extra,
+      ...(extra.length ? ["-" as const] : []),
       row("Edit", "Paste"),
       row("Edit", "Paste in Place"),
       row("Edit", "Repeat Last Command"),
@@ -1811,6 +1814,7 @@ function drawingRows(
     ...(isSiteModel(under) ? [{ label: "Edit Crop…", run: () => editSiteCrop(under) }] : []),
     ...(isAutoHybrid(under) ? [{ label: "Edit", run: () => editAutoHybrid(under) }] : []),
     ...textureRows(under),
+    ...extensionContextRows(under),
     ...locate,
   ];
   return [

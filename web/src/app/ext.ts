@@ -207,6 +207,7 @@ const fileHooks: ((f: FileIn) => void)[] = [];
 const leaveGuards: (() => string | null)[] = [];
 const urlHandlers: { param: string; run: (value: string, params: URLSearchParams, ctx: AppContext) => void }[] = [];
 const layerExtensions: LayerExtension[] = [];
+const contextRows: ((under: string | null) => readonly Row[])[] = [];
 const driverSources: (() => readonly PluginDriver[])[] = [];
 let wantedDriver: string | null = null;
 
@@ -292,6 +293,11 @@ export function leaveRefusal(): string | null {
 /** Adds a mark and right-click rows to each layer in the Layers list (it redraws on the store's "layer" event). */
 export function registerLayerExtension(ext: LayerExtension): void {
   layerExtensions.push(ext);
+}
+
+/** Adds rows to the drawing's right-click menu: `rows` is given the object under the pointer (null over empty space) and gives the feature's rows for it, shown with the object's own commands. */
+export function registerContextRows(rows: (under: string | null) => readonly Row[]): void {
+  contextRows.push(rows);
 }
 
 /** Adds plug-in kinds the feature draws: `drivers` gives them as they are now (installed ones come and go). */
@@ -432,6 +438,10 @@ export function editMade(session: EditSession, e: ChangeEvent, stillOpen: () => 
 
 export function extensionLayerRows(layerId: string): Row[] {
   return layerExtensions.flatMap((e) => [...(e.rows?.(layerId) ?? [])]);
+}
+
+export function extensionContextRows(under: string | null): Row[] {
+  return contextRows.flatMap((rows) => [...rows(under)]);
 }
 
 export function drawExtensionOverlays(p: Painter): void {
