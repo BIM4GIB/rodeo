@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:14:00Z",
+    "interior-elevations",
+    "Create Interior Elevation Viewport",
+    `View > Create Interior Elevation Viewport… draws a room's walls as up to four elevations on a sheet.
+- Select an Interior Elevation Marker, or a shape drawn round the room; each way it points becomes a North, East, South or West elevation.
+- Each runs from wall to wall and floor to ceiling, with what stands in the room drawn in front of the wall.
+- Section viewports now leave alone anything that only touches the cut, like a cupboard against the wall behind.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:13:00Z",
     "section-viewport",
     "Create Section Viewport",

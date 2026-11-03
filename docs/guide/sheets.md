@@ -20,6 +20,14 @@ Look sets which side of the line, as drawn, the view faces; a section line's arr
 
 **Limits:** the drawing is made once, as the model is then, and isn't kept up to date. A line with corners is cut straight from its first point to its last. Only what lies across the line's length is drawn. The section line's bubbles aren't renumbered, and there are no render modes or section styles.
 
+### Create Interior Elevation Viewport…
+
+**View › Create Interior Elevation Viewport…** draws up to four elevations of a room's walls, one for each way an Interior Elevation Marker's arrows point. Select the marker (Dims/Notes), or a closed shape drawn round the room, first. Each look is named North, East, South or West by the way it faces, and gets a number and title in the dialog; the marker's numbers start them.
+
+Each elevation runs from the wall behind the look to the wall in front, across from wall to wall and up from floor to ceiling, drawn as a section viewport is. A shape gets an Interior Elevation Marker at its middle with the numbers.
+
+**Limits:** the walls are found straight out from the marker's middle, 1 m above its layer, so something in the way (a column, a tall cupboard) stops a look short; draw a shape round the room to set the walls yourself. The viewports are drawn once and aren't linked to the marker.
+
 ### How viewports draw
 
 Plan viewports draw the design layers they list, live (edits on a design layer show on every sheet), with the viewport's class overrides and grayed layers. Section, elevation and detail viewports draw their cached drawings, with a cached Renderworks render under their line work.

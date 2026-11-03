@@ -4,7 +4,9 @@
 // outline inside another a hole in it. Beyond the plane, the edges the 3D view draws and the outlines
 // curved surfaces show against what's behind them are drawn where nothing nearer hides them; that is
 // Vectorworks' hidden-line section worked out as lines, not pixels. Nothing in front of the plane is
-// drawn, and only what lies across the line's length. Pure, so its Node check runs it.
+// drawn, and only what lies across the line's length (and between the heights given). Faces on the
+// plane are neither cut nor drawn, so what only touches it, from either side, isn't cut. Pure, so its
+// Node check runs it.
 
 import earcut from "earcut";
 import type { BBox, Pt } from "../core/index.ts";
@@ -28,6 +30,9 @@ export interface SectionPlane {
   readonly look: "left" | "right";
   /** how far beyond the plane to draw: Infinity for all of it, 0 for the cut alone */
   readonly depth: number;
+  /** the heights the view is cut to, when it is */
+  readonly bottom?: number;
+  readonly top?: number;
 }
 
 /** An object's cut and lines, in the section's frame: x across the view left to right, y up (the model's z). */
@@ -69,8 +74,8 @@ function inside(p: Pt, ring: readonly Pt[]): boolean {
   return hit;
 }
 
-/** A ring cut to the strip x0 ≤ x ≤ x1. */
-function clipRing(ring: readonly Pt[], x0: number, x1: number): Pt[] {
+/** A ring cut to a box (its sides may be infinite). */
+function clipRing(ring: readonly Pt[], box: BBox): Pt[] {
   const half = (pts: readonly Pt[], keep: (p: Pt) => number): Pt[] => {
     const out: Pt[] = [];
     for (let i = 0; i < pts.length; i++) {
@@ -86,34 +91,51 @@ function clipRing(ring: readonly Pt[], x0: number, x1: number): Pt[] {
     }
     return out;
   };
-  return half(half(ring, (p) => p.x - x0), (p) => x1 - p.x);
+  let out = [...ring];
+  if (Number.isFinite(box.x0)) out = half(out, (p) => p.x - box.x0);
+  if (Number.isFinite(box.x1)) out = half(out, (p) => box.x1 - p.x);
+  if (Number.isFinite(box.y0)) out = half(out, (p) => p.y - box.y0);
+  if (Number.isFinite(box.y1)) out = half(out, (p) => box.y1 - p.y);
+  return out;
 }
 
-/** A line's pieces within the strip x0 ≤ x ≤ x1. */
-function clipLine(line: readonly Pt[], x0: number, x1: number): Pt[][] {
+/** Where along p→q (0..1) lies within the box, or null. */
+function within(p: Pt, q: Pt, box: BBox): [number, number] | null {
+  let t0 = 0;
+  let t1 = 1;
+  for (const [fp, fq] of [
+    [p.x - box.x0, q.x - box.x0],
+    [box.x1 - p.x, box.x1 - q.x],
+    [p.y - box.y0, q.y - box.y0],
+    [box.y1 - p.y, box.y1 - q.y],
+  ]) {
+    if (fp < 0 && fq < 0) return null;
+    if (fp < 0) t0 = Math.max(t0, fp / (fp - fq));
+    else if (fq < 0) t1 = Math.min(t1, fp / (fp - fq));
+  }
+  return t1 > t0 ? [t0, t1] : null;
+}
+
+/** A line's pieces within a box. */
+function clipLine(line: readonly Pt[], box: BBox): Pt[][] {
   const out: Pt[][] = [];
   let cur: Pt[] = [];
-  const cross = (p: Pt, q: Pt, x: number): Pt => ({ x, y: p.y + ((q.y - p.y) * (x - p.x)) / (q.x - p.x) });
+  const at = (p: Pt, q: Pt, t: number): Pt => (t === 0 ? p : t === 1 ? q : { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
   for (let i = 0; i + 1 < line.length; i++) {
     const p = line[i];
     const q = line[i + 1];
-    let a = p;
-    let b = q;
-    if ((a.x < x0 && b.x < x0) || (a.x > x1 && b.x > x1)) {
+    const s = within(p, q, box);
+    if (!s) {
       if (cur.length > 1) out.push(cur);
       cur = [];
       continue;
     }
-    if (a.x < x0) a = cross(p, q, x0);
-    else if (a.x > x1) a = cross(p, q, x1);
-    if (b.x < x0) b = cross(p, q, x0);
-    else if (b.x > x1) b = cross(p, q, x1);
-    if (!cur.length || cur[cur.length - 1] !== a) {
+    if (s[0] > 0 || !cur.length) {
       if (cur.length > 1) out.push(cur);
-      cur = [a];
+      cur = [at(p, q, s[0])];
     }
-    cur.push(b);
-    if (b !== q) {
+    cur.push(at(p, q, s[1]));
+    if (s[1] < 1) {
       out.push(cur);
       cur = [];
     }
@@ -197,6 +219,8 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
   const ry = -nx;
   const x0 = plane.look === "left" ? 0 : -length;
   const x1 = plane.look === "left" ? length : 0;
+  const y0 = plane.bottom ?? -Infinity;
+  const y1 = plane.top ?? Infinity;
   const far = Math.max(0, plane.depth);
   const view = (f: Float32Array, i: number): V => {
     const dx = f[i] - plane.a.x;
@@ -214,6 +238,9 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
     }
   const size = Number.isFinite(lo) ? Math.max(hi - lo, Math.abs(hi), Math.abs(lo)) : 0;
   const tol = Math.max(0.05, size * 2e-6);
+  // what's drawn: the line's length and the heights given
+  const exact: BBox = { x0, y0, x1, y1 };
+  const snap = (v: number, lo: number, hi: number): number => (v < lo && v >= lo - tol ? lo : v > hi && v <= hi + tol ? hi : v);
   const q = (v: number): number => Math.round(v / (tol / 4));
   const keyOf = (p: V): string => `${q(p[0])},${q(p[1])},${q(p[2])}`;
 
@@ -251,6 +278,7 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
 
   for (const [id, parts] of byObject) {
     const cutSegs: [string, string][] = [];
+    const onPlane = new Map<string, { a: string; b: string; pa: Pt; pb: Pt; sides: number; color: string }>();
     const cutAt = new Map<string, Pt>();
     const cutColor = new Map<string, string>();
     /** each edge between corners: the far corner and the facing of each face on it */
@@ -271,28 +299,47 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
       const t = m.triangles;
       for (let i = 0; i + 8 < t.length; i += 9) {
         const v: V[] = [view(t, i), view(t, i + 3), view(t, i + 6)];
-        // wholly in front of the plane, or past as far as the view goes: neither cut nor seen
-        if (Math.max(v[0][2], v[1][2], v[2][2]) <= 0 || Math.min(v[0][2], v[1][2], v[2][2]) > far) continue;
+        // each corner beyond the plane (1), in front of it (-1) or on it (0)
+        const side = v.map((p) => (p[2] > tol ? 1 : p[2] < -tol ? -1 : 0));
+        const on = side.filter((s) => s === 0).length;
+        const crosses = side.includes(1) && side.includes(-1);
+        // wholly on or in front of the plane, or past as far as the view goes: neither cut nor seen
+        const seen = side.includes(1) && Math.min(v[0][2], v[1][2], v[2][2]) <= far;
+        if (!crosses && !seen && on !== 2) continue;
         const keys = v.map(keyOf);
-        // the plane's cut: where the triangle's edges cross from in front of it to beyond
-        const beyond = v.map((p) => p[2] > 0);
-        if (beyond[0] !== beyond[1] || beyond[1] !== beyond[2]) {
+        if (crosses) {
+          // the plane's cut: where the triangle's edges cross from in front of it to beyond, or a corner on it
           const ends: string[] = [];
           for (let k = 0; k < 3; k++) {
             const j = (k + 1) % 3;
-            if (beyond[k] === beyond[j]) continue;
-            const ek = keys[k] < keys[j] ? `${keys[k]}|${keys[j]}` : `${keys[j]}|${keys[k]}`;
-            if (!cutAt.has(ek)) {
-              const s = v[k][2] / (v[k][2] - v[j][2]);
-              cutAt.set(ek, { x: v[k][0] + (v[j][0] - v[k][0]) * s, y: v[k][1] + (v[j][1] - v[k][1]) * s });
+            if (side[k] === 0) {
+              const vk = `v${keys[k]}`;
+              if (!cutAt.has(vk)) cutAt.set(vk, { x: v[k][0], y: v[k][1] });
+              ends.push(vk);
+            } else if (side[k] * side[j] === -1) {
+              const ek = keys[k] < keys[j] ? `${keys[k]}|${keys[j]}` : `${keys[j]}|${keys[k]}`;
+              if (!cutAt.has(ek)) {
+                const s = v[k][2] / (v[k][2] - v[j][2]);
+                cutAt.set(ek, { x: v[k][0] + (v[j][0] - v[k][0]) * s, y: v[k][1] + (v[j][1] - v[k][1]) * s });
+              }
+              ends.push(ek);
             }
-            ends.push(ek);
           }
           cutSegs.push([ends[0], ends[1]]);
           for (const ek of ends) cutColor.set(ek, m.color);
+        } else if (on === 2 && !side.every((s) => s === 0)) {
+          // an edge on the plane is cut where faces either side of it lie in front and beyond (touching isn't cutting)
+          const k = side.findIndex((s) => s !== 0);
+          const [p0, p1] = [(k + 1) % 3, (k + 2) % 3];
+          const ek = keys[p0] < keys[p1] ? `${keys[p0]}|${keys[p1]}` : `${keys[p1]}|${keys[p0]}`;
+          const e = onPlane.get(ek);
+          if (e) e.sides |= side[k] > 0 ? 2 : 1;
+          else onPlane.set(ek, { a: `v${keys[p0]}`, b: `v${keys[p1]}`, pa: { x: v[p0][0], y: v[p0][1] }, pb: { x: v[p1][0], y: v[p1][1] }, sides: side[k] > 0 ? 2 : 1, color: m.color });
         }
+        if (!seen) continue;
         // off the line's length it's only cut, and the cut clipped
         if (Math.max(v[0][0], v[1][0], v[2][0]) < x0 - tol || Math.min(v[0][0], v[1][0], v[2][0]) > x1 + tol) continue;
+        if (Math.max(v[0][1], v[1][1], v[2][1]) < y0 - tol || Math.min(v[0][1], v[1][1], v[2][1]) > y1 + tol) continue;
         // its edges, for creases and the outlines curved surfaces show
         const ux1 = v[1][0] - v[0][0];
         const uy1 = v[1][1] - v[0][1];
@@ -314,7 +361,7 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
           } else sides.set(ek, { a: v[k], b: v[j], c: [v[3 - k - j]], n: [facing] });
         }
         // what it hides: its part beyond the plane, as far as the view goes
-        let poly = clipDepth(v, (p) => p[2]);
+        let poly = clipDepth(v, (p) => p[2] - tol);
         if (Number.isFinite(far) && poly.length) poly = clipDepth(poly, (p) => far - p[2]);
         for (let k = 1; k + 1 < poly.length; k++) addOcc(poly[0], poly[k], poly[k + 1]);
       }
@@ -349,6 +396,13 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
     const cutLines: Pt[][] = [];
     // each ring the colour of the faces its first crossing was cut from
     const colorOf = new Map<Pt[], string>();
+    for (const e of onPlane.values())
+      if (e.sides === 3) {
+        if (!cutAt.has(e.a)) cutAt.set(e.a, e.pa);
+        if (!cutAt.has(e.b)) cutAt.set(e.b, e.pb);
+        cutSegs.push([e.a, e.b]);
+        cutColor.set(e.a, e.color);
+      }
     for (const c of chain(cutSegs, cutAt)) {
       if (c.closed) {
         const ring = straighten(c.pts, true, tol);
@@ -357,18 +411,18 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
           colorOf.set(ring, cutColor.get(c.keys[0]) ?? parts[0].color);
         }
       } else {
-        for (const l of clipLine(straighten(c.pts, false, tol), x0, x1)) if (l.length > 1) cutLines.push(l);
+        for (const l of clipLine(straighten(c.pts, false, tol), exact)) if (l.length > 1) cutLines.push(l);
       }
     }
     const depthIn = rings.map((r, i) => rings.filter((o, j) => j !== i && Math.abs(area2(o)) > Math.abs(area2(r)) && inside(r[0], o)).length);
     const cuts: { outer: Pt[]; holes: Pt[][]; color: string }[] = [];
     rings.forEach((r, i) => {
       if (depthIn[i] % 2 === 1) return;
-      const outer = clipRing(area2(r) < 0 ? [...r].reverse() : r, x0, x1);
+      const outer = clipRing(area2(r) < 0 ? [...r].reverse() : r, exact);
       if (outer.length < 3 || !(Math.abs(area2(outer)) > tol * tol)) return;
       const holes = rings
         .filter((h, j) => depthIn[j] === depthIn[i] + 1 && Math.abs(area2(h)) < Math.abs(area2(r)) && inside(h[0], r))
-        .map((h) => clipRing(area2(h) > 0 ? [...h].reverse() : h, x0, x1))
+        .map((h) => clipRing(area2(h) > 0 ? [...h].reverse() : h, exact))
         .filter((h) => h.length >= 3 && Math.abs(area2(h)) > tol * tol);
       cuts.push({ outer, holes, color: colorOf.get(r) ?? parts[0].color });
     });
@@ -564,7 +618,9 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
       return k;
     };
     if (far > 0)
-      for (const [a, b] of w.edges) {
+      for (const edge of w.edges) {
+        // an end just off a bound counts as on it, so an edge along it isn't lost to rounding
+        const [a, b] = edge.map((p): V => [snap(p[0], x0, x1), snap(p[1], y0, y1), p[2]]);
         // the part of the edge beyond the plane, as far as the view goes and across the line's length
         let t0 = 0;
         let t1 = 1;
@@ -573,10 +629,12 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
           else if (fa < 0) t0 = Math.max(t0, fa / (fa - fb));
           else if (fb < 0) t1 = Math.min(t1, fa / (fa - fb));
         };
-        keep(a[2], b[2]);
+        keep(a[2] - tol, b[2] - tol);
         if (Number.isFinite(far)) keep(far - a[2], far - b[2]);
         keep(a[0] - x0, b[0] - x0);
         keep(x1 - a[0], x1 - b[0]);
+        if (Number.isFinite(y0)) keep(a[1] - y0, b[1] - y0);
+        if (Number.isFinite(y1)) keep(y1 - a[1], y1 - b[1]);
         if (!(t1 > t0)) continue;
         const lerp = (t: number): V => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
         const p = lerp(t0);
@@ -601,4 +659,40 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
     pieces.push(piece);
   }
   return { pieces, box: pieces.length ? { x0: bx0, y0: by0, x1: bx1, y1: by1 } : null };
+}
+
+/** How far from `from` along `dir` (a unit vector) the nearest of the meshes' faces lies, or null when it meets none. */
+export function nearestHit(meshes: readonly CutMesh[], from: readonly [number, number, number], dir: readonly [number, number, number]): number | null {
+  let best = Infinity;
+  const [ox, oy, oz] = from;
+  const [dx, dy, dz] = dir;
+  for (const m of meshes) {
+    const t = m.triangles;
+    for (let i = 0; i + 8 < t.length; i += 9) {
+      const e1x = t[i + 3] - t[i];
+      const e1y = t[i + 4] - t[i + 1];
+      const e1z = t[i + 5] - t[i + 2];
+      const e2x = t[i + 6] - t[i];
+      const e2y = t[i + 7] - t[i + 1];
+      const e2z = t[i + 8] - t[i + 2];
+      const px = dy * e2z - dz * e2y;
+      const py = dz * e2x - dx * e2z;
+      const pz = dx * e2y - dy * e2x;
+      const det = e1x * px + e1y * py + e1z * pz;
+      if (Math.abs(det) < 1e-12) continue;
+      const sx = ox - t[i];
+      const sy = oy - t[i + 1];
+      const sz = oz - t[i + 2];
+      const u = (sx * px + sy * py + sz * pz) / det;
+      if (u < 0 || u > 1) continue;
+      const qx = sy * e1z - sz * e1y;
+      const qy = sz * e1x - sx * e1z;
+      const qz = sx * e1y - sy * e1x;
+      const v = (dx * qx + dy * qy + dz * qz) / det;
+      if (v < 0 || u + v > 1) continue;
+      const d = (e2x * qx + e2y * qy + e2z * qz) / det;
+      if (d > 1e-6 && d < best) best = d;
+    }
+  }
+  return Number.isFinite(best) ? best : null;
 }

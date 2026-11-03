@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { Pt } from "../core/index.ts";
-import { sectionDrawing, type CutMesh, type SectionPiece } from "./sectionCut.ts";
+import { nearestHit, sectionDrawing, type CutMesh, type SectionPiece } from "./sectionCut.ts";
 
 type V3 = [number, number, number];
 
@@ -109,6 +109,13 @@ const east = { a: { x: -500, y: 500 }, b: { x: 1500, y: 500 }, look: "left" as c
   assert.ok(segs.some(([p, q]) => near(p.y, 2000) && near(q.y, 2000) && near(Math.abs(q.x - p.x), 600)), "its top edge whole");
   assert.deepEqual(d.box, { x0: 500, y0: 0, x1: 1500, y1: 2000 });
 
+  // only between two heights
+  const band = sectionDrawing([mesh("A", a.triangles, a.edges), mesh("B", b.triangles, b.edges)], { ...east, bottom: 200, top: 1500 });
+  assert.ok(near(area(piece(band.pieces, "A")!.cuts[0].outer), 800e3, 1));
+  const bandSides = segments(piece(band.pieces, "B")!.lines).filter(([p, q]) => near(p.x, q.x));
+  assert.equal(bandSides.length, 2);
+  for (const [p, q] of bandSides) assert.ok(near(Math.min(p.y, q.y), 1000, 0.5) && near(Math.max(p.y, q.y), 1500));
+  assert.deepEqual(band.box, { x0: 500, y0: 200, x1: 1500, y1: 1500 });
   // only so far beyond the plane
   const short = sectionDrawing([mesh("A", a.triangles, a.edges), mesh("B", b.triangles, b.edges)], { ...east, depth: 1000 });
   assert.equal(piece(short.pieces, "B"), undefined);
@@ -122,6 +129,34 @@ const east = { a: { x: -500, y: 500 }, b: { x: 1500, y: 500 }, look: "left" as c
   assert.equal(piece(south.pieces, "B"), undefined);
   const sx = piece(south.pieces, "A")!.cuts[0].outer.map((p) => p.x);
   assert.deepEqual([Math.min(...sx), Math.max(...sx)], [-1500, -500]);
+}
+
+// touching the plane isn't cutting: a box beyond with its face on it is drawn whole, one in front with its face on it isn't drawn
+{
+  const beyond = box(0, 500, 0, 1000, 1500, 1000);
+  const before = box(2000, -500, 0, 3000, 500, 2000);
+  const d = sectionDrawing([mesh("B", beyond.triangles, beyond.edges), mesh("F", before.triangles, before.edges)], { ...east, b: { x: 4000, y: 500 } });
+  const B = piece(d.pieces, "B")!;
+  assert.equal(B.cuts.length, 0);
+  assert.equal(segments(B.lines).reduce((n, [p, q]) => n + Math.hypot(q.x - p.x, q.y - p.y), 0), 4000, "its outline");
+  assert.equal(piece(d.pieces, "F"), undefined);
+}
+
+// a box turned 45° with two of its upright edges on the plane: cut across its whole width
+{
+  const c = (x: number, y: number, z: number): V3 => [x, y, z];
+  const ring = [c(0, 500, 0), c(500, 0, 0), c(1000, 500, 0), c(500, 1000, 0)];
+  const t: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const p = ring[i];
+    const q = ring[(i + 1) % 4];
+    t.push(...p, ...q, q[0], q[1], 1000, ...p, q[0], q[1], 1000, p[0], p[1], 1000);
+  }
+  t.push(...ring[0], ...ring[1], ...ring[2], ...ring[0], ...ring[2], ...ring[3]);
+  t.push(0, 500, 1000, 500, 0, 1000, 1000, 500, 1000, 0, 500, 1000, 1000, 500, 1000, 500, 1000, 1000);
+  const d = sectionDrawing([mesh("D", t)], east);
+  assert.equal(d.pieces[0].cuts.length, 1);
+  assert.ok(near(area(d.pieces[0].cuts[0].outer), 1e6, 1), `diamond cut ${area(d.pieces[0].cuts[0].outer)}`);
 }
 
 // only across the line's length: a line from x 0 to 600 cuts the box to 600 wide
@@ -187,6 +222,17 @@ const east = { a: { x: -500, y: 500 }, b: { x: 1500, y: 500 }, look: "left" as c
   const d = sectionDrawing([mesh("G", a.triangles, a.edges, "#ff0000"), mesh("G", b.triangles, b.edges, "#00ff00")], { a: { x: -500, y: 500 }, b: { x: 3500, y: 500 }, look: "left", depth: Infinity });
   assert.equal(d.pieces.length, 1);
   assert.deepEqual(d.pieces[0].cuts.map((c) => c.color).sort(), ["#00ff00", "#ff0000"]);
+}
+
+// the nearest face along a ray, either way it's wound
+{
+  const a = box(0, 0, 0, 1000, 1000, 1000);
+  const b = box(0, 3000, 0, 1000, 4000, 1000);
+  const ms = [mesh("A", a.triangles), mesh("B", b.triangles)];
+  assert.equal(nearestHit(ms, [500, 2000, 500], [0, 1, 0]), 1000);
+  assert.equal(nearestHit(ms, [500, 2000, 500], [0, -1, 0]), 1000);
+  assert.equal(nearestHit(ms, [500, 500, 500], [0, 0, 1]), 500, "from inside");
+  assert.equal(nearestHit(ms, [5000, 2000, 500], [1, 0, 0]), null);
 }
 
 // a big model in reasonable time

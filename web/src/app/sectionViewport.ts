@@ -7,7 +7,7 @@
 // Elevation's are, and its design layers are hidden. A line with corners is cut straight between its
 // ends, and only across its length.
 
-import type { Attributes, BBox, NewShape, Pt } from "../core/index.ts";
+import type { Attributes, BBox, EditSession, NewShape, Pt } from "../core/index.ts";
 import { attempt, setActiveLayer, setSelection, zoomToSelection } from "./commands.ts";
 import { firstFree, NEW_SHEET, viewportClasses, viewportNamesTaken } from "./createViewport.ts";
 import { nextPaint } from "./dom.ts";
@@ -17,7 +17,7 @@ import { withoutHidden } from "./hiddenObjects.ts";
 import { showLoading } from "./loading.ts";
 import { drawingLabel } from "./markerShapes.ts";
 import { colorMatcher } from "./pdfImport.ts";
-import { sectionDrawing, type SectionDrawing } from "./sectionCut.ts";
+import { sectionDrawing, type CutMesh, type SectionDrawing } from "./sectionCut.ts";
 import { store } from "./state.ts";
 import { errorMessage, toast } from "./toast.ts";
 import { toolPrefs } from "./toolPrefs.ts";
@@ -93,19 +93,123 @@ function sheetBox(sheetId: string): BBox | null {
   return box;
 }
 
-/** The section of the 3D model the design layers the 3D view shows hold, their classes shown. */
-function cutModel(src: Source, look: "left" | "right", depth: number): SectionDrawing {
-  const session = store.session!;
+/** The 3D model a section cuts: the design layers the 3D view shows, without hidden objects or hidden classes. */
+export function sectionMeshes(): CutMesh[] {
+  const session = store.session;
+  if (!session) return [];
   const ctx = appContext();
   let layers = ctx?.scene.drawnLayers(store.activeLayerId).filter((l) => l.kind === "design") ?? [];
   if (!layers.length) layers = session.doc.layers().filter((l) => l.kind === "design" && l.visibility !== "hidden");
   const shown = new Set(layers.map((l) => l.id));
   const hiddenClasses = new Set(session.doc.classes().filter((c) => c.visibility === "hidden").map((c) => c.index));
-  const meshes = withoutHidden(session.doc)
+  return withoutHidden(session.doc)
     .model3d()
     .filter((m) => shown.has(m.layerId) && !hiddenClasses.has(m.classIndex) && m.triangles.length >= 9)
     .map((m) => ({ id: m.objectId, triangles: m.triangles, edges: m.edges, color: m.color }));
-  return sectionDrawing(meshes, { a: src.a, b: src.b, look, depth });
+}
+
+/** A section's viewport size on paper at a scale: half its width and height, its margin in. */
+export function sectionHalves(box: BBox, scale: number): { halfW: number; halfH: number } {
+  return { halfW: (box.x1 - box.x0) / 2 / scale + MARGIN_MM, halfH: (box.y1 - box.y0) / 2 / scale + MARGIN_MM };
+}
+
+/** Where a new viewport goes on a sheet: right of what it holds already, tops level; at its origin when it's empty (or new). */
+export function nextSpot(sheetId: string | null, halfW: number, halfH: number): Pt {
+  const busy = sheetId === null ? null : sheetBox(sheetId);
+  return busy ? { x: busy.x1 + GAP_MM + halfW, y: busy.y1 - halfH } : { x: 0, y: 0 };
+}
+
+/** What a section viewport is: its drawing, scale, middle on the sheet, the plan point it's of, its name, and the drawing label under it if any. */
+export interface SectionView {
+  readonly drawing: SectionDrawing & { box: BBox };
+  readonly scale: number;
+  readonly mid: Pt;
+  readonly at: Pt;
+  readonly name: string;
+  readonly label: { readonly number: string; readonly sheet: string; readonly title: string } | null;
+}
+
+/**
+ * Adds a section viewport to a sheet in a batch: a viewport showing no design layers, the drawing in
+ * its annotations (the cut filled with a heavier outline, the lines beyond thin, each object's
+ * grouped), and its drawing label on the sheet under it. The viewport.
+ */
+export function addSectionViewport(s: EditSession, sheetId: string, view: SectionView): string {
+  const { drawing, scale, mid } = view;
+  const box = drawing.box;
+  const { halfW, halfH } = sectionHalves(box, scale);
+  const match = colorMatcher();
+  const ink = (hex: string): number => {
+    const h = /^#([0-9a-f]{6})/i.exec(hex)?.[1] ?? "808080";
+    return match({ r: parseInt(h.slice(0, 2), 16) / 255, g: parseInt(h.slice(2, 4), 16) / 255, b: parseInt(h.slice(4, 6), 16) / 255 });
+  };
+  const black = ink("#000000");
+  const centre = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+  // annotations are at the sheet × the scale
+  const place = (p: Pt): Pt => ({ x: p.x - centre.x + mid.x * scale, y: p.y - centre.y + mid.y * scale });
+  const id = s.createViewport(sheetId, {
+    scale,
+    box: { x0: mid.x - halfW, y0: mid.y - halfH, x1: mid.x + halfW, y1: mid.y + halfH },
+    at: view.at,
+    layers: [],
+    classes: viewportClasses(s.doc),
+    classIndex: store.activeClassIndex,
+  });
+  if (view.name) s.setObjectName(id, view.name);
+  const notes = s.doc.openAnnotations(id);
+  if (!notes) throw new Error("The viewport's annotations couldn't be opened.");
+  try {
+    for (const piece of drawing.pieces) {
+      const parts: { shape: NewShape; look: Partial<Attributes> }[] = [];
+      for (const c of piece.cuts) {
+        const fill = ink(c.color);
+        // a cut with holes: one outline, each hole joined to it by an edge both ways that isn't drawn
+        const points = c.outer.map(place);
+        const hidden: number[] = [];
+        for (const h of c.holes) {
+          const ring = h.map(place);
+          let bi = 0;
+          let bj = 0;
+          let best = Infinity;
+          points.forEach((p, i) =>
+            ring.forEach((q, j) => {
+              const d = Math.hypot(p.x - q.x, p.y - q.y);
+              if (d < best) [best, bi, bj] = [d, i, j];
+            }),
+          );
+          const loop = [...ring.slice(bj), ...ring.slice(0, bj + 1)];
+          // shift the hidden edges after where the hole goes in
+          for (let k = 0; k < hidden.length; k++) if (hidden[k] > bi) hidden[k] += loop.length + 1;
+          hidden.push(bi, bi + loop.length);
+          points.splice(bi + 1, 0, ...loop, points[bi]);
+        }
+        const shape: NewShape = hidden.length ? { kind: "polyline", points, closed: true, hidden } : { kind: "polygon", points, closed: true };
+        parts.push({ shape, look: { penFore: black, lineWeight: CUT_MILS, fillPattern: 1, fillFore: fill, fillBack: fill, fillOpacity: 100, penOpacity: 100 } });
+      }
+      for (const l of piece.cutLines) parts.push({ shape: { kind: "polygon", points: l.map(place), closed: false }, look: { penFore: black, lineWeight: CUT_MILS, fillPattern: 0 } });
+      for (const l of piece.lines)
+        parts.push({
+          shape: l.length === 2 ? { kind: "line", a: place(l[0]), b: place(l[1]) } : { kind: "polygon", points: l.map(place), closed: false },
+          look: { penFore: black, lineWeight: LINE_MILS, fillPattern: 0 },
+        });
+      const ids = s.addObjects(
+        notes,
+        parts.map((p) => p.shape),
+        store.activeClassIndex,
+        parts.map((p) => p.look),
+      );
+      if (ids.length > 1) s.groupObjects(ids);
+    }
+  } finally {
+    s.doc.openAnnotations(null);
+  }
+  if (view.label) {
+    // on the sheet under the viewport's box, as Vectorworks' drawing label sits
+    const lr = BUBBLE_MM / 2;
+    const d = drawingLabel({ x: mid.x - halfW + lr, y: mid.y - halfH - 1.6 * lr }, lr, view.label.number, view.label.sheet, view.label.title, `Scale 1:${scale}`, LABEL_LINE_MM);
+    if (d) s.groupObjects(markerParts(d).map((p) => addPart(s, sheetId, p)));
+  }
+  return id;
 }
 
 export async function createSectionViewportDialog(): Promise<void> {
@@ -181,7 +285,7 @@ export async function createSectionViewportDialog(): Promise<void> {
   let drawing: SectionDrawing;
   try {
     await nextPaint();
-    drawing = cutModel(src, look, depth);
+    drawing = sectionDrawing(sectionMeshes(), { a: src.a, b: src.b, look, depth });
   } catch (err) {
     toast(`The section couldn't be cut: ${errorMessage(err)}`);
     return;
@@ -193,86 +297,13 @@ export async function createSectionViewportDialog(): Promise<void> {
     if (!box) toast("The line doesn't cut or look at any 3D objects on the visible design layers.", "info");
     return;
   }
-  const halfW = (box.x1 - box.x0) / 2 / scale + MARGIN_MM;
-  const halfH = (box.y1 - box.y0) / 2 / scale + MARGIN_MM;
-  // on paper right of what the sheet holds already, tops level; at the sheet's origin on an empty one
-  const busy = chosen === NEW_SHEET ? null : sheetBox(chosen);
-  const mid = busy ? { x: busy.x1 + GAP_MM + halfW, y: busy.y1 - halfH } : { x: 0, y: 0 };
-  const match = colorMatcher();
-  const ink = (hex: string): number => {
-    const h = /^#([0-9a-f]{6})/i.exec(hex)?.[1] ?? "808080";
-    return match({ r: parseInt(h.slice(0, 2), 16) / 255, g: parseInt(h.slice(2, 4), 16) / 255, b: parseInt(h.slice(4, 6), 16) / 255 });
-  };
-  const black = ink("#000000");
-  const centre = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
-  // annotations are at the sheet × the scale
-  const place = (p: Pt): Pt => ({ x: p.x - centre.x + mid.x * scale, y: p.y - centre.y + mid.y * scale });
+  const { halfW, halfH } = sectionHalves(box, scale);
+  const mid = nextSpot(chosen === NEW_SHEET ? null : chosen, halfW, halfH);
   const made = attempt("Create Section Viewport", (s) =>
     s.batch(() => {
       const sheetId = chosen === NEW_SHEET ? s.createLayer(newSheetName, "sheet") : chosen;
-      const id = s.createViewport(sheetId, {
-        scale,
-        box: { x0: mid.x - halfW, y0: mid.y - halfH, x1: mid.x + halfW, y1: mid.y + halfH },
-        at: { x: (src.a.x + src.b.x) / 2, y: (src.a.y + src.b.y) / 2 },
-        layers: [],
-        classes: viewportClasses(s.doc),
-        classIndex: store.activeClassIndex,
-      });
-      if (name) s.setObjectName(id, name);
-      const notes = s.doc.openAnnotations(id);
-      if (!notes) throw new Error("The viewport's annotations couldn't be opened.");
-      try {
-        for (const piece of drawing.pieces) {
-          const parts: { shape: NewShape; look: Partial<Attributes> }[] = [];
-          for (const c of piece.cuts) {
-            const fill = ink(c.color);
-            // a cut with holes: one outline, each hole joined to it by an edge both ways that isn't drawn
-            const points = c.outer.map(place);
-            const hidden: number[] = [];
-            for (const h of c.holes) {
-              const ring = h.map(place);
-              let bi = 0;
-              let bj = 0;
-              let best = Infinity;
-              points.forEach((p, i) =>
-                ring.forEach((q, j) => {
-                  const d = Math.hypot(p.x - q.x, p.y - q.y);
-                  if (d < best) [best, bi, bj] = [d, i, j];
-                }),
-              );
-              const loop = [...ring.slice(bj), ...ring.slice(0, bj + 1)];
-              // shift the hidden edges after where the hole goes in
-              for (let k = 0; k < hidden.length; k++) if (hidden[k] > bi) hidden[k] += loop.length + 1;
-              hidden.push(bi, bi + loop.length);
-              points.splice(bi + 1, 0, ...loop, points[bi]);
-            }
-            const shape: NewShape = hidden.length ? { kind: "polyline", points, closed: true, hidden } : { kind: "polygon", points, closed: true };
-            parts.push({ shape, look: { penFore: black, lineWeight: CUT_MILS, fillPattern: 1, fillFore: fill, fillBack: fill, fillOpacity: 100, penOpacity: 100 } });
-          }
-          for (const l of piece.cutLines) parts.push({ shape: { kind: "polygon", points: l.map(place), closed: false }, look: { penFore: black, lineWeight: CUT_MILS, fillPattern: 0 } });
-          for (const l of piece.lines)
-            parts.push({
-              shape: l.length === 2 ? { kind: "line", a: place(l[0]), b: place(l[1]) } : { kind: "polygon", points: l.map(place), closed: false },
-              look: { penFore: black, lineWeight: LINE_MILS, fillPattern: 0 },
-            });
-          const ids = s.addObjects(
-            notes,
-            parts.map((p) => p.shape),
-            store.activeClassIndex,
-            parts.map((p) => p.look),
-          );
-          if (ids.length > 1) s.groupObjects(ids);
-        }
-      } finally {
-        s.doc.openAnnotations(null);
-      }
-      if (v.flag("label")) {
-        // on the sheet under the viewport's box, as Vectorworks' drawing label sits
-        const lr = BUBBLE_MM / 2;
-        const d = drawingLabel({ x: mid.x - halfW + lr, y: mid.y - halfH - 1.6 * lr }, lr, number, sheetName, title, `Scale 1:${scale}`, LABEL_LINE_MM);
-        if (d) s.groupObjects(markerParts(d).map((p) => addPart(s, sheetId, p)));
-      }
-      return { sheetId, id };
+      const view = { drawing: { ...drawing, box }, scale, mid, at: { x: (src.a.x + src.b.x) / 2, y: (src.a.y + src.b.y) / 2 }, name, label: v.flag("label") ? { number, sheet: sheetName, title } : null };
+      return { sheetId, id: addSectionViewport(s, sheetId, view) };
     }),
   );
   if (!made) return;

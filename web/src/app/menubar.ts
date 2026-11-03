@@ -703,6 +703,11 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           enabled: () => canCreateViewport() && store.selection.size === 1,
           run: () => void import("./sectionViewport.ts").then((m) => m.createSectionViewportDialog()),
         },
+        {
+          label: "Create Interior Elevation Viewport…",
+          enabled: () => canCreateViewport() && store.selection.size === 1,
+          run: () => void import("./interiorElevation.ts").then((m) => m.createInteriorElevationDialog()),
+        },
         { label: "Set Sun Position…", enabled: hasDoc, run: () => void setSunPosition() },
         { label: "Set Lighting Options…", enabled: hasDoc, run: () => void import("./lightingOptions.ts").then((m) => m.lightingOptionsDialog()) },
         "-",
