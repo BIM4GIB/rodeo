@@ -289,7 +289,13 @@ The reader is `web/src/import/rvt.ts`, with `cfb.ts` for the compound file aroun
 
 **File › Export › Export STEP (3D only)…** writes the model for mechanical CAD (AP214, millimetres): each object a solid where its flat faces close round it, else surfaces, or every face a body of its own (Export Solid as Trimmed Surfaces), coloured, by layer.
 
-**Limits:** curved surfaces go flat-faceted.
+**Limits:** curved surfaces go flat-faceted, and it hasn't been opened in a CAD program yet (only Rodeo's own STEP reader has checked it).
+
+### IGES
+
+**File › Export › Export IGES (3D only)…** writes the same bodies as IGES 5.3 (millimetres), as Vectorworks does: solids as B-rep objects (Type 186), the rest as trimmed surfaces (Type 144), or every face a trimmed surface of its own (Export Solid as Trimmed Surfaces). Objects keep their names and colours, each layer a numbered level.
+
+**Limits:** curved surfaces go flat-faceted, levels are numbered rather than named, and it hasn't been opened in a CAD program yet (only Rodeo's own IGES reader has checked it).
 
 ### USD
 

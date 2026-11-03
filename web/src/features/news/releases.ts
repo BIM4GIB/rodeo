@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:12:00Z",
+    "iges-export",
+    "Export IGES",
+    `File > Export > Export IGES (3D only)… writes the 3D model as IGES 5.3, for CAD programs that take it.
+- Objects whose faces close round them become solids; the rest become trimmed surfaces.
+- Tick Export Solid as Trimmed Surfaces to make every face a surface of its own.
+- Names, colours and layers carry over, in millimetres; curved surfaces go faceted as the 3D view draws them.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:11:00Z",
     "step-export",
     "Export STEP",
