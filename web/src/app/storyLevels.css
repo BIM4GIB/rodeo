@@ -1,0 +1,91 @@
+/* A story's levels, in Navigation > Stories' Edit Story and Organization's Levels…: each row a
+   level type, its elevation above the story, the design layer at it and a remove button, then Add
+   Level, inside the shared dialog shell (menubar.css). Colours come from the tokens in styles.css,
+   so both themes follow. */
+
+.menu-dialog.story-levels-dialog {
+  width: min(560px, 100%);
+}
+
+.sl-head,
+.sl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 96px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 4px;
+}
+
+.sl-head {
+  margin: 10px 0 4px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.sl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(280px, 40vh);
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.sl-type,
+.sl-elevation,
+.sl-layer {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+}
+
+.sl-elevation {
+  text-align: right;
+}
+
+.sl-type:focus,
+.sl-elevation:focus,
+.sl-layer:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+.sl-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sl-remove:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.sl-empty {
+  color: var(--text-2);
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.sl-add {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 520px) {
+  .sl-head,
+  .sl-row {
+    grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr) 22px;
+  }
+}

@@ -1,0 +1,11 @@
+/* Inventory and Equipment List: Spotlight's long column names wrap, so the table fits the dialog. */
+
+.ccad-table.inventory-table th {
+  white-space: normal;
+  vertical-align: bottom;
+  max-width: 96px;
+}
+
+.ccad-table.inventory-table .menu-dialog-select {
+  min-width: 120px;
+}

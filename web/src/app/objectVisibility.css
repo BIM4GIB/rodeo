@@ -1,0 +1,39 @@
+/* The drawing's Unhide Objects button (objectVisibility.ts), shown while objects are hidden, in the edit bars' stack */
+
+.unhide-objects {
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--pill-border);
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unhide-objects svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Use Small Buttons: the icon alone */
+.unhide-objects.icon-only {
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+.unhide-objects:hover {
+  background: var(--fill-hover);
+}
+
+.unhide-objects[hidden] {
+  display: none;
+}

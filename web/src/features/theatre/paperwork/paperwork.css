@@ -1,0 +1,45 @@
+/* Stage > Lighting Paperwork (paperwork.ts): the tabs' stacking, feet, filter and limit. Tables and notes are ui.ts's. */
+
+.paperwork-tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.paperwork-foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.paperwork-filter,
+.paperwork-number {
+  padding: 4px 8px;
+  color: var(--text);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.paperwork-filter {
+  flex: 1;
+  min-width: 160px;
+}
+
+.paperwork-number {
+  width: 96px;
+}
+
+.paperwork-limit {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}

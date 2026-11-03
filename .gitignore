@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+samples/
+*.vwx
+web/node_modules/
+web/dist/
+# a link to the samples (as a worktree has) is never committed either
+/samples

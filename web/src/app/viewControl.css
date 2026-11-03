@@ -1,0 +1,244 @@
+/* The Onscreen View Control (viewControl.ts): a cube in a corner of the drawing, above the bars there */
+
+.ovc {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 128px;
+  pointer-events: none;
+}
+
+.ovc[hidden] {
+  display: none;
+}
+
+/* in a corner of the drawing area, or of the active pane when there are several (viewControl.ts sets --pane-*) */
+.ovc[data-position="bl"] {
+  left: calc(16px + var(--pane-left, 0px));
+  bottom: calc(60px + var(--pane-bottom, 0px));
+}
+
+.ovc[data-position="br"] {
+  right: calc(16px + var(--pane-right, 0px));
+  bottom: calc(60px + var(--pane-bottom, 0px));
+}
+
+.ovc[data-position="tl"] {
+  left: calc(16px + var(--pane-left, 0px));
+  top: calc(56px + var(--pane-top, 0px));
+}
+
+.ovc[data-position="tr"] {
+  right: calc(16px + var(--pane-right, 0px));
+  top: calc(12px + var(--pane-top, 0px));
+}
+
+/* View > Rulers: clear of the rulers along the drawing's left and top */
+.stage.rulers .ovc[data-position="bl"],
+.stage.rulers .ovc[data-position="tl"] {
+  left: calc(32px + var(--pane-left, 0px));
+}
+
+.stage.rulers .ovc[data-position="tr"] {
+  top: calc(28px + var(--pane-top, 0px));
+}
+
+.ovc-cube {
+  width: 128px;
+  height: 128px;
+  overflow: visible;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ovc.turning .ovc-cube {
+  cursor: grabbing;
+}
+
+/* turned off: only the menu button, as the pointer nears the corner */
+.ovc.off .ovc-cube {
+  display: none;
+}
+
+.ovc-face-fill {
+  fill: var(--surface);
+  stroke: var(--text-3);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+
+.ovc-face-shade {
+  fill: var(--text);
+  pointer-events: none;
+}
+
+.ovc-face-label {
+  fill: var(--text-2);
+  font-family: var(--font);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ovc-cell {
+  fill: var(--accent);
+  fill-opacity: 0;
+}
+
+.ovc-cell.current {
+  fill-opacity: 0.28;
+}
+
+.ovc-cell.hover {
+  fill-opacity: 0.5;
+}
+
+.ovc-axis {
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.ovc-axis-label {
+  font-family: var(--font);
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ovc-x {
+  stroke: #e5484d;
+  fill: #e5484d;
+}
+
+.ovc-y {
+  stroke: #30a46c;
+  fill: #30a46c;
+}
+
+.ovc-z {
+  stroke: #3e63dd;
+  fill: #3e63dd;
+}
+
+.ovc-axis-label.ovc-x,
+.ovc-axis-label.ovc-y,
+.ovc-axis-label.ovc-z {
+  stroke: none;
+}
+
+/* the top face's 2D/3D toggle: Top/Plan, or back to the 3D view */
+.ovc-toggle-fill {
+  fill: var(--pill);
+  stroke: var(--pill-border);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+
+.ovc-toggle:hover .ovc-toggle-fill {
+  fill: var(--accent);
+  fill-opacity: 0.5;
+}
+
+.ovc-toggle-label {
+  fill: var(--text-soft);
+  font-family: var(--font);
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ovc-toggle:hover .ovc-toggle-label {
+  fill: var(--text);
+}
+
+/* the settings: shown as the pointer nears the control */
+.ovc-menu {
+  position: absolute;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--pill-border);
+  border-radius: 6px;
+  background: var(--pill);
+  color: var(--text-soft);
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.ovc[data-position="bl"] .ovc-menu,
+.ovc[data-position="tl"] .ovc-menu {
+  left: -6px;
+}
+
+.ovc[data-position="br"] .ovc-menu,
+.ovc[data-position="tr"] .ovc-menu {
+  right: -6px;
+}
+
+.ovc:hover .ovc-menu,
+.ovc.off .ovc-menu:hover,
+.ovc-menu:focus-visible,
+.ovc-menu[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* turned off, the menu button waits where the cube's corner was */
+.ovc.off {
+  width: 40px;
+  height: 40px;
+  pointer-events: auto;
+}
+
+.ovc.off:hover .ovc-menu {
+  opacity: 1;
+}
+
+/* a phone's drawing has no room for it */
+@media (max-width: 599px) {
+  .ovc {
+    display: none;
+  }
+}
+
+/* the compass ring round the cube's foot, in a georeferenced drawing: it only shows */
+.ovc-compass {
+  pointer-events: none;
+}
+
+.ovc-compass-ring,
+.ovc-compass-tick {
+  fill: none;
+  stroke: #7a808a;
+  stroke-width: 1;
+}
+
+.ovc-compass-letter {
+  font-family: var(--font);
+  font-size: 8px;
+  font-weight: 700;
+  fill: #7a808a;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.ovc-compass-letter.north {
+  fill: #e5484d;
+}

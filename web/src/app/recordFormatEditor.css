@@ -1,0 +1,108 @@
+/* Tools > Records > New and Edit Record Format: the name, the field rows (name, type, default and
+   their move and remove buttons) and Add Field, inside the shared dialog shell (menubar.css).
+   Colours come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.rf-dialog {
+  width: min(560px, 100%);
+}
+
+.menu-dialog-input.rf-name {
+  width: 260px;
+  text-align: left;
+}
+
+.rf-head,
+.rf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 104px minmax(0, 1fr) 22px 22px 22px;
+  align-items: center;
+  gap: 4px;
+}
+
+.rf-head {
+  margin: 6px 0 4px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.rf-head span:last-child {
+  grid-column: 3 / 7;
+}
+
+.rf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(320px, 45vh);
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.rf-field,
+.rf-value,
+.rf-kind {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+}
+
+.rf-kind:disabled {
+  color: var(--text-2);
+}
+
+.rf-field:focus,
+.rf-value:focus,
+.rf-kind:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+.rf-default {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.rf-check {
+  margin: 0 4px;
+}
+
+.rf-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.rf-btn:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.rf-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.rf-add {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 520px) {
+  .rf-head,
+  .rf-row {
+    grid-template-columns: minmax(0, 1fr) 84px minmax(0, 1fr) 22px 22px 22px;
+  }
+}

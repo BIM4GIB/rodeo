@@ -1,0 +1,120 @@
+/* The lighting windows of the Stage menu's beam tools: the light coverage readout and the wash plan with its
+   mini plan. Solid panels in the app's tokens, so both themes follow. */
+
+.beam-cov {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.beam-cov-note,
+.beam-wash-note,
+.beam-wash-head {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.beam-cov-note,
+.beam-wash-note {
+  color: var(--text-2);
+}
+
+.beam-cov-stats,
+.beam-wash-stats {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.beam-cov-stats dt,
+.beam-wash-stats dt {
+  color: var(--text-2);
+}
+
+.beam-cov-stats dd,
+.beam-wash-stats dd {
+  margin: 0;
+}
+
+.beam-ramp-title {
+  color: var(--text-2);
+}
+
+.beam-ramp {
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.beam-ramp-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.beam-wash {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.beam-wash-head {
+  font-weight: 600;
+}
+
+.beam-plan {
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.beam-plan svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+}
+
+.beam-plan line,
+.beam-plan rect,
+.beam-plan polygon,
+.beam-plan circle {
+  vector-effect: non-scaling-stroke;
+}
+
+.beam-plan-area {
+  fill: none;
+  stroke: var(--text-3);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+}
+
+.beam-plan-axis {
+  stroke: var(--text-3);
+  stroke-width: 1px;
+}
+
+.beam-plan-pipe {
+  stroke: var(--text);
+  stroke-width: 1.5px;
+}
+
+.beam-plan-pool {
+  stroke-width: 1px;
+}
+
+.beam-plan-unit {
+  fill: var(--text);
+}
+
+.beam-plan-focus {
+  fill: var(--text);
+}
+
+.beam-plan-label {
+  fill: var(--text-2);
+}

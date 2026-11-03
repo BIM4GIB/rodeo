@@ -1,0 +1,182 @@
+/* The Load Check and Power Balance windows (loadCheck.ts, powerPanel.ts). The windows' frame and tables are in
+   ../theatre.css; these are the batten drawings, the charts, the phase bars and the fields. Solid colours only. */
+
+.loads-host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.loads-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.loads-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}
+
+.loads-label {
+  white-space: nowrap;
+}
+
+.loads-unit,
+.loads-hint {
+  color: var(--text-3);
+}
+
+.loads-input {
+  min-width: 0;
+  padding: 4px 8px;
+  color: var(--text);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.loads-small {
+  width: 72px;
+}
+
+.loads-wide {
+  flex: 1;
+  min-width: 200px;
+}
+
+.loads-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loads-table .th-table-wrap {
+  max-height: 240px;
+}
+
+.loads-heading {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.loads-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loads-detail-head {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.loads-detail p,
+.loads-detail ul {
+  margin: 0;
+}
+
+.loads-hoists {
+  padding-left: 18px;
+  color: var(--text-2);
+}
+
+.loads-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.loads-svg text {
+  fill: var(--text-2);
+  font-size: 10px;
+}
+
+.loads-svg .loads-batten {
+  stroke: var(--text);
+  stroke-width: 3;
+}
+
+.loads-svg .loads-hang {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.4;
+}
+
+.loads-svg .loads-hoist {
+  fill: var(--accent);
+}
+
+.loads-svg .loads-zero {
+  stroke: var(--border);
+  stroke-dasharray: 3 3;
+}
+
+.loads-svg .loads-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+}
+
+.loads-moment .loads-line {
+  stroke: var(--warn);
+}
+
+.loads-svg .loads-peak {
+  fill: var(--text);
+}
+
+.loads-bars {
+  display: grid;
+  gap: 6px;
+}
+
+.loads-bar-row {
+  display: grid;
+  grid-template-columns: 30px minmax(100px, 1fr) minmax(150px, auto);
+  align-items: center;
+  gap: 8px;
+}
+
+.loads-phase-name {
+  font-weight: 600;
+}
+
+.loads-bar {
+  height: 14px;
+  overflow: hidden;
+  background: var(--fill);
+  border-radius: 3px;
+}
+
+.loads-bar > i {
+  display: block;
+  height: 100%;
+}
+
+.loads-phase-0 {
+  background: var(--accent);
+}
+
+.loads-phase-1 {
+  background: #b07ce8;
+}
+
+.loads-phase-2 {
+  background: #4caf6e;
+}
+
+.loads-bar-text {
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

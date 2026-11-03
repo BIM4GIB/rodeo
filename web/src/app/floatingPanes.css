@@ -1,0 +1,92 @@
+/* View > Multiple View Panes > Create Floating View Pane (floatingPanes.ts): views of the drawing in
+   windows of their own over the drawing area, with a floating palette's title bar and frame. */
+
+.fpanes {
+  position: absolute;
+  inset: 0 8px 8px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.stage.no-doc .fpanes {
+  display: none;
+}
+
+.fpane {
+  position: absolute;
+  pointer-events: auto;
+  min-height: 0;
+}
+
+.fpane .pal-head {
+  height: 32px;
+}
+
+.fpane-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--chrome-border);
+  background: #e6e7ea;
+}
+
+.fpane.plan .fpane-body {
+  background: var(--paper);
+}
+
+.fpane-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.fpane-canvas.dragging {
+  cursor: grabbing;
+}
+
+/* View > Dark Canvas: the plan's ink and paper swap, as in the drawing */
+.dark-canvas .fpane.plan .fpane-body {
+  background: #0f0f0f;
+}
+
+.dark-canvas .fpane.plan .fpane-canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* rolled up to its title */
+.fpane.collapsed {
+  height: auto !important;
+}
+
+.fpane.collapsed .fpane-body,
+.fpane.collapsed .fpane-grip {
+  display: none;
+}
+
+/* the corner is rounded and clips: the grip reaches in past the curve, its mark inside it */
+.fpane-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.fpane-grip::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  opacity: 0.7;
+}

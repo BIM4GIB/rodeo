@@ -1,0 +1,8 @@
+/* Model > Create Surface Array: rows of two fields, X' and Y' */
+.menu-dialog.surface-array-dialog {
+  width: min(480px, calc(100vw - 32px));
+}
+
+.surface-array-dialog .menu-dialog-select {
+  width: 160px;
+}

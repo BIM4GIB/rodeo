@@ -1,0 +1,23 @@
+/* Tools > Records > Split Record Format… (mergeSplitRecords.ts): the source format's fields as a scrolling list of tick boxes */
+.menu-dialog.split-record-dialog {
+  width: min(420px, 100%);
+}
+
+.split-fields-label {
+  margin-top: 8px;
+}
+
+.split-fields {
+  display: flex;
+  flex-direction: column;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
+  margin: 4px 0 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--fill);
+}
+
+.split-fields .menu-dialog-check {
+  margin: 3px 0;
+}

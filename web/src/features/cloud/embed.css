@@ -1,0 +1,42 @@
+/* Links that open a shared drawing (urls.ts): the bar above a view-only drawing, and an
+   embed (?embed=), which keeps only the drawing, zoom and fit, and the 2D and 3D switch.
+   The rest of the editor is hidden there, so a frame shows a view, not an editor. */
+
+.share-banner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--chrome-border);
+  background: var(--chrome);
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+body.embed .tb-left,
+body.embed #tb-tools,
+body.embed .tb-center > .tb-group:not(#tb-view),
+body.embed .tb-right > .spacer,
+body.embed #save-split,
+body.embed .hud,
+body.embed .dock,
+body.embed .menu-panel {
+  display: none !important;
+}
+
+.embed-link {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  padding: 4px 9px;
+  border: 1px solid var(--pill-border);
+  border-radius: 6px;
+  background: var(--pill);
+  color: var(--text-soft);
+  font-size: 11px;
+  text-decoration: none;
+}

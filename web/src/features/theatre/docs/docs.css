@@ -1,0 +1,34 @@
+/* The Stage paperwork and audit windows (controls.ts, focusCardsPanel.ts, auditPanel.ts). The window shell and
+   tables come from theatre.css; these are the bits only they use. */
+
+.docs-cards-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+}
+
+.docs-audit-table td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.docs-print-frame {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.docs-cards-body,
+.docs-audit-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}

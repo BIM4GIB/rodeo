@@ -1,0 +1,256 @@
+/* ConnectCAD's Edit Sockets: a device's sockets in a dense table that scrolls, the one clicked marked. */
+
+.menu-dialog.ccad-dialog {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.menu-dialog.ccad-dialog .muted {
+  max-width: none;
+}
+
+.ccad-scroll {
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.ccad-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ccad-table th {
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 2px 6px 4px 0;
+}
+
+.ccad-table td {
+  padding: 2px 6px 2px 0;
+}
+
+.ccad-table .menu-dialog-input {
+  width: 100%;
+  min-width: 64px;
+}
+
+.ccad-table input[type="text"] {
+  text-align: left;
+}
+
+.ccad-table .ccad-num {
+  width: 52px;
+  min-width: 52px;
+}
+
+.ccad-centre {
+  text-align: center;
+}
+
+.ccad-table tr.ccad-focus td {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.ccad-table tr.ccad-gone td {
+  opacity: 0.45;
+}
+
+.ccad-table td.ccad-missing {
+  color: var(--danger);
+}
+
+/* Edit Cabling: cables assigned to circuits greyed, spare ones editable; each route's colour box */
+.ccad-table tr.ccad-assigned td {
+  opacity: 0.6;
+}
+
+.ccad-swatch {
+  display: inline-block;
+  width: 22px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-radius: 3px;
+  vertical-align: middle;
+  background: none;
+}
+
+.ccad-note:empty {
+  display: none;
+}
+
+.ccad-builder-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+/* the device's details two to a line, so the socket rows stay in view */
+.ccad-builder-top > .ccad-pane {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+}
+
+.ccad-builder-top > .ccad-label-preview {
+  flex: none;
+  max-width: 45%;
+  overflow: auto;
+}
+
+.ccad-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ccad-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.ccad-report th,
+.ccad-report td {
+  white-space: nowrap;
+}
+
+.ccad-report .ccad-gap td {
+  height: 12px;
+}
+
+/* a row dragged to reorder (Rack Equipment Columns) */
+.ccad-table tr.ccad-drag {
+  cursor: grab;
+}
+
+/* Create Labels' preview of one label, white as on paper */
+.ccad-label-preview {
+  margin: 10px 0 4px;
+  min-height: 24px;
+}
+
+.ccad-label-preview svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ConnectCAD Status: a severity dot, small view and resolve buttons */
+.ccad-status td {
+  vertical-align: middle;
+}
+
+.ccad-status-sev {
+  white-space: nowrap;
+}
+
+.ccad-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.ccad-status-view {
+  white-space: nowrap;
+}
+
+.ccad-status-btn {
+  padding: 0 6px;
+  min-height: 20px;
+  font-size: 12px;
+}
+
+.ccad-status-btn svg {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+}
+
+/* Adapter Slot: the equipment's face to click on, its slots, and the slot picked */
+.menu-dialog.ccad-slot-dialog {
+  width: min(600px, 100%);
+}
+
+.ccad-slot-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+
+.ccad-slot-bar > .menu-dialog-field {
+  flex: 1 1 160px;
+}
+
+.ccad-slot-face {
+  display: block;
+  margin: 4px 0 6px;
+  border-radius: 6px;
+  background: var(--fill);
+  cursor: crosshair;
+}
+
+.ccad-slot-face:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.ccad-slot-body,
+.ccad-slot-ear {
+  fill: #d9d9d9;
+  stroke: #404040;
+}
+
+.ccad-slot-ear {
+  fill: #b8b8b8;
+}
+
+.ccad-slot-rect {
+  fill: #dde3ea;
+  stroke: #202020;
+}
+
+.ccad-slot {
+  cursor: pointer;
+}
+
+.ccad-slot-on .ccad-slot-rect {
+  fill: #fff3c4;
+  stroke: var(--accent);
+}
+
+.ccad-slot-cross {
+  stroke: #202020;
+}
+
+.ccad-slot-text {
+  fill: #202020;
+}
+
+.ccad-slot-ghost {
+  fill: none;
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
+.ccad-slot-bad {
+  stroke: #e5484d;
+}
+
+.ccad-slot-note,
+.ccad-slot-status {
+  margin: 0 0 8px;
+}
+
+.ccad-slot-picked {
+  margin: 4px 0 0;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}

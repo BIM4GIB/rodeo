@@ -1,0 +1,43 @@
+/* Navigation panel extras: the "Layer options" / "Class options" rows and the
+   Views tab. Colours come from the tokens in src/styles.css. */
+
+.display-options .muted {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* the select takes the rest of the row, and wraps onto its own line when narrow */
+.display-options .select {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+}
+
+.view-row .names {
+  padding: 2px 0;
+}
+
+.view-vis {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.view-vis input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.view-del {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-2);
+}
+
+.view-del:hover {
+  color: var(--danger);
+}

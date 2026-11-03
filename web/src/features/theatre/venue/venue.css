@@ -1,0 +1,68 @@
+/* Stage > Venue's windows: the lineset table's selected row and the hang plot. Solid panels in the app's tokens. */
+
+.venue-row-on td {
+  background: var(--fill-strong);
+}
+
+.venue-plot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.venue-plot svg {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  height: auto;
+}
+
+.venue-plot text {
+  fill: var(--text);
+  font-family: inherit;
+}
+
+.venue-plot .venue-label {
+  font-size: 11px;
+}
+
+.venue-plot .venue-small {
+  font-size: 10px;
+  fill: var(--text-2);
+}
+
+.venue-plot .venue-axis {
+  stroke: var(--text-2);
+  stroke-width: 1;
+}
+
+.venue-plot .venue-marker {
+  stroke: var(--text-3);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.venue-plot .venue-dotted {
+  stroke-dasharray: 2 3;
+}
+
+.venue-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--text-2);
+}
+
+.venue-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.venue-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}

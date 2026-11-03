@@ -1,0 +1,361 @@
+/* The Visibility Grid (dialog.ts): a resizable dialog over the drawing. Colours are the tokens in
+   styles.css, so both themes follow. The row, column and sheet heads stick to the scroll edges. */
+
+.menu-dialog.vg-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(960px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 32px));
+  height: min(620px, calc(100dvh - 32px));
+  min-width: min(560px, calc(100vw - 32px));
+  min-height: min(360px, calc(100vh - 32px));
+  min-height: min(360px, calc(100dvh - 32px));
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  padding: 14px 16px 12px;
+  overflow: hidden;
+  resize: both;
+}
+
+.vg-top {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.menu-dialog .vg-title {
+  margin: 0 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-dialog .vg-search {
+  width: 200px;
+  text-align: left;
+}
+
+.menu-dialog .vg-sheet {
+  width: 200px;
+}
+
+.vg-note {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* the grid: one scroll box, its content as tall and wide as the table */
+.vg-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.vg-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.vg-canvas {
+  position: relative;
+}
+
+.vg-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  height: 138px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.vg-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  width: 200px;
+  padding: 0 8px 6px;
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.vg-sheetgroup {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.vg-sheetgroup.sep {
+  box-shadow: inset 1px 0 0 var(--chrome-border);
+}
+
+.vg-sheethead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: none;
+  border-bottom: 1px solid var(--divider);
+  background: none;
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.vg-sheethead:hover {
+  background: var(--fill-hover);
+}
+
+.vg-sheetnum {
+  flex: none;
+  font-weight: 600;
+}
+
+.vg-sheettitle {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+}
+
+.vg-colheads {
+  display: flex;
+  height: 112px;
+}
+
+.vg-colhead {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  width: 26px;
+  height: 112px;
+  padding: 0 0 6px;
+  box-sizing: border-box;
+  border: none;
+  background: none;
+  color: var(--text-soft);
+  font-size: 11px;
+  cursor: default;
+}
+
+.vg-colhead:hover,
+.vg-colhead.hl-col {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+/* the name runs up the column; a section, elevation or detail (drawn from the file's copy) is italic */
+.vg-vtext {
+  display: block;
+  width: 14px;
+  height: 100px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.vg-colhead.other .vg-vtext {
+  color: var(--text-3);
+  font-style: italic;
+}
+
+.vg-window {
+  position: absolute;
+  left: 0;
+  width: 100%;
+}
+
+.vg-row {
+  display: flex;
+  height: 24px;
+}
+
+.vg-row:hover {
+  background: var(--fill);
+}
+
+.vg-rowhead {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  align-items: center;
+  width: 200px;
+  height: 24px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: none;
+  background-color: var(--surface);
+  color: var(--text-soft);
+  font-size: 11px;
+  text-align: left;
+  cursor: default;
+}
+
+.vg-row:hover .vg-rowhead {
+  background-image: linear-gradient(var(--fill), var(--fill));
+  color: var(--text);
+}
+
+.vg-rowname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vg-cell {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  box-sizing: border-box;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.vg-cell svg {
+  width: 15px;
+  height: 15px;
+}
+
+.vg-cell.v-hidden {
+  color: var(--text-3);
+}
+
+/* a class the viewport doesn't list shows the class's own visibility, faded */
+.vg-cell.inherited {
+  opacity: 0.45;
+}
+
+.vg-cell.sheet-start {
+  box-shadow: inset 1px 0 0 var(--chrome-border);
+}
+
+.vg-cell.hl-col {
+  background: var(--fill-hover);
+}
+
+.vg-cell.pending {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.vg-cell:focus-visible,
+.vg-rowhead:focus-visible,
+.vg-colhead:focus-visible,
+.vg-sheethead:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.vg-dialog.readonly .vg-cell {
+  cursor: default;
+}
+
+.vg-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+}
+
+.vg-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.vg-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vg-key svg {
+  width: 14px;
+  height: 14px;
+}
+
+.vg-key .vis-hidden {
+  display: inline-flex;
+  color: var(--text-3);
+}
+
+.vg-key > span:first-child {
+  display: inline-flex;
+}
+
+.vg-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vg-count {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-dialog .vg-foot .btn {
+  flex: none;
+}
+
+/* a phone: the legend, the count and Done wrap onto lines of their own, and the grid scrolls */
+@media (max-width: 560px), (max-height: 600px) {
+  .menu-dialog.vg-dialog {
+    height: min(620px, calc(100dvh - 16px));
+  }
+
+  .vg-foot {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .vg-hint {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  .menu-dialog .vg-foot .btn {
+    margin-left: auto;
+  }
+}

@@ -1,0 +1,45 @@
+/* View > Set Sun Position… (sunPosition.ts) */
+.sun-fields .menu-dialog-input {
+  width: 72px;
+}
+
+.sun-fields .menu-dialog-select {
+  width: 56px;
+}
+
+.sun-fields .menu-dialog-select.wide {
+  width: 164px;
+}
+
+/* page north's degree sign takes the place of the N/S and E/W choices, so the inputs line up */
+.sun-fields .menu-dialog-unit {
+  min-width: 56px;
+}
+
+/* the date: its month, then its day */
+.sun-fields select[aria-label="Month"] {
+  width: 112px;
+}
+
+.sun-fields input[aria-label="Day"] {
+  width: 48px;
+}
+
+.sun-fields input[type="time"] {
+  width: 96px;
+}
+
+.sun-head {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.sun-out {
+  flex: none;
+  width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}

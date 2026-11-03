@@ -1,0 +1,408 @@
+/* Search feature: Search Everything, Find Usages and the Query Bar. Colours are the
+   editor's tokens from styles.css, so the light and dark themes follow it. */
+
+/* ---- Search Everything -------------------------------------------------------- */
+
+.sx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 42;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.sx-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: 68vh;
+  min-height: 0;
+  background: var(--chrome);
+  color: var(--text);
+  border: 1px solid var(--chrome-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font: 12px/1.35 var(--font);
+}
+
+.sx-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.sx-search-icon,
+.sx-query-icon,
+.sx-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-soft);
+}
+
+.sx-search-icon svg,
+.sx-query-icon svg,
+.sx-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.sx-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: 14px var(--font);
+}
+
+.sx-input::placeholder {
+  color: var(--text-soft);
+  opacity: 0.8;
+}
+
+.sx-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 6px 6px;
+}
+
+.sx-group {
+  padding: 10px 8px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.sx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sx-item.active {
+  background: var(--select);
+}
+
+.sx-item.active .sx-icon {
+  color: var(--text);
+}
+
+.sx-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sx-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sx-label mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sx-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.sx-keys {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--fill-strong);
+  color: var(--text-soft);
+  font: 11px var(--mono);
+}
+
+.sx-usage-hint {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.sx-empty {
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--text-soft);
+}
+
+.sx-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--divider);
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.sx-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sx-hint kbd {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--fill-strong);
+  font: 10.5px var(--mono);
+}
+
+/* ---- Query Bar ---------------------------------------------------------------- */
+
+.sx-query {
+  position: fixed;
+  top: calc(var(--topbar-h) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 41;
+  width: min(580px, calc(100vw - 32px));
+  padding: 8px 10px 9px;
+  background: var(--chrome);
+  color: var(--text);
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font: 12px/1.35 var(--font);
+}
+
+.sx-query-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sx-query-icon {
+  padding-left: 2px;
+}
+
+.sx-query-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--fill);
+  color: var(--text);
+  font: 12.5px var(--mono);
+}
+
+.sx-query-input:focus {
+  border-color: var(--accent);
+}
+
+.sx-query-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--btn);
+  color: var(--text);
+  font: 12px var(--font);
+  cursor: pointer;
+}
+
+.sx-query-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.sx-query-status {
+  min-height: 16px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
+
+.sx-query-status.error {
+  color: var(--danger);
+}
+
+.sx-query-error {
+  font-weight: 500;
+}
+
+.sx-caret {
+  margin: 4px 0 0;
+  overflow-x: auto;
+  white-space: pre;
+  font: 11.5px/1.3 var(--mono);
+  color: var(--text-soft);
+}
+
+.sx-help {
+  margin-top: 8px;
+  padding: 10px 2px 2px;
+  border-top: 1px solid var(--divider);
+  font-size: 11.5px;
+}
+
+.sx-help[hidden] {
+  display: none;
+}
+
+.sx-help-line {
+  display: block;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-radius: 6px;
+  background: var(--fill);
+  font: 11px var(--mono);
+}
+
+.sx-help-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+}
+
+.sx-help-list dt {
+  color: var(--text-soft);
+}
+
+.sx-help-list dd {
+  margin: 0;
+}
+
+.sx-help-examples-title {
+  margin: 6px 0 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.sx-help-example {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: 11px var(--mono);
+  cursor: pointer;
+}
+
+.sx-help-example:hover {
+  background: var(--fill-hover);
+}
+
+/* ---- Find Usages -------------------------------------------------------------- */
+
+.menu-dialog.sx-usages-dialog {
+  width: min(540px, 100%);
+}
+
+.sx-usages-summary {
+  margin: 0 0 8px;
+}
+
+.sx-usages-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.sx-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(52vh, 420px);
+  margin: 0 -4px;
+  overflow-y: auto;
+}
+
+.sx-usage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: 12px var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sx-usage:hover {
+  background: var(--fill-hover);
+}
+
+.sx-usage-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sx-usage-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.sx-usage-how {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.sx-usage-layer {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+/* a Quick Preference's switch, set in place */
+.sx-check {
+  flex: none;
+  margin: 0;
+  pointer-events: none;
+}

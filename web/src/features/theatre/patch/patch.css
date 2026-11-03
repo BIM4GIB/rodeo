@@ -1,0 +1,275 @@
+/* The Patch window (patchPanel.ts): a form over a preview table, the numbering, and each universe's map. Solid
+   panels in the app's tokens, so both themes follow. Class names carry the folder's prefix. */
+
+.patch-form {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.patch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.patch-input {
+  min-width: 0;
+  padding: 4px 6px;
+  color: var(--text);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.patch-input[type="number"] {
+  width: 96px;
+}
+
+.patch-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.patch-status {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.patch-summary {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.patch-actions {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.patch-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.patch-universe {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.patch-universe-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  font-weight: 600;
+}
+
+.patch-universe-head span {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.patch-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  touch-action: none;
+}
+
+.patch-readout {
+  min-height: 1.4em;
+  margin: 0;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.patch-blocks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.patch-blocks li {
+  padding: 3px 0;
+  border-top: 1px solid var(--divider);
+}
+
+/* Stage > Lighting > DMX Patch… (dmxPatchDialog.ts): Spotlight's patch dialog, a list over Patch Settings and the
+   diagnostic diagram. The diagram's problem colours are its own; the rest takes the app's tokens. */
+
+.menu-dialog.patch-dmx-dialog {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.menu-dialog.patch-dmx-dialog .muted {
+  max-width: none;
+}
+
+.patch-dmx-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.patch-dmx-filter {
+  margin: 0;
+}
+
+.patch-dmx-filter select {
+  min-width: 140px;
+  text-align: left;
+}
+
+.patch-dmx-scroll {
+  max-height: 32vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.patch-dmx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.patch-dmx-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 6px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--border);
+}
+
+.patch-dmx-table td {
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.patch-dmx-row {
+  cursor: default;
+}
+
+.patch-dmx-row.patch-dmx-sel td {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.patch-dmx-cell.menu-dialog-input {
+  width: 64px;
+  min-width: 0;
+  padding: 2px 4px;
+}
+
+.patch-dmx-cell.patch-dmx-bad,
+.patch-dmx-num.patch-dmx-bad {
+  border-color: var(--danger);
+}
+
+.patch-dmx-fixed {
+  color: var(--text-2);
+}
+
+.patch-dmx-problems {
+  color: var(--danger);
+}
+
+.patch-dmx-status {
+  min-height: 1.3em;
+  margin: 6px 0 0;
+}
+
+.patch-dmx-settings {
+  margin: 10px 0;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.patch-dmx-settings legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.patch-dmx-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.patch-dmx-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.patch-dmx-fields .menu-dialog-field {
+  margin: 0;
+}
+
+.patch-dmx-num.menu-dialog-input {
+  width: 72px;
+}
+
+.patch-dmx-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.patch-dmx-canvas {
+  cursor: grab;
+}
+
+.patch-dmx-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 4px;
+  color: var(--text-2);
+}
+
+.patch-dmx-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.patch-dmx-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.patch-dmx-swatch-sel {
+  border: 2px solid var(--accent);
+}

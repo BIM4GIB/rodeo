@@ -1,0 +1,74 @@
+/* File > Title Block Manager…: project data, the title blocks ticked, and their sheet data, as
+   label and control rows inside the shared dialog shell (menubar.css). */
+
+.menu-dialog.tb-dialog {
+  width: min(520px, 100%);
+}
+
+.tb-head {
+  margin: 10px 0 6px;
+}
+
+.tb-head:first-of-type {
+  margin-top: 0;
+}
+
+.tb-fields {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tb-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.tb-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tb-dialog .tb-input {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+.tb-dialog .tb-input.num {
+  width: 96px;
+  text-align: right;
+}
+
+.tb-check {
+  display: flex;
+  align-items: center;
+  height: 26px;
+}
+
+.tb-sheets {
+  max-height: 128px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+}
+
+.tb-sheets .menu-dialog-check {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
+
+.tb-all {
+  margin: 4px 0 10px;
+}
+
+@media (max-width: 480px) {
+  .tb-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}

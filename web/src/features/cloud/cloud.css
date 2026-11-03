@@ -1,0 +1,405 @@
+/* Cloud drawings: the Open from Cloud and share dialogs, the Version History palette and
+   the welcome screen's cloud block. The dialog shell is menubar.css's; colours are the
+   tokens in styles.css, so both themes follow. */
+
+/* ---- dialogs ---------------------------------------------------------- */
+
+.menu-dialog.cloud-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+}
+
+.menu-dialog.cloud-dialog {
+  width: min(760px, 100%);
+}
+
+.menu-dialog.share-dialog {
+  width: min(560px, 100%);
+}
+
+.cloud-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.cloud-wide-input {
+  width: 220px;
+  text-align: left;
+}
+
+.cloud-note {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.cloud-note:empty {
+  display: none;
+}
+
+/* ---- Open from Cloud -------------------------------------------------- */
+
+.cloud-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cloud-tabs {
+  flex: none;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--fill);
+}
+
+.cloud-tabs .seg-btn.active {
+  background: var(--btn);
+  color: var(--text);
+}
+
+.cloud-search,
+.share-input {
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.cloud-search {
+  flex: 1 1 180px;
+}
+
+.cloud-search:focus,
+.share-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+.cloud-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.cloud-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  overflow: hidden;
+  border: none;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.cloud-card:hover {
+  background: var(--fill-hover);
+}
+
+.cloud-thumb,
+.cloud-thumb-empty {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: contain;
+  background: var(--paper);
+}
+
+.cloud-thumb-empty {
+  display: grid;
+  place-items: center;
+  background: var(--fill);
+  color: var(--text-3);
+}
+
+.cloud-thumb-empty svg {
+  width: 40%;
+  height: 40%;
+}
+
+.cloud-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px 4px;
+}
+
+.cloud-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-meta {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 10px;
+}
+
+.btn.small.danger:hover:not(:disabled) {
+  background: var(--fill-strong);
+}
+
+.cloud-usage-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cloud-usage-text {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.cloud-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--fill-strong);
+}
+
+.cloud-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+/* ---- share --------------------------------------------------------------- */
+
+.share-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.share-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.share-heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.share-people {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.share-initial {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--select);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.share-who {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.share-name,
+.share-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-email {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.share-role {
+  color: var(--text-2);
+}
+
+.share-role-select {
+  width: 110px;
+  text-align: left;
+}
+
+.share-invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.share-invite-row .share-input {
+  flex: 1 1 160px;
+}
+
+.share-invite-row .menu-dialog-select {
+  width: 110px;
+}
+
+.share-invite-result,
+.share-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-invite-result:empty {
+  display: none;
+}
+
+.share-hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.share-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.share-code {
+  flex: 1 1 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.share-link {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.share-link-head,
+.share-create {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ---- Version History palette ------------------------------------------ */
+
+.cloud-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.cloud-history .cloud-note {
+  padding: 4px;
+}
+
+.ver-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ver-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.ver-row:hover {
+  background: var(--fill-hover);
+}
+
+.ver-when {
+  grid-column: 1;
+  grid-row: 1;
+  font-weight: 500;
+}
+
+.ver-tag {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--select);
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.ver-who,
+.ver-label {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ver-label {
+  color: var(--text-soft);
+  font-style: italic;
+}

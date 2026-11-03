@@ -1,0 +1,94 @@
+/* File > Export > Export USDZ (AR)… and Export glTF (AR)…: the layer list and the summary, inside the shared
+   dialog shell (menubar.css). Colours come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.usdz-dialog {
+  width: min(420px, 100%);
+}
+
+.usdz-hint,
+.usdz-summary {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.usdz-heading {
+  margin: 4px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.usdz-layers {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.usdz-layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.usdz-layer:hover {
+  background: var(--surface-hover);
+}
+
+.usdz-layer input:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.usdz-layer-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usdz-layer-meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.usdz-scale-row {
+  display: flex;
+  gap: 6px;
+}
+
+.usdz-scale {
+  width: 110px;
+  text-align: left;
+}
+
+.usdz-custom {
+  width: 80px;
+  text-align: left;
+}
+
+.usdz-custom[hidden] {
+  display: none;
+}
+
+.usdz-warn {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c26a14;
+}
+
+.usdz-warn[hidden] {
+  display: none;
+}

@@ -1,0 +1,102 @@
+/* Data bar: live values beside the cursor while a drawing tool is active. */
+
+.databar {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  max-width: min(360px, calc(100% - 12px));
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: 12px/1.3 var(--font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.databar[hidden] {
+  display: none;
+}
+
+.databar-caption {
+  color: var(--text-2);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.databar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* a field Data Bar Options doesn't show */
+.databar-field[hidden] {
+  display: none;
+}
+
+.databar-label {
+  min-width: 16px;
+  color: var(--text-2);
+}
+
+/* X and Y measured from the SmartCursor datum */
+.databar.from-datum .databar-field:has(> .databar-input[data-key="x"]) .databar-label,
+.databar.from-datum .databar-field:has(> .databar-input[data-key="y"]) .databar-label {
+  color: var(--accent);
+}
+
+.databar-input {
+  /* wide enough for feet-and-inches such as 12'-6 1/2" */
+  width: 88px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+
+.databar-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* a typed value: highlighted until Enter or Esc */
+.databar-input.is-locked {
+  border-color: var(--accent);
+  background: var(--surface-active);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.databar-input.is-invalid {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.databar-suffix {
+  color: var(--text-2);
+}
+
+/* a phone: the bar takes less of the drawing, its fields wrapping under the caption */
+@media (max-width: 560px) {
+  .databar {
+    max-width: min(240px, calc(100% - 80px));
+  }
+
+  .databar-input {
+    width: 72px;
+  }
+}

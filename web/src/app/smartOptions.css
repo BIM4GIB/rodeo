@@ -1,0 +1,224 @@
+/* the Smart Options display (smartOptions.ts): a ring at the cursor, a panel beside it */
+.smart {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 28;
+}
+
+.smart-ring {
+  position: fixed;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  box-shadow: var(--shadow);
+}
+
+.smart-hub,
+.smart-seg {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.smart-hub {
+  left: 46px;
+  top: 46px;
+  width: 34px;
+  height: 34px;
+  background: var(--fill);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.smart-hub svg,
+.smart-seg svg {
+  width: 18px;
+  height: 18px;
+}
+
+.smart-seg {
+  width: 36px;
+  height: 36px;
+}
+
+.smart-seg.top {
+  left: 45px;
+  top: 4px;
+}
+
+.smart-seg.right {
+  right: 4px;
+  top: 45px;
+}
+
+.smart-seg.bottom {
+  left: 45px;
+  bottom: 4px;
+}
+
+.smart-seg.left {
+  left: 4px;
+  top: 45px;
+}
+
+.smart-seg:hover,
+.smart-hub:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.smart-seg.active {
+  background: var(--fill-strong);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* the segment's name, shown in the panel's title instead */
+.smart-seg-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.smart-panel {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.smart-title {
+  padding: 7px 10px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Tools: Basic and the tool sets as tabs, icons only in a fixed grid */
+.tool-picker .picker-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 6px 0;
+  max-width: 260px;
+}
+
+.picker-tab {
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.picker-tab:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.picker-tab[aria-selected="true"] {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.smart-panel .tool-grid {
+  grid-template-columns: repeat(8, 28px);
+}
+
+.smart-panel .tool-name {
+  display: none;
+}
+
+/* Snaps: the Snapping palette's toggles, six to a row */
+.smart-panel.top .tool-grid {
+  grid-template-columns: repeat(6, 28px);
+}
+
+/* Layers: the layers and the classes side by side, each list scrolling */
+.smart-cols {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+}
+
+.smart-col {
+  display: flex;
+  flex-direction: column;
+  width: 176px;
+  min-height: 0;
+}
+
+.smart-head {
+  padding: 0 4px 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.smart-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(48vh, 300px);
+  overflow-y: auto;
+}
+
+.smart-group {
+  padding: 6px 6px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
+.smart-item {
+  flex: none;
+  height: var(--row-h);
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.smart-item:hover {
+  background: var(--fill-hover);
+}
+
+.smart-item.active {
+  background: var(--fill-strong);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* View: the View menu's rows, a menu panel kept above the ring */
+.menu-panel.smart-menu {
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}

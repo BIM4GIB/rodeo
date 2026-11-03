@@ -1,0 +1,97 @@
+/* Dialogs on a phone and on a short screen (a phone in landscape): the shared dialog shell
+   (menubar.css) and the dialogs built beside it fit the screen. A long one scrolls inside its box
+   and its buttons stay at the foot. Desktop is unchanged: every rule here sits in a media query. */
+
+@media (max-width: 560px), (max-height: 600px) {
+  /* the backdrop is one cell, so a box can be no wider than the screen (its content would
+     otherwise set the cell's width) and no taller than the space between the safe areas */
+  .menu-dialog-backdrop {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    padding: calc(8px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+  }
+
+  .menu-dialog {
+    max-width: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* a field the focus scrolls to clears the footer that sticks to the foot of the box */
+    scroll-padding-bottom: 72px;
+  }
+
+  /* the buttons stay on screen while the body above them scrolls */
+  .menu-dialog > .menu-dialog-actions {
+    position: sticky;
+    bottom: -16px;
+    z-index: 2;
+    margin: 14px -16px -16px;
+    padding: 10px 16px 16px;
+    background: var(--chrome);
+    border-top: 1px solid var(--divider);
+  }
+
+  /* the tool and menu shortcut lists: one column */
+  .tk-list,
+  .mk-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* the tabs (Organization, Batch Rename, Visibility Grid) wrap, and the search goes below them */
+  .menu-dialog .org-top {
+    flex-wrap: wrap;
+  }
+
+  .menu-dialog .seg {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+}
+
+/* A finger needs a target of 40 px or more. Only a coarse pointer gets these, so a mouse on a
+   desktop keeps the sizes above. Small icon buttons keep their size and grow a larger hit area. */
+@media (pointer: coarse) {
+  .menu-dialog .btn {
+    height: 40px;
+    padding: 0 14px;
+  }
+
+  .menu-dialog .btn.small {
+    height: 36px;
+  }
+
+  .menu-dialog-input,
+  .menu-dialog select {
+    min-height: 40px;
+  }
+
+  .menu-dialog-check,
+  .menu-dialog label:has(> input[type="checkbox"]) {
+    min-height: 40px;
+  }
+
+  .menu-dialog input[type="checkbox"],
+  .menu-dialog input[type="radio"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  .menu-dialog .rf-btn,
+  .menu-dialog .re-btn,
+  .menu-dialog .sl-remove,
+  .menu-dialog .ts-fold,
+  .menu-dialog .ts-btn {
+    position: relative;
+  }
+
+  .menu-dialog .rf-btn::after,
+  .menu-dialog .re-btn::after,
+  .menu-dialog .sl-remove::after,
+  .menu-dialog .ts-fold::after,
+  .menu-dialog .ts-btn::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+}

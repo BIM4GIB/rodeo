@@ -1,0 +1,18 @@
+/* The Working Planes palette: the active plane's origin and facing under the buttons. Colours
+   come from the tokens in src/styles.css. */
+
+.working-plane-info {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--divider);
+  overflow-wrap: anywhere;
+}
+
+.working-plane-info:empty {
+  display: none;
+}
+
+.working-planes .row .names {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+}

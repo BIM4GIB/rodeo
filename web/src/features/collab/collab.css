@@ -1,0 +1,255 @@
+/* Live collaboration: the top bar's avatars and status, the banner over the drawing while
+   following, and the Collaborators palette. Colours come from the editor's tokens; a peer's
+   colour is set on each element as --peer. */
+
+.collab-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.collab-bar[hidden] {
+  display: none;
+}
+
+.collab-avatars {
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+}
+
+.collab-avatar {
+  --peer: var(--text-3);
+  position: relative;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--peer);
+  border-radius: 50%;
+  background: var(--chrome);
+  overflow: hidden;
+  color: var(--text);
+  font: 600 10px/1 var(--font);
+  cursor: pointer;
+}
+
+.collab-avatars > .collab-avatar + .collab-avatar,
+.collab-avatars > .collab-more {
+  margin-left: -7px;
+}
+
+button.collab-avatar:hover {
+  filter: brightness(1.08);
+}
+
+.collab-avatar.self,
+span.collab-avatar {
+  cursor: default;
+}
+
+.collab-avatar.following {
+  box-shadow: 0 0 0 2px var(--chrome), 0 0 0 4px var(--peer);
+}
+
+.collab-avatar.collab-more {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  width: auto;
+  padding: 0 6px;
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+
+.collab-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.collab-initials {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--peer);
+  color: #ffffff;
+}
+
+.collab-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 2px 0 4px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.collab-dot.live {
+  background: #30a46c;
+}
+
+.collab-dot.connecting {
+  background: var(--warn);
+}
+
+.collab-dot.offline {
+  background: var(--text-3);
+}
+
+/* the banner over the drawing while following: below the View bar, centred */
+.collab-follow {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 40px);
+  box-sizing: border-box;
+  padding: 5px 12px 5px 9px;
+  border: 1px solid var(--pill-border);
+  border-radius: 999px;
+  background: var(--pill);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 500 12px/1.2 var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.collab-follow[hidden] {
+  display: none;
+}
+
+.collab-follow::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--peer, var(--accent));
+}
+
+.collab-follow-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* the Collaborators palette */
+
+.collab-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.collab-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.collab-row .collab-avatar {
+  margin: 0;
+}
+
+.collab-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.collab-name,
+.collab-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collab-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.collab-where {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.collab-empty {
+  margin: 6px 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* File > Project Sharing…: each layer, who has it checked out, and Check Out or Release */
+.sharing-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(50vh, 420px);
+  margin: 8px 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.sharing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 6px 3px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.sharing-row:last-child {
+  border-bottom: none;
+}
+
+.sharing-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sharing-who {
+  flex: none;
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.sharing-who.mine {
+  color: var(--accent);
+}
+
+.sharing-who.theirs {
+  color: var(--warn);
+}
+
+.sharing-row .btn,
+.sharing-none {
+  flex: none;
+  width: 84px;
+}
+
+.sharing-actions {
+  display: flex;
+  gap: 8px;
+}

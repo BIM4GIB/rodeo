@@ -1,0 +1,5 @@
+.menu-dialog.trees-loci-dialog { width: min(560px, calc(100vw - 32px)); }
+.trees-loci-table { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr) 72px; gap: 4px 8px; align-items: center; max-height: 300px; overflow: auto; }
+.trees-loci-table .menu-dialog-input { width: 100%; min-width: 0; }
+.trees-loci-head { font-weight: 600; }
+.trees-loci-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

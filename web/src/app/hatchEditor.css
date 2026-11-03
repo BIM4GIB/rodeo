@@ -1,0 +1,148 @@
+/* Resources > Edit, New and Duplicate Hatch: the preview beside the name, ground, page sizing and
+   the levels list, then the selected level's fields, inside the shared dialog shell (menubar.css).
+   Colours come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.hatch-dialog {
+  width: min(560px, 100%);
+}
+
+.hatch-top {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.hatch-preview {
+  flex: none;
+  width: 168px;
+  height: 168px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.hatch-settings {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Modify > Hatch…: the drawing's hatches as a list beside the preview */
+.menu-dialog-input.hatch-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  padding: 4px;
+  text-align: left;
+}
+
+.menu-dialog-input.hatch-name {
+  width: 100%;
+  max-width: 220px;
+  text-align: left;
+}
+
+.hatch-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--text-soft);
+}
+
+.hatch-list-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hatch-list-head .muted {
+  flex: 1 1 auto;
+}
+
+.hatch-levels {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 52px;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.hatch-level {
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hatch-level:hover {
+  background: var(--fill-hover);
+}
+
+.hatch-level.sel {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.hatch-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+
+/* label, value and unit, so the values line up down each column */
+.hatch-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 30px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hatch-field > .muted:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hatch-field .menu-dialog-input {
+  width: 100%;
+}
+
+.hatch-field.hatch-colour {
+  display: flex;
+}
+
+.hatch-field .menu-dialog-input.bad {
+  border-color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .hatch-top {
+    flex-direction: column;
+  }
+
+  .hatch-preview {
+    align-self: center;
+  }
+
+  .hatch-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

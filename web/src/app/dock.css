@@ -1,0 +1,975 @@
+/* Palettes (dock.ts), as Spline's side panels: a docked palette is a section of
+   the full-height panel at its edge, divided from the next by a hairline; a
+   floating one is a card over the drawing. Each dock has a rail of palette icons
+   along the window's edge. */
+
+:root {
+  --rail-w: 36px;
+  --rail-btn: 28px;
+}
+
+:root[data-density="compact"] {
+  --rail-w: 30px;
+  --rail-btn: 24px;
+}
+
+.dock {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  min-height: 0;
+  background: var(--chrome);
+}
+
+.dock-right {
+  flex-direction: row-reverse;
+}
+
+/* the palettes, beside the rail: one column, or several side by side */
+.dock-cols {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dock-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dock.folded .dock-cols {
+  display: none;
+}
+
+/* between two columns: a hairline, wider to the pointer, that resizes them */
+.dock-col-split {
+  position: relative;
+  flex: none;
+  width: 1px;
+  background: var(--chrome-border);
+  cursor: ew-resize;
+  z-index: 2;
+}
+
+.dock-col-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.dock-col-split:hover,
+.dock-col-split:active {
+  background: var(--accent);
+}
+
+.dock-left {
+  left: 0;
+  border-right: 1px solid var(--chrome-border);
+}
+
+.dock-right {
+  right: 0;
+  border-left: 1px solid var(--chrome-border);
+}
+
+/* ---- the docking bars along the drawing's top and bottom (Vectorworks 2027's):
+   palettes side by side between the docks, a hairline between each two ------- */
+
+.shelf {
+  position: absolute;
+  left: var(--dock-left, 0px);
+  right: var(--dock-right, 0px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--chrome);
+}
+
+.shelf-top {
+  top: 0;
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.shelf-bottom {
+  bottom: 0;
+  border-top: 1px solid var(--chrome-border);
+}
+
+.shelf-row {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.shelf-row > .pal {
+  min-width: 140px;
+}
+
+/* rolled up, a palette in a bar is its title */
+.shelf-row > .pal.collapsed {
+  flex: none;
+  min-width: 0;
+  align-self: flex-start;
+}
+
+.shelf-split {
+  position: relative;
+  flex: none;
+  width: 1px;
+  background: var(--chrome-border);
+  cursor: ew-resize;
+  z-index: 2;
+}
+
+.shelf-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+.shelf-split:hover,
+.shelf-split:active {
+  background: var(--accent);
+}
+
+/* the inner edge makes the bar taller or shorter */
+.shelf-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7px;
+  cursor: ns-resize;
+  z-index: 2;
+}
+
+.shelf-top .shelf-edge {
+  bottom: -4px;
+}
+
+.shelf-bottom .shelf-edge {
+  top: -4px;
+}
+
+.shelf-edge:hover,
+.shelf-edge:active {
+  background: linear-gradient(to bottom, transparent 3px, var(--accent) 3px 4px, transparent 4px);
+}
+
+/* a palette dragged over the bar joins it */
+.shelf.drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* the inner edge widens or narrows the dock */
+.dock-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+
+.dock-left .dock-edge {
+  right: -4px;
+}
+
+.dock-right .dock-edge {
+  left: -4px;
+}
+
+.dock-edge:hover,
+.dock-edge:active {
+  background: linear-gradient(to right, transparent 3px, var(--accent) 3px 4px, transparent 4px);
+}
+
+.dock-float {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* ---- the rail: an icon per palette of the dock, then the fold button ----- */
+
+.dock.folded .dock-edge {
+  display: none;
+}
+
+.dock-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  width: var(--rail-w);
+  min-height: 0;
+  padding: 6px 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.dock-left:not(.folded) .dock-rail {
+  border-right: 1px solid var(--chrome-border);
+}
+
+.dock-right:not(.folded) .dock-rail {
+  border-left: 1px solid var(--chrome-border);
+}
+
+.dock-rail.drop {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.dock-rail-gap {
+  flex: 1 1 auto;
+  min-height: 4px;
+}
+
+/* the auto-hide pin, lit while the dock hides itself */
+.dock-pin.on {
+  color: var(--accent);
+}
+
+/* the fold button points to the window's edge, a folded dock's into the drawing */
+.dock-left .dock-fold:not(.folded) svg,
+.dock-right .dock-fold.folded svg {
+  transform: scaleX(-1);
+}
+
+.dock-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--rail-btn);
+  height: var(--rail-btn);
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.dock-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dock-icon-letters {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.dock-icon:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.dock-icon.open {
+  color: var(--text-2);
+}
+
+/* open but out of view (rolled up, a tab behind another, or in a folded dock): a dot at the window's edge */
+.dock-icon.open::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.dock-left .dock-icon.open::after {
+  left: 1px;
+}
+
+.dock-right .dock-icon.open::after {
+  right: 1px;
+}
+
+.dock-icon.active {
+  color: var(--text);
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.dock-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* the palette an icon opens: beside the rail, over the drawing, as wide as the dock unfolded */
+.dock-flyout {
+  position: absolute;
+  top: 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  min-height: 0;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  border-top: none;
+  box-shadow: var(--shadow);
+}
+
+.dock-flyout.fill {
+  bottom: 0;
+}
+
+.dock-flyout[data-side="left"] {
+  border-radius: 0 0 var(--glass-radius) 0;
+}
+
+.dock-flyout[data-side="right"] {
+  border-radius: 0 0 0 var(--glass-radius);
+}
+
+.dock-flyout > .pal {
+  border-radius: inherit;
+}
+
+/* unrolled for as long as it is open */
+.dock-flyout .pal-collapse {
+  display: none;
+}
+
+.dock-float > .pal {
+  position: absolute;
+  pointer-events: auto;
+}
+
+/* floating palettes docked to one another: one box, a hairline between each two, resized from its corner */
+.dock-float > .pal-stack {
+  position: absolute;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--glass-radius);
+  box-shadow: var(--shadow);
+  background: var(--chrome);
+}
+
+.pal-stack > .pal.floating {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.pal-stack > .pal + .pal {
+  border-top: 1px solid var(--chrome-border);
+}
+
+.pal-stack > .pal:not(:last-child) .pal-grip {
+  display: none;
+}
+
+.pal-stack.dragging {
+  opacity: 0.9;
+}
+
+.dock-drop {
+  position: absolute;
+  z-index: 8;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* a dragged palette's new column, where and how wide it will stand */
+.dock-preview {
+  position: absolute;
+  z-index: 8;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+}
+
+/* ---- the docking guides, shown while a palette is dragged ---------------- */
+
+.dock-guide {
+  position: absolute;
+  z-index: 9;
+  display: grid;
+  grid-template-columns: repeat(3, 26px);
+  grid-template-rows: repeat(3, 26px);
+  gap: 3px;
+  pointer-events: none;
+}
+
+.dock-guide-edge {
+  position: absolute;
+  z-index: 9;
+  width: 26px;
+  height: 26px;
+  pointer-events: none;
+}
+
+.dock-guide-cell {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--chrome);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.dock-guide-cell.off {
+  visibility: hidden;
+}
+
+.dock-guide .at-top {
+  grid-area: 1 / 2;
+}
+
+.dock-guide .at-left {
+  grid-area: 2 / 1;
+}
+
+.dock-guide .at-tab {
+  grid-area: 2 / 2;
+}
+
+.dock-guide .at-right {
+  grid-area: 2 / 3;
+}
+
+.dock-guide .at-bottom {
+  grid-area: 3 / 2;
+}
+
+/* the bar in a square: the side of the palette it docks to, or (the middle) a tab over a page */
+.dock-guide-cell > span {
+  position: absolute;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+
+.dock-guide-cell.at-top > span {
+  inset: 4px 4px auto;
+  height: 6px;
+}
+
+.dock-guide-cell.at-bottom > span {
+  inset: auto 4px 4px;
+  height: 6px;
+}
+
+.dock-guide-cell.at-left > span {
+  inset: 4px auto 4px 4px;
+  width: 6px;
+}
+
+.dock-guide-cell.at-right > span {
+  inset: 4px 4px 4px auto;
+  width: 6px;
+}
+
+.dock-guide-cell.at-tab > span {
+  inset: 9px 4px 4px;
+  background: transparent;
+  border: 1.5px solid var(--text-3);
+}
+
+.dock-guide-cell.at-tab > span::before {
+  content: "";
+  position: absolute;
+  left: -1.5px;
+  top: -5px;
+  width: 7px;
+  height: 4px;
+  border-radius: 1.5px 1.5px 0 0;
+  background: var(--text-3);
+}
+
+.dock-guide-cell.on {
+  border-color: var(--accent);
+}
+
+.dock-guide-cell.on > span,
+.dock-guide-cell.on > span::before {
+  background: var(--accent);
+}
+
+.dock-guide-cell.at-tab.on > span {
+  background: transparent;
+  border-color: var(--accent);
+}
+
+/* ---- a palette ---------------------------------------------------------- */
+
+.pal {
+  display: flex;
+  flex-direction: column;
+  /* a palette that keeps its content's height still gives way when the dock is short, and scrolls */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--chrome);
+  font-size: 11px;
+}
+
+.dock-col > .pal + .pal {
+  border-top: 1px solid var(--chrome-border);
+}
+
+.pal:not(.collapsed) {
+  min-height: 64px;
+}
+
+.pal.fill:not(.collapsed) {
+  min-height: 80px;
+}
+
+.pal.floating {
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--glass-radius);
+  box-shadow: var(--shadow);
+}
+
+.pal.dragging {
+  opacity: 0.9;
+  cursor: grabbing;
+}
+
+/* Window > Palette Options > Auto-Hide Floating Palettes: rolled up to its title while the pointer is elsewhere */
+.pal.floating.tucked {
+  height: auto !important;
+  min-height: 0;
+}
+
+.pal.tucked .pal-body,
+.pal.tucked .pal-grip,
+.pal.tucked .pal-edge {
+  display: none;
+}
+
+/* the title: Spline's section heading, its buttons showing on hover */
+.pal-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  flex: none;
+  padding: 0 6px 0 12px;
+  cursor: grab;
+  user-select: none;
+  color: var(--text);
+}
+
+.pal-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.pal-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.pal-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pal-btn:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.pal-collapse {
+  order: 1;
+}
+
+.pal-close {
+  order: 2;
+}
+
+.pal-collapse svg {
+  transition: transform 0.12s ease;
+}
+
+.pal.collapsed .pal-collapse svg {
+  transform: rotate(-90deg);
+}
+
+/* buttons show while the pointer is on the title, leaving narrow palettes their title */
+.pal-head .pal-btn {
+  opacity: 0;
+}
+
+.pal-head:hover .pal-btn,
+.pal.collapsed .pal-collapse,
+.pal-btn:focus-visible {
+  opacity: 1;
+}
+
+/* palettes that are tabs of one another: Spline's tab strip in the title */
+.pal.tabbed .pal-head {
+  padding-left: 8px;
+}
+
+.pal.tabbed .pal-title {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pal-htab {
+  flex: 0 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 18px;
+  height: 24px;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: grab;
+}
+
+.pal-htab:hover {
+  color: var(--text);
+}
+
+.pal-htab.active {
+  flex-shrink: 0;
+  color: var(--text);
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* Tab Style (each palette's title bar menu): a tab's name, its icon, or both; names by default */
+.pal-htab .tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-icon {
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+}
+
+.tab-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-icon .dock-icon-letters {
+  font-size: 9px;
+}
+
+.pal[data-tab-style="icon"] :is(.pal-htab, .pal-tab) .tab-icon,
+.pal[data-tab-style="both"] :is(.pal-htab, .pal-tab) .tab-icon {
+  display: inline-flex;
+}
+
+.pal[data-tab-style="icon"] :is(.pal-htab, .pal-tab) .tab-label {
+  display: none;
+}
+
+/* icons alone: square tabs, so more of them fit across */
+.pal[data-tab-style="icon"] :is(.pal-htab, .pal-tab) {
+  flex-shrink: 0;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 5px;
+}
+
+/* the title a dragged palette would become a tab of */
+.pal.tab-drop {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.pal.tab-drop .pal-head {
+  background: var(--select);
+}
+
+.pal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* its width sets how its sections lie (below); every palette's width comes from its dock, bar or own size */
+  container-type: inline-size;
+}
+
+/* a palette wider than two columns of fields (in a docking bar, floating, or in a dock pulled wide)
+   lays its sections side by side, as many columns as fit, a hairline between them, so a short bar
+   along the drawing holds what a sidebar stacks */
+@container (min-width: 500px) {
+  /* at its own height inside the scroller: a multi-column box held to a height spills sideways */
+  .info {
+    flex: none;
+    column-width: 232px;
+    column-gap: 0;
+    column-rule: 1px solid var(--divider);
+  }
+
+  .info > * {
+    break-inside: avoid;
+  }
+}
+
+.pal.collapsed .pal-body,
+.pal.collapsed .pal-grip,
+.pal.collapsed .pal-edge {
+  display: none;
+}
+
+/* a filling palette's lower edge, shared with the filling palette below */
+.pal-edge {
+  display: none;
+  height: 7px;
+  margin-top: -4px;
+  margin-bottom: -3px;
+  flex: none;
+  cursor: ns-resize;
+  position: relative;
+  z-index: 1;
+}
+
+.pal-edge:hover,
+.pal-edge:active {
+  background: linear-gradient(to bottom, transparent 3px, var(--accent) 3px 4px, transparent 4px);
+}
+
+.pal.splits .pal-edge {
+  display: block;
+}
+
+.pal-grip {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 55%, var(--text-3) 55% 62%, transparent 62% 72%, var(--text-3) 72% 79%, transparent 79%);
+}
+
+.pal.floating .pal-grip {
+  display: block;
+}
+
+/* ---- tabs inside a palette: Spline's Agent, Objects, Assets ---------------- */
+
+.pal-tabbed {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.pal-tabs {
+  display: flex;
+  gap: 2px;
+  flex: none;
+  padding: 0 8px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pal-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.pal-tab:hover {
+  color: var(--text);
+}
+
+/* a tab being dragged along its strip (off it, it comes out as a palette of its own) */
+.pal-tab.moving {
+  color: var(--text);
+  background: var(--fill);
+}
+
+.pal-tab.active {
+  color: var(--text);
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.pal-tab-bodies {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pal-tab-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* a tabbed palette scrolls inside its tabs, under the tab strip */
+.pal-body:has(> .pal-tabbed) {
+  overflow: hidden;
+}
+
+/* a palette body that fills its palette (Object Info's tabs) */
+.pal-fill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.pal-fill > .pal-tabbed {
+  flex: 1;
+}
+
+.pal-body:has(> .pal-fill) {
+  overflow: hidden;
+}
+
+/* ---- a phone's sheet: one palette, up from the bottom edge (dock.ts) ----- */
+
+/* the sheet's height is --sheet-h, set on the workspace: 55 per cent of the window to start with */
+.pal-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  height: var(--sheet-h, 55dvh);
+  /* the top stop never rises past the top bar: the window's height less the bar's */
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--chrome);
+  border-top: 1px solid var(--chrome-border);
+  border-radius: var(--glass-radius) var(--glass-radius) 0 0;
+  box-shadow: var(--shadow);
+  transition: height 0.18s ease;
+}
+
+.pal-sheet > .pal {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pal-sheet .pal-collapse {
+  display: none;
+}
+
+/* the title lists the palettes to switch to: a caret after it */
+.pal-sheet .pal-title {
+  cursor: pointer;
+}
+
+.pal-sheet .pal-title::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 2px 2px 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.5;
+  vertical-align: middle;
+}
+
+/* the grip: a bar a finger takes hold of, above the title */
+.sheet-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 26px;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.sheet-grip > span {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+
+/* the stage stands above the sheet, so the drawing and its Mode bar stay in view */
+.workspace.sheet-open > .stage {
+  bottom: var(--sheet-h);
+  transition: bottom 0.18s ease;
+}
+
+/* while the grip is dragged the sheet and the stage follow the pointer without easing */
+.sheet-drag .pal-sheet,
+.workspace.sheet-drag > .stage {
+  transition: none;
+}

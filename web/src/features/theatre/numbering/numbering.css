@@ -1,0 +1,73 @@
+/* Spotlight Numbering: the type, its fields' two lists with the buttons between, and each field's options */
+.menu-dialog.spot-num-dialog {
+  width: min(540px, 100%);
+}
+
+.spot-num-dialog .spot-num-type {
+  width: 220px;
+  text-align: left;
+}
+
+.spot-num-lists {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.spot-num-col {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.menu-dialog-input.spot-num-list {
+  width: 100%;
+  height: auto;
+  padding: 4px;
+  text-align: left;
+}
+
+.spot-num-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 18px;
+}
+
+.spot-num-options {
+  margin: 0 0 10px;
+  padding: 8px 10px 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.spot-num-legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.spot-num-pair {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spot-num-pair > .menu-dialog-field,
+.spot-num-pair > .menu-dialog-check {
+  flex: 1 1 0;
+}
+
+.spot-num-pair select.menu-dialog-input {
+  width: 132px;
+}
+
+.spot-num-options .menu-dialog-check .menu-dialog-input {
+  margin-left: auto;
+}
+
+.spot-num-dialog .muted {
+  max-width: none;
+}

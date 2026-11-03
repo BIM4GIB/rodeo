@@ -1,0 +1,16 @@
+/* File > Export > Export Image File…: the size hints under the fields, inside the shared dialog
+   shell (menubar.css). Colours come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.png-dialog {
+  width: min(400px, 100%);
+}
+
+.png-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.png-hint:last-child {
+  margin-bottom: 0;
+}

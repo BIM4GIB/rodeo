@@ -1,0 +1,164 @@
+/* Tools > Reports > Edit Worksheet…: the worksheet picker, the entry bar and the cell grid,
+   inside the shared dialog shell (menubar.css). Colours come from the tokens in styles.css, so
+   both themes follow. */
+
+.menu-dialog.ws-dialog {
+  width: min(760px, 100%);
+}
+
+.ws-top {
+  margin-bottom: 8px;
+}
+
+.ws-picker {
+  width: min(280px, 100%);
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.ws-name {
+  margin: -6px 0 8px;
+  color: var(--text-2);
+}
+
+.ws-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.ws-ref {
+  flex: none;
+  min-width: 44px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 26px;
+  text-align: center;
+}
+
+.ws-entry {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+}
+
+.ws-entry:focus,
+.ws-picker:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+.ws-entry:read-only {
+  color: var(--text-2);
+}
+
+.ws-scroll {
+  max-height: min(420px, 55vh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.ws-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ws-grid th,
+.ws-grid td {
+  height: 22px;
+  padding: 0 6px;
+  border-right: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
+  white-space: nowrap;
+}
+
+.ws-grid td {
+  min-width: 72px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: cell;
+}
+
+.ws-grid td.num {
+  text-align: right;
+}
+
+.ws-grid td.formula {
+  color: var(--text-2);
+  font-style: italic;
+}
+
+.ws-grid td.edited {
+  color: var(--accent);
+}
+
+.ws-grid td.on {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* the column letters stay along the top and the row numbers down the side while it scrolls */
+.ws-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.ws-grid tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  color: var(--text-2);
+  font-weight: 500;
+  text-align: right;
+}
+
+.ws-grid .ws-corner {
+  left: 0;
+  z-index: 2;
+  min-width: 32px;
+}
+
+.ws-grid tr.db td {
+  background: var(--fill);
+  color: var(--text-2);
+}
+
+.ws-hint {
+  min-height: 1.4em;
+  margin: 6px 0 0;
+}
+
+.ws-hint.error {
+  color: var(--danger);
+}
+
+.ws-empty {
+  margin: 0;
+  padding: 16px;
+}

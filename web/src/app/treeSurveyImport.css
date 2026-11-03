@@ -1,0 +1,8 @@
+.menu-dialog.tree-survey-dialog { width: min(680px, calc(100vw - 32px)); }
+.tree-survey-table { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1fr) 54px; gap: 4px 8px; align-items: center; margin-bottom: 8px; }
+.tree-survey-table .menu-dialog-input { width: 100%; min-width: 0; }
+.tree-survey-head { font-weight: 600; }
+.tree-survey-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-survey-add { display: flex; justify-content: center; }
+.tree-survey-sets { display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 8px; }
+.tree-survey-sets .menu-dialog-input { flex: 1; min-width: 0; }

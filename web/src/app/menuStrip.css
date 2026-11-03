@@ -1,0 +1,60 @@
+/* ---- the menu bar's row of titles over the top bar (Window > Top Bar > Menu Bar) ---- */
+
+.menu-strip {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 26px;
+  padding: 0 6px;
+  gap: 1px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--divider);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  position: relative;
+  z-index: 11;
+}
+
+.menu-strip[hidden] {
+  display: none;
+}
+
+.menu-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.menu-strip-title {
+  flex: none;
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.menu-strip-title:hover,
+.menu-strip-title.open {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.menu-strip-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+:root[data-density="compact"] .menu-strip {
+  height: 22px;
+}
+
+:root[data-density="compact"] .menu-strip-title {
+  height: 18px;
+  line-height: 18px;
+  font-size: 12px;
+}

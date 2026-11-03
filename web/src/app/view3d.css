@@ -1,0 +1,38 @@
+/* 3D view: the WebGL canvas, the overlay toolbar and the empty note. The host
+   element (placed by the app over the 2D canvas) must be positioned; the stage
+   fills it. Toolbar colours come from the tokens in styles.css, so both themes
+   follow; the canvas keeps its light grey background in both. */
+
+.view3d-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #e6e7ea;
+}
+
+.view3d-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+}
+
+.view3d-canvas:active {
+  cursor: grabbing;
+}
+
+/* shown when nothing on the visible layers can be drawn in 3D */
+.view3d-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: #50545e;
+  text-align: center;
+  pointer-events: none;
+}

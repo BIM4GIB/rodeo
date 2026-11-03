@@ -1,0 +1,247 @@
+/* Touch and Apple Pencil (features/touch): the touch layout, the quick bar that
+   stands in for the keyboard, and the update notice. Colours are tokens from
+   styles.css, so both themes follow.
+
+   The overrides below use an `html` prefix (or `html:root`) so they beat the
+   single-class rules in styles.css and dock.css, whichever stylesheet loads first. */
+
+/* ---- coarse pointers (a finger): targets of 40 px, taller bars ---------- */
+
+@media (pointer: coarse) {
+  html:root {
+    --topbar-h: 54px;
+  }
+
+  /* clear of a notch or the Dynamic Island in a home-screen app (viewport-fit=cover); 0 elsewhere */
+  html .topbar {
+    height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  html .app {
+    padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+
+  html .tb-icon,
+  html .bar-btn {
+    min-width: 40px;
+    height: 40px;
+  }
+
+  html .tb-btn {
+    height: 40px;
+    padding: 0 14px;
+  }
+
+  html .tb-tool {
+    height: 40px;
+  }
+
+  html .tb-tool .tool {
+    width: 40px;
+    height: 40px;
+  }
+
+  html .tb-tool.has-more .tool {
+    width: 32px;
+  }
+
+  html .tb-tool-more {
+    width: 22px;
+  }
+
+  html .seg-btn {
+    height: 40px;
+  }
+
+  html .menu-panel {
+    min-width: 230px;
+    font-size: 14px;
+  }
+
+  html .menu-item {
+    height: 40px;
+  }
+
+  /* palette title bars: their buttons always show, since there is no hover */
+  html .pal-head {
+    height: 44px;
+  }
+
+  html .pal-head .pal-btn {
+    width: 40px;
+    height: 40px;
+    opacity: 1;
+  }
+
+  /* the drawing and the 3D view take the finger: no scrolling, zooming or callouts */
+  html #canvas,
+  html .view3d-canvas {
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* with no palette in a dock, the top bar's end there sizes to its buttons: the
+   dock width (0 when empty) would otherwise push the Menu button or Save out of the bar */
+html .topbar:not(.left-dock) .tb-left {
+  width: auto;
+}
+
+html .topbar:not(.right-dock) .tb-right {
+  width: auto;
+}
+
+/* ---- narrow windows: a compact top bar (menus keep what it drops) ------- */
+
+@media (max-width: 899px) {
+  html .tb-side {
+    gap: 2px;
+    padding: 0 6px;
+  }
+
+  html .tb-left {
+    padding-left: 4px;
+  }
+
+  html .tb-center {
+    gap: 4px;
+    padding: 0 4px;
+  }
+
+  html .tb-right {
+    gap: 4px;
+  }
+
+  html #vb-zoom {
+    display: none;
+  }
+}
+
+/* ---- the quick bar (quickbar.ts): a column at the drawing's right edge --- */
+
+.touch-quickbar {
+  position: absolute;
+  top: 50%;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  transform: translateY(-50%);
+  border: 1px solid var(--pill-border);
+  border-radius: 16px;
+  background: var(--pill);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.touch-qb-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-soft);
+  font: 600 14px/1 var(--font);
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-qb-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.touch-qb-btn:active:not(:disabled) {
+  background: var(--fill-strong);
+}
+
+.touch-qb-btn:disabled {
+  opacity: 0.35;
+}
+
+/* a latch that is on */
+.touch-qb-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.touch-qb-sep {
+  width: 26px;
+  height: 1px;
+  margin: 2px 0;
+  background: var(--divider);
+}
+
+/* the quick bar edits the 2D drawing: it waits while there is none, and in the 3D view */
+.stage.no-doc .touch-quickbar,
+.stage.is-3d .touch-quickbar {
+  display: none;
+}
+
+/* ---- a phone's palette sheet (dock.ts, sheet.ts) ------------------------- */
+
+/* the Palettes button in the top bar's right end opens the sheet's list: a phone only */
+html .touch-palettes {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  html .touch-palettes {
+    display: grid;
+  }
+}
+
+/* with a sheet up, the View bar goes (the Navigation palette has the layers and classes) and the
+   quick bar lies in a row where it was, so the strip of drawing between it and the Mode bar is clear */
+.workspace.sheet-open #viewbar {
+  display: none;
+}
+
+.workspace.sheet-open .touch-quickbar {
+  top: 8px;
+  transform: none;
+  flex-direction: row;
+  gap: 2px;
+}
+
+.workspace.sheet-open .touch-qb-sep {
+  width: 1px;
+  height: 26px;
+  margin: 0 3px;
+}
+
+/* at its tallest the sheet leaves no drawing to edit, and the quick bar waits */
+.workspace.sheet-tall .touch-quickbar {
+  display: none;
+}
+
+/* ---- the update notice (install.ts) ------------------------------------- */
+
+.touch-update {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.touch-update-reload {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+  cursor: default;
+}

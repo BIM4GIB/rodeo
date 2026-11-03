@@ -1,0 +1,13 @@
+/* Replace Lighting Devices: a pop-up wide enough for symbol names */
+.menu-dialog.replace-device-dialog {
+  width: min(440px, 100%);
+}
+
+.replace-device-dialog .replace-device-pick {
+  width: 240px;
+  text-align: left;
+}
+
+.replace-device-dialog .muted {
+  max-width: none;
+}

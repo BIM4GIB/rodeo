@@ -1,0 +1,82 @@
+/* Text > Check Spelling: the scope, language and options, then the word not in the dictionary in
+   its context, the field to change it to, the suggestions and the actions, inside the shared
+   dialog shell (menubar.css). Colours come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.sc-dialog {
+  width: min(440px, 100%);
+}
+
+.sc-status {
+  margin: 8px 0 6px;
+  min-height: 1.4em;
+}
+
+.sc-card {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.sc-label {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.sc-context {
+  min-height: 2.6em;
+  margin: 0 0 10px;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.sc-context mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--select);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--danger);
+}
+
+.menu-dialog-input.sc-change {
+  width: 200px;
+  text-align: left;
+}
+
+.sc-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 24px;
+  margin-bottom: 10px;
+}
+
+.sc-suggestion {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sc-suggestion:hover {
+  background: var(--fill-hover);
+}
+
+.sc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.sc-credit {
+  margin: 8px 0 0;
+  font-size: 11px;
+}
+
+.sc-credit a {
+  color: inherit;
+}

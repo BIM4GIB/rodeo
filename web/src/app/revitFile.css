@@ -1,0 +1,121 @@
+/* A Revit file's details (revitFile.ts): thumbnail and facts, Project Information or a family's types, linked files */
+.menu-dialog.rvt-dialog {
+  width: min(560px, 100%);
+}
+
+.rvt-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.rvt-thumb {
+  flex: none;
+  width: 128px;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.rvt-no-thumb {
+  background: var(--fill);
+  display: grid;
+  place-items: center;
+  height: 96px;
+  padding: 8px;
+  color: var(--text-2);
+  font-size: 11px;
+  text-align: center;
+}
+
+.rvt-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rvt-section {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rvt-params {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 3px 12px;
+  max-height: 220px;
+  margin: 0;
+  overflow-y: auto;
+}
+
+.rvt-params dt {
+  color: var(--text-2);
+}
+
+.rvt-params dt.rvt-group {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rvt-params dd {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.rvt-types {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.rvt-types table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.rvt-types th,
+.rvt-types td {
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.rvt-types th {
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.rvt-links {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rvt-links li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+
+.menu-dialog .rvt-links .muted {
+  flex: none;
+  margin: 0;
+}
+
+.menu-dialog.rvt-dialog .rvt-note {
+  max-width: none;
+  margin-top: 14px;
+}

@@ -1,0 +1,174 @@
+/* The Scenes palette (scenesPalette.ts) and the Shift Plot and Spike Sheet windows: solid panels in the app's tokens. */
+
+.scenes-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 10px 12px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.scenes-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scenes-title {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.scenes-meta {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.scenes-empty {
+  margin: 6px 0;
+  color: var(--text-3);
+}
+
+.scenes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scenes-scene {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scenes-scene.current {
+  border-color: var(--accent);
+}
+
+.scenes-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.scenes-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+.scenes-name {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.scenes-name:hover {
+  background: var(--fill);
+}
+
+.scenes-name:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.scenes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.scenes-actions .btn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.scenes-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scenes-scrub {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.scenes-scrub input[type="range"] {
+  width: 100%;
+  margin: 0;
+}
+
+.scenes-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+
+.scenes-pieces {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.scenes-piece {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scenes-piece .scenes-name {
+  flex: 1;
+}
+
+/* the windows */
+
+.scenes-window {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.scenes-plan {
+  flex: none;
+  max-height: 240px;
+  background: var(--fill);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scenes-plan svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+}
+
+.scenes-plan text {
+  fill: var(--text-2);
+  font-family: var(--font, sans-serif);
+  text-anchor: middle;
+}

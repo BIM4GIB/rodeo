@@ -1,0 +1,117 @@
+/* The Notification Center (notifications.ts): its bell on the status bar's pill, and the list of the session's alerts */
+
+.sb-notify {
+  position: relative;
+}
+
+.sb-badge {
+  position: absolute;
+  top: 1px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.sb-badge.error {
+  background: var(--danger);
+}
+
+.sb-badge[hidden] {
+  display: none;
+}
+
+.notify-panel {
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  width: min(340px, calc(100vw - 16px));
+  max-height: min(420px, calc(100vh - 120px));
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  outline: none;
+}
+
+.notify-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.notify-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notify-count {
+  flex: 1;
+  color: var(--text-3);
+}
+
+.notify-list {
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.notify-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.notify-item + .notify-item {
+  border-top: 1px solid var(--chrome-border);
+}
+
+.notify-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-1px);
+}
+
+.notify-item.error .notify-dot {
+  background: var(--danger);
+}
+
+.notify-message {
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.notify-item.error .notify-message {
+  color: var(--danger);
+}
+
+.notify-time {
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notify-empty {
+  padding: 16px 12px;
+  color: var(--text-3);
+  text-align: center;
+}

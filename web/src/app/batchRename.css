@@ -1,0 +1,92 @@
+/* Tools > Utilities > Batch Rename…: the tabs and search as Organization's (menubar.css), the rules
+   in two columns, then the rows' current and new names. Resources > Import from Another File…
+   (resourceImport.ts) lays out the same way, with a kind column. Colours come from the tokens in
+   styles.css, so both themes follow. */
+
+.menu-dialog.br-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.br-scope,
+.br-rules {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+
+.br-scope[hidden],
+.br-field[hidden] {
+  display: none;
+}
+
+.br-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.br-label {
+  flex: 0 0 84px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.menu-dialog-input.br-input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.menu-dialog-input.br-num {
+  text-align: right;
+}
+
+.br-check {
+  font-size: 12px;
+}
+
+.org-table.br-table {
+  height: min(280px, calc(100vh - 380px));
+  height: min(280px, calc(100dvh - 380px));
+  min-height: 120px;
+}
+
+.br-table .org-row {
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.br-table.ri-table .org-row {
+  grid-template-columns: 22px minmax(0, 1.3fr) 88px minmax(0, 1fr);
+}
+
+.br-new {
+  color: var(--text-2);
+}
+
+.br-new.changed {
+  color: var(--accent);
+}
+
+.br-new.bad {
+  color: var(--danger);
+}
+
+.menu-dialog .muted.br-note {
+  max-width: none;
+  font-size: 11px;
+}
+
+.br-note.br-bad {
+  color: var(--danger);
+}
+
+/* a phone: one rule per line */
+@media (max-width: 560px) {
+  .br-scope,
+  .br-rules {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,570 @@
+/* crit mode (features/crit): the review overlay's controls over the drawing, its
+   popovers, and the threads palette. Colours are the editor's tokens (styles.css). */
+
+/* the crit canvas: pins and redlines, above the drawing and below the controls */
+.crit-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* the capture layer: takes the pointer for Pin and Redline, not the editor's tools */
+.crit-capture {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.crit-capture[data-tool="pin"] {
+  cursor: crosshair;
+}
+
+.crit-capture[data-tool="redline"] {
+  cursor: crosshair;
+}
+
+/* the floating toolbar, top-centre over the drawing (below the View bar) */
+.crit-bar {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 40px);
+  padding: 4px 6px;
+  transform: translateX(-50%);
+  border: 1px solid var(--pill-border);
+  border-radius: 12px;
+  background: var(--pill);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: var(--text-soft);
+  font: 11px/1 var(--font);
+}
+
+.crit-bar[hidden] {
+  display: none;
+}
+
+.crit-tool,
+.crit-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.crit-tool svg {
+  width: 14px;
+  height: 14px;
+}
+
+.crit-tool:hover:not(:disabled),
+.crit-text-btn:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.crit-tool.active {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.crit-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.crit-text-btn.primary {
+  background: var(--btn-strong);
+  color: var(--text);
+}
+
+.crit-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  flex: none;
+  background: var(--chrome-border);
+}
+
+.crit-swatches {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 3px;
+}
+
+.crit-swatch {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1.5px solid var(--chrome-border);
+  border-radius: 50%;
+  cursor: default;
+}
+
+.crit-swatch.active {
+  box-shadow: 0 0 0 2px var(--pill), 0 0 0 3.5px var(--text-soft);
+}
+
+.crit-draft {
+  padding: 0 2px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.crit-tool-close {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: default;
+}
+
+.crit-tool-close:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.crit-tool-close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* the top bar button: a speech bubble, with the open threads counted */
+.crit-top {
+  position: relative;
+}
+
+.crit-top.active {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.crit-count {
+  position: absolute;
+  top: 1px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: 600 9px/14px var(--font);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.crit-count[hidden] {
+  display: none;
+}
+
+/* popovers over the drawing: a thread, or the composer */
+.crit-pop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  box-sizing: border-box;
+  width: 300px;
+  max-width: calc(100% - 16px);
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: 12px/1.35 var(--font);
+}
+
+.crit-pop[hidden] {
+  display: none;
+}
+
+.crit-pop.redline,
+.crit-pop.pin {
+  width: 280px;
+}
+
+.crit-thread,
+.crit-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.crit-head-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.crit-head-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.crit-head-text strong {
+  font-weight: 600;
+}
+
+.crit-num {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2f6fdb;
+  color: #ffffff;
+  font: 600 11px/1 var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+.crit-num.resolved {
+  background: #8d8d93;
+}
+
+.crit-meta {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.crit-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.crit-icon-btn:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.crit-icon-btn.danger:hover {
+  color: var(--danger);
+}
+
+.crit-icon-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.crit-thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.crit-msg {
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--fill);
+}
+
+.crit-msg.root {
+  background: var(--fill-hover);
+}
+
+.crit-msg-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.crit-msg-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.crit-msg-meta .crit-link {
+  margin-left: auto;
+}
+
+.crit-msg-body {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.crit-audio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.crit-audio audio {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+
+.crit-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: default;
+}
+
+.crit-link.danger {
+  color: var(--danger);
+}
+
+.crit-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.crit-text {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 60px;
+  padding: 6px 8px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.crit-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.crit-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.crit-error[hidden] {
+  display: none;
+}
+
+.crit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* the voice note: record, stop with its timer, or play and discard */
+.crit-voice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.crit-voice audio {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+
+.crit-voice-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: var(--btn);
+  color: var(--text-soft);
+  font: inherit;
+  cursor: default;
+}
+
+.crit-voice-btn:hover {
+  color: var(--text);
+}
+
+.crit-voice-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.crit-voice-btn.recording {
+  background: rgba(255, 107, 99, 0.18);
+  color: var(--danger);
+}
+
+.crit-voice-time {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the threads palette */
+.crit-palette {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+.crit-filter {
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
+.crit-filter .seg-btn {
+  height: 24px;
+  font-size: 11px;
+}
+
+.crit-status {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.crit-status:empty {
+  display: none;
+}
+
+.crit-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.crit-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px;
+  border-radius: 7px;
+  cursor: default;
+}
+
+.crit-row:hover,
+.crit-row:focus-visible {
+  background: var(--fill-hover);
+  outline: none;
+}
+
+.crit-row.selected {
+  background: var(--select);
+}
+
+.crit-row.resolved .crit-row-text {
+  color: var(--text-2);
+}
+
+.crit-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.crit-row-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crit-row-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.crit-row-voice {
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-2);
+}
+
+.crit-row-voice svg {
+  width: 13px;
+  height: 13px;
+}
+
+.crit-foot {
+  flex: none;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+.crit-foot-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: var(--btn);
+  color: var(--text-soft);
+  font: inherit;
+  cursor: default;
+}
+
+.crit-foot-btn:hover {
+  color: var(--text);
+}
+
+.crit-foot-btn svg {
+  width: 14px;
+  height: 14px;
+}

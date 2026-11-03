@@ -1,0 +1,61 @@
+/* Screen tips (screenTips.ts): a tool's or mode's name, key and what it does */
+
+.screen-tip {
+  position: fixed;
+  z-index: 70;
+  max-width: 280px;
+  padding: 7px 9px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.screen-tip[hidden] {
+  display: none;
+}
+
+.screen-tip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.screen-tip-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.screen-tip-key {
+  color: var(--text-2);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.screen-tip-note {
+  color: var(--text-3);
+}
+
+.screen-tip-detail {
+  margin-top: 4px;
+  color: var(--text-2);
+}
+
+.screen-tip-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.screen-tip-chip {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--fill-hover);
+  color: var(--text-2);
+  font-size: 10px;
+}

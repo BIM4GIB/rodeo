@@ -1,0 +1,53 @@
+/* Tools > Reports > Create Report…: the name, the objects and their criteria (Custom
+   Selection's rows, menubar.css), the columns and record fields to report. */
+
+.menu-dialog.cr-dialog {
+  width: min(500px, 100%);
+}
+
+.cr-dialog .cr-name {
+  width: 220px;
+  text-align: left;
+}
+
+.cr-dialog .cr-scope,
+.cr-dialog .cr-from {
+  width: 220px;
+}
+
+.cr-criteria {
+  margin: -2px 0 6px;
+}
+
+.cr-head {
+  margin: 12px 0 2px;
+  font-weight: 600;
+}
+
+.cr-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  column-gap: 12px;
+}
+
+.cr-columns .menu-dialog-check {
+  margin: 4px 0;
+}
+
+.cr-fields {
+  max-height: 132px;
+  overflow-y: auto;
+  margin-bottom: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+}
+
+.cr-fields .menu-dialog-check {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
+
+.cr-fields .muted {
+  margin: 8px 0;
+}

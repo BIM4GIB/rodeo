@@ -1,0 +1,108 @@
+/* Window > Workspaces > Tool Sets… (toolSetsDialog.ts) and Menus… (menuLayout.ts): each set
+   or menu with its tools or commands, in order. */
+
+.menu-dialog.ts-dialog {
+  width: min(460px, 100%);
+}
+
+.ts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(58vh, 460px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ts-set {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--fill-hover);
+}
+
+.ts-head,
+.ts-tool {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ts-head {
+  margin-bottom: 4px;
+}
+
+.ts-dialog .ts-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.ts-fold {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.ts-fold svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+  transition: transform 0.12s;
+}
+
+.ts-fold[aria-expanded="true"] svg {
+  transform: none;
+}
+
+.ts-tool {
+  padding-left: 2px;
+}
+
+.ts-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-soft);
+}
+
+.ts-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ts-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-origin,
+.ts-count {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.ts-count {
+  flex: none;
+  min-width: 18px;
+  text-align: right;
+}
+
+.ts-btn {
+  flex: none;
+  min-width: 26px;
+}
+
+.ts-add {
+  margin-top: 4px;
+}
+
+.ts-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}

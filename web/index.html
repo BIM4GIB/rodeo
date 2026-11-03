@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Rodeo</title>
+    <meta name="theme-color" content="#1d1d1d" />
+    <!-- installed on an iPad or iPhone home screen: a standalone window with a dark status bar above it -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Rodeo" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- the theme before the first paint (theme.ts keeps it after) -->
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("openvwx.theme") || "dark";
+      } catch {
+        document.documentElement.dataset.theme = "dark";
+      }
+    </script>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- the menu bar's row of titles (Window > Top Bar > Menu Bar), over the top bar -->
+      <nav class="menu-strip" id="menu-strip" aria-label="Menu bar" hidden></nav>
+      <!-- the top bar spans the window: its ends sit over the side panels, its middle over the drawing -->
+      <header class="topbar" id="topbar">
+        <div class="tb-side tb-left">
+          <button class="tb-icon" id="btn-menu" title="Menu" aria-label="Menu"></button>
+          <div class="file-info">
+            <span class="file-name" id="file-name">Rodeo</span>
+            <span class="dirty-dot" id="dirty-dot" title="Unsaved changes" hidden></span>
+          </div>
+        </div>
+        <div class="tb-center">
+          <div class="tb-group" id="tb-view">
+            <div class="seg" role="group" aria-label="Projection">
+              <button class="seg-btn" id="btn-plan" title="2D drawing">2D</button>
+              <button class="seg-btn" id="btn-3d" title="3D view (3)">3D</button>
+            </div>
+          </div>
+          <div class="tb-tools" id="tb-tools" role="toolbar" aria-label="Tools"></div>
+          <div class="tb-group" id="tb-undo">
+            <button class="tb-icon" id="btn-undo" title="Undo (⌘Z)" data-menu-key="Edit › Undo" aria-label="Undo"></button>
+            <button class="tb-icon" id="btn-redo" title="Redo (⇧⌘Z)" data-menu-key="Edit › Redo" aria-label="Redo"></button>
+          </div>
+        </div>
+        <div class="tb-side tb-right">
+          <div class="tb-group" id="vb-zoom">
+            <button class="tb-icon" id="btn-fit" title="Fit (⌘0)" data-menu-key="View › Fit to Window" aria-label="Fit to window"></button>
+          </div>
+          <div class="spacer"></div>
+          <div class="tb-split" id="save-split" role="group" aria-label="Save and export">
+            <button class="tb-btn primary tb-split-main" id="btn-save" title="Save (⌘S)" data-menu-key="File › Save">Save</button>
+            <button class="tb-btn primary tb-split-caret" id="btn-save-menu" title="Save, export and print" aria-label="Save, export and print"></button>
+          </div>
+        </div>
+      </header>
+
+      <div class="workspace" id="workspace">
+        <main class="stage" id="stage">
+          <div class="canvas-wrap" id="canvas-wrap">
+            <canvas id="canvas" aria-label="Drawing"></canvas>
+            <div class="text-host" id="text-host"></div>
+            <div class="view3d-host" id="view3d-host" hidden></div>
+          </div>
+
+          <!-- over the drawing: the active layer and class (View bar), the tool (Mode bar), the cursor and snapping -->
+          <div class="hud hud-top" id="viewbar" role="toolbar" aria-label="View bar"></div>
+          <div class="hud hud-bottom">
+            <span class="pill pill-quiet sb-cursor" id="sb-cursor" hidden></span>
+            <div class="pill modebar" id="modebar" role="toolbar" aria-label="Mode bar"></div>
+            <span class="pill sb-snaps" id="snapbar" role="group" aria-label="Snapping">
+              <label class="sb-toggle" title="Snap to objects"><input type="checkbox" id="snap-objects" /><span class="sb-icon" data-icon="snap-objects"></span></label>
+              <label class="sb-toggle" title="Grid (⌘')" data-menu-key="View › Show Grid"><input type="checkbox" id="grid-show" /><span class="sb-icon" data-icon="grid-show"></span></label>
+              <label class="sb-toggle" title="Snap to grid (⇧⌘')" data-menu-key="View › Snap to Grid"><input type="checkbox" id="snap-grid" /><span class="sb-icon" data-icon="snap-grid"></span></label>
+              <button class="sb-more" id="btn-snapping" title="Snapping" aria-label="Snapping"></button>
+            </span>
+          </div>
+        </main>
+        <!-- the side panels (dock.ts) -->
+      </div>
+    </div>
+
+    <!-- the start hub (welcome.ts): over the whole editor, which shows faded behind it, until a drawing is open -->
+    <section class="welcome" id="welcome" aria-label="Start">
+      <div class="hub">
+        <header class="hub-head">
+          <img class="hub-logo" src="/icon.svg" alt="" width="36" height="36" />
+          <div class="hub-name">
+            <h1 class="hub-title">Rodeo</h1>
+            <p class="hub-tagline">Draw, model and share in your browser.</p>
+          </div>
+          <div class="hub-head-end" id="welcome-head-slot"></div>
+        </header>
+        <section class="hub-start" aria-label="Open">
+          <div class="hub-actions" id="welcome-open-slot">
+            <button class="btn primary" id="welcome-open">Open file…</button>
+            <button class="btn" id="welcome-new">New drawing</button>
+            <button class="btn" id="welcome-template">From template…</button>
+            <button class="btn" id="welcome-sample" hidden>Try sample</button>
+          </div>
+          <p class="hub-hint">or drop a file anywhere</p>
+        </section>
+        <section class="hub-recent" id="welcome-recent" hidden>
+          <h2 class="hub-heading">Recent</h2>
+          <ul class="hub-files" id="welcome-recent-list"></ul>
+        </section>
+        <div class="hub-slot" id="welcome-main-slot"></div>
+        <footer class="hub-foot" id="welcome-foot-slot"></footer>
+      </div>
+      <p class="hub-fine">Files you open stay on this computer unless you save them to the cloud.</p>
+    </section>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <div class="drop-overlay" id="drop-overlay">Drop to open</div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

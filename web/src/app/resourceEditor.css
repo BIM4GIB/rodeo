@@ -1,0 +1,121 @@
+/* Resources > Edit, New and Duplicate Gradient and Line Type: the name, a preview bar, then a row
+   per gradient stop or per dash and gap, inside the shared dialog shell (menubar.css). Colours
+   come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.re-dialog {
+  width: min(460px, 100%);
+}
+
+.menu-dialog-input.re-name {
+  width: 220px;
+  text-align: left;
+}
+
+.re-bar {
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin: 2px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* a line type's preview draws in the text colour, on the dialog */
+.re-bar.re-line {
+  height: 28px;
+  color: var(--text);
+}
+
+/* a text style's sample line */
+.re-bar.ts-sample {
+  height: 40px;
+}
+
+.re-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(280px, 40vh);
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.grad-row,
+.lt-row {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+}
+
+.grad-row {
+  grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr) minmax(0, 1fr) 22px;
+}
+
+.lt-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 22px;
+}
+
+.re-head {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.re-input {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.re-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+.re-input.bad {
+  border-color: var(--danger);
+}
+
+.re-colour {
+  width: 44px;
+  height: 24px;
+  padding: 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--fill);
+  cursor: pointer;
+}
+
+.re-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.re-btn:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.re-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.re-add {
+  margin-bottom: 8px;
+}

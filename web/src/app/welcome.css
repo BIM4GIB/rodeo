@@ -1,0 +1,245 @@
+/* The start hub (welcome.ts, markup in index.html): one solid card in the editor's tokens, so
+   the light and dark themes both apply, over the whole editor faded and blurred behind it.
+   Feature blocks in the hub (the account control, the cloud's Open button, the sponsor, the
+   footer's links) style themselves from their own files. */
+
+/* the editor behind, faded: above its bars and palettes, below menus (30) and dialogs (40) */
+.welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--viewport) 62%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.hub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 22px;
+  width: min(560px, 100%);
+  padding: 24px;
+  text-align: left;
+  border: 1px solid var(--chrome-border);
+  border-radius: 14px;
+  background: var(--chrome);
+  box-shadow: var(--shadow);
+}
+
+.hub-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hub-logo {
+  flex: none;
+  width: 36px;
+  height: 36px;
+}
+
+.hub-name {
+  min-width: 0;
+}
+
+.hub-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hub-tagline {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* back to the drawing and the account control, at the header's end */
+.hub-head-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* the blocks features add under Recent take part in the card's gap, so a hidden one leaves no space */
+.hub-slot {
+  display: contents;
+}
+
+.hub-heading {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* ---- open ------------------------------------------------------------------ */
+
+/* the open buttons, then a hint: a file dropped anywhere opens (fileio.ts shows where) */
+.hub-start {
+  display: grid;
+  gap: 8px;
+}
+
+.hub-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* a touch screen has nothing to drag from */
+@media (pointer: coarse) {
+  .hub-hint {
+    display: none;
+  }
+}
+
+.hub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hub-actions .btn {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
+/* ---- recent: this computer's and the cloud's, newest first ------------------ */
+
+.hub-files {
+  display: grid;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.hub-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.hub-file:hover {
+  background: var(--fill-hover);
+}
+
+.hub-file-icon {
+  display: flex;
+  flex: none;
+  color: var(--text-soft);
+}
+
+.hub-file-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hub-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-file-time {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ---- footer: small links (news, feedback, donations), and the line under the card ---- */
+
+.hub-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-top: -6px;
+  padding-top: 14px;
+  border-top: 1px solid var(--divider);
+}
+
+.hub-foot:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+/* a footer link: a button or an anchor that reads as text */
+.hub-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.hub-link:hover {
+  color: var(--text);
+}
+
+.hub-fine {
+  margin: 0;
+  max-width: 560px;
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* phones: the card fills the width and Open file takes a row of its own */
+@media (max-width: 560px) {
+  .welcome {
+    align-content: start;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+
+  .hub {
+    gap: 18px;
+    padding: 18px;
+  }
+
+  .hub-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hub-actions > .btn:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .hub-actions .btn {
+    height: 40px;
+  }
+}

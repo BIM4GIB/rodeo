@@ -1,0 +1,343 @@
+/* File X-ray dialog (dialog.ts): the shell is the shared menu dialog (menubar.css); colours come
+   from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.xr-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(800px, 100%);
+  height: min(580px, calc(100vh - 32px));
+  height: min(580px, calc(100dvh - 32px));
+  padding: 14px 16px 12px;
+  overflow: hidden;
+}
+
+.xr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.xr-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xr-summary {
+  margin: 0 0 10px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* ---- the stacked bar ---- */
+
+.xr-bar {
+  display: flex;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--fill);
+}
+
+.xr-seg {
+  height: 100%;
+  min-width: 0;
+  flex: none;
+}
+
+.xr-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.xr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.xr-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+/* ---- tabs ---- */
+
+.xr-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 8px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.xr-tab {
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.xr-tab.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.xr-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.xr-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ---- contents table ---- */
+
+.xr-contents {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.xr-toolbar {
+  margin-bottom: 6px;
+}
+
+.xr-filter {
+  width: 240px;
+  text-align: left;
+}
+
+.xr-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px 92px 64px;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+}
+
+.xr-head-row {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 22px;
+  background: var(--chrome);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.xr-cat {
+  font-weight: 500;
+}
+
+.xr-cat:hover,
+.xr-item:hover {
+  background: var(--fill-hover);
+}
+
+.xr-item {
+  color: var(--text-soft);
+}
+
+.xr-c-name {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 0;
+}
+
+.xr-item .xr-c-name {
+  padding-left: 22px;
+}
+
+.xr-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xr-c-count,
+.xr-c-bytes,
+.xr-c-share {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.xr-caret {
+  flex: none;
+  width: 18px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.xr-caret:disabled {
+  cursor: default;
+}
+
+/* a thin bar under each category name, its size against the largest category */
+.xr-meter {
+  position: absolute;
+  left: 22px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.85;
+}
+
+.xr-empty {
+  margin: 14px 4px;
+}
+
+/* ---- findings ---- */
+
+.xr-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.xr-finding {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.xr-finding-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.xr-finding-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.xr-finding-bytes {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.xr-finding-summary {
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+
+.xr-rows {
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 150px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.xr-row-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.xr-row-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xr-row-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xr-row-bytes {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.xr-more {
+  padding: 3px 0;
+}
+
+.xr-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.xr-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ---- footer ---- */
+
+.xr-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.xr-spacer {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+  .menu-dialog.xr-dialog {
+    height: calc(100vh - 24px);
+    height: calc(100dvh - 24px);
+  }
+
+  .xr-row {
+    grid-template-columns: minmax(0, 1fr) 96px 76px 56px;
+  }
+}

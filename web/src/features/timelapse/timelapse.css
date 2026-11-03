@@ -1,0 +1,111 @@
+/* File > Export Timelapse…: the preview, its scrubber and the progress bar, inside the shared dialog
+   shell (menubar.css). Colours come from the tokens in styles.css, so both themes follow. */
+
+.menu-dialog.tl-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.tl-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 236px;
+  gap: 16px;
+  align-items: start;
+}
+
+.tl-preview {
+  min-width: 0;
+}
+
+.tl-stage {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.tl-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 52vh;
+  object-fit: contain;
+}
+
+.tl-scrub {
+  width: 100%;
+  margin: 10px 0 4px;
+  accent-color: var(--accent);
+}
+
+.tl-scrub:disabled {
+  opacity: 0.5;
+}
+
+.tl-readout {
+  margin: 0 0 4px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-controls {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tl-select {
+  width: 136px;
+  text-align: left;
+}
+
+.tl-note {
+  min-height: 1em;
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--warn);
+}
+
+.tl-note:empty {
+  min-height: 0;
+}
+
+.tl-progress {
+  margin-top: 12px;
+}
+
+.tl-progress[hidden] {
+  display: none;
+}
+
+.tl-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--fill-strong);
+}
+
+.tl-bar-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+
+.tl-status {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+@media (max-width: 680px) {
+  .tl-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

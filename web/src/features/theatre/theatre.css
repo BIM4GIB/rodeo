@@ -1,0 +1,237 @@
+/* The Stage menu's windows (ui.ts): solid panels in the app's tokens, so both themes follow. */
+
+.th-panel {
+  position: fixed;
+  /* over the docks, under the menus (30) and dialogs (40) they open */
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  min-height: 180px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: hidden;
+  resize: both;
+  color: var(--text);
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.th-panel-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.th-panel-title {
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.th-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+}
+
+.th-panel-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 12px;
+  overflow: auto;
+}
+
+.th-panel-foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.th-tabbed {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+.th-tabs {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.th-tab {
+  padding: 4px 10px;
+  color: var(--text-2);
+  font: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.th-tab:hover {
+  background: var(--fill-hover);
+}
+
+.th-tab.on {
+  color: var(--text);
+  background: var(--fill-strong);
+}
+
+.th-tab-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+.th-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.th-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.th-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 8px;
+  color: var(--text-2);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+}
+
+.th-table th.up::after {
+  content: " ▲";
+  font-size: 9px;
+}
+
+.th-table th.down::after {
+  content: " ▼";
+  font-size: 9px;
+}
+
+.th-table td {
+  padding: 4px 8px;
+  white-space: nowrap;
+  border-top: 1px solid var(--divider);
+}
+
+.th-table tbody tr:hover {
+  background: var(--fill);
+}
+
+.th-table .num {
+  text-align: right;
+}
+
+.th-table td:has(> .th-cell) {
+  padding: 1px 2px;
+}
+
+.th-cell {
+  width: 100%;
+  min-width: 44px;
+  padding: 3px 6px;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.th-table .num .th-cell {
+  text-align: right;
+}
+
+.th-cell:hover {
+  background: var(--fill);
+}
+
+.th-cell:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.th-bad,
+.th-table td.th-bad .th-cell {
+  color: var(--danger);
+}
+
+.th-warn,
+.th-table td.th-warn .th-cell {
+  color: var(--warn);
+}
+
+.th-empty {
+  margin: 24px 0;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.th-note {
+  flex: none;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.th-note.th-bad {
+  color: var(--danger);
+}
+
+.th-note.th-warn {
+  color: var(--warn);
+}
+
+.th-toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.th-spacer {
+  flex: 1;
+}
+
+.th-stage-readout {
+  position: absolute;
+}

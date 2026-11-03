@@ -1,0 +1,121 @@
+/* Rodeo's colour tokens, after Spline's editor: dark on :root; [data-theme="light"] and
+   [data-theme="system"] (theme.ts) swap them. Shared by the editor (styles.css) and the admin
+   page (admin/admin.css). */
+
+:root {
+  color-scheme: dark;
+  --font: "Spline Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Spline's palette */
+  --chrome: #1d1d1d;
+  --chrome-border: #2e2e2e;
+  --viewport: #111111;
+  --divider: rgba(255, 255, 255, 0.05);
+  --text: rgba(255, 255, 255, 0.95);
+  --text-soft: rgba(255, 255, 255, 0.7);
+  --text-2: rgba(255, 255, 255, 0.6);
+  --text-3: rgba(255, 255, 255, 0.4);
+  --fill: rgba(255, 255, 255, 0.05);
+  --fill-hover: rgba(255, 255, 255, 0.08);
+  --fill-strong: rgba(255, 255, 255, 0.1);
+  --ring: rgba(255, 255, 255, 0.06);
+  --btn: rgba(255, 255, 255, 0.12);
+  --btn-strong: rgba(255, 255, 255, 0.2);
+  --select: rgba(142, 178, 242, 0.16);
+  --axis: #2b99ff;
+  --pill: rgba(29, 29, 29, 0.92);
+  --pill-border: rgba(255, 255, 255, 0.08);
+
+  /* the tokens the rest of the app's stylesheets use, in Spline's terms */
+  --bg: var(--chrome);
+  --surface: #262626;
+  --surface-2: #232323;
+  --surface-hover: var(--fill-hover);
+  --surface-active: var(--select);
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #5ea8ff;
+  --accent-text: #111111;
+  --danger: #ff6b63;
+  --warn: #f2c879;
+  --paper: #fcfcfb;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --radius: 6px;
+  --row-h: 26px;
+  --glass-bg: var(--chrome);
+  --glass-bg-float: var(--chrome);
+  --glass-bar: var(--chrome);
+  --glass-border: var(--chrome-border);
+  --glass-divider: var(--divider);
+  --glass-highlight: transparent;
+  --glass-chip: var(--fill-strong);
+  --glass-shadow: none;
+  --glass-shadow-float: var(--shadow);
+  --glass-blur: none;
+  --glass-radius: 12px;
+
+  --topbar-h: 48px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --chrome: #f6f6f6;
+  --chrome-border: #e2e2e2;
+  --viewport: #e9e9e9;
+  --divider: rgba(0, 0, 0, 0.06);
+  --text: rgba(0, 0, 0, 0.88);
+  --text-soft: rgba(0, 0, 0, 0.68);
+  --text-2: rgba(0, 0, 0, 0.55);
+  --text-3: rgba(0, 0, 0, 0.38);
+  --fill: rgba(0, 0, 0, 0.045);
+  --fill-hover: rgba(0, 0, 0, 0.07);
+  --fill-strong: rgba(0, 0, 0, 0.08);
+  --ring: rgba(0, 0, 0, 0.06);
+  --btn: rgba(0, 0, 0, 0.07);
+  --btn-strong: #1d1d1d;
+  --select: rgba(43, 120, 230, 0.13);
+  --axis: #1a7fe0;
+  --pill: rgba(255, 255, 255, 0.94);
+  --pill-border: rgba(0, 0, 0, 0.08);
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --border: rgba(0, 0, 0, 0.1);
+  --accent: #1a7fe0;
+  --accent-text: #ffffff;
+  --danger: #c4372f;
+  --warn: #d89020;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* System: light tokens while the system is light, the dark ones otherwise */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    color-scheme: light;
+    --chrome: #f6f6f6;
+    --chrome-border: #e2e2e2;
+    --viewport: #e9e9e9;
+    --divider: rgba(0, 0, 0, 0.06);
+    --text: rgba(0, 0, 0, 0.88);
+    --text-soft: rgba(0, 0, 0, 0.68);
+    --text-2: rgba(0, 0, 0, 0.55);
+    --text-3: rgba(0, 0, 0, 0.38);
+    --fill: rgba(0, 0, 0, 0.045);
+    --fill-hover: rgba(0, 0, 0, 0.07);
+    --fill-strong: rgba(0, 0, 0, 0.08);
+    --ring: rgba(0, 0, 0, 0.06);
+    --btn: rgba(0, 0, 0, 0.07);
+    --btn-strong: #1d1d1d;
+    --select: rgba(43, 120, 230, 0.13);
+    --axis: #1a7fe0;
+    --pill: rgba(255, 255, 255, 0.94);
+    --pill-border: rgba(0, 0, 0, 0.08);
+    --surface: #ffffff;
+    --surface-2: #fafafa;
+    --border: rgba(0, 0, 0, 0.1);
+    --accent: #1a7fe0;
+    --accent-text: #ffffff;
+    --danger: #c4372f;
+    --warn: #d89020;
+    --shadow: 0 16px 40px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
+  }
+}

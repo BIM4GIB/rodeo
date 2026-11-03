@@ -1,0 +1,251 @@
+/* The Resource Manager palette: the library as tiles grouped by folder, with a kind filter
+   and a search box above, and a detail area for the chosen resource. Colours come
+   from the tokens in src/styles.css; the thumbnail paper and ink are fixed so a
+   drawing reads the same in both themes. */
+
+/* kind filter: shares the toolbar row with the search box and wraps under it when narrow */
+.res-kind {
+  flex: 1 1 110px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+/* New Resource: a square button closing the toolbar row */
+.res-new {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+/* the chosen resource: a larger picture beside its name and facts; wraps when narrow */
+.res-detail {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.res-detail-img {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 112px;
+  height: 112px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fcfcfb;
+  overflow: hidden;
+}
+
+.res-detail-text {
+  flex: 1 1 100px;
+  min-width: 0;
+}
+
+.res-detail-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.res-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+/* folder header: a button that collapses or expands its tiles */
+.res-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 2px 8px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: left;
+  cursor: default;
+}
+
+.res-folder:hover {
+  background: var(--surface-hover);
+}
+
+.res-caret {
+  flex: none;
+  width: 10px;
+  font-size: 10px;
+}
+
+.res-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-count {
+  flex: none;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the tiles of one folder (or of the top level), as a grid that fits the panel width */
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 4px;
+  padding: 4px 6px 6px;
+}
+
+/* one resource: its thumbnail over its name; a tile is a button, so Tab reaches each one */
+.res-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 3px 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: default;
+}
+
+.res-tile:hover {
+  background: var(--surface-hover);
+}
+
+/* the active symbol, or the resource the detail area shows */
+.res-tile[aria-pressed="true"] {
+  background: var(--surface-active);
+  border-color: var(--accent);
+}
+
+.res-label {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+/* the thumbnail box, also used by the detail picture */
+.res-thumb {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fcfcfb;
+  overflow: hidden;
+}
+
+.res-thumb canvas,
+.res-thumb img,
+.res-detail-img img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* a resource with no picture names its kind instead; the paper is fixed, so the text is too */
+.res-none {
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: #6b6b73;
+}
+
+/* the kind beside the name, in the list only */
+.res-kind-label {
+  display: none;
+}
+
+/* the title bar's views: small and large thumbnails, or a list of rows */
+:root[data-res-view="small"] .res-grid {
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+}
+
+:root[data-res-view="small"] .res-thumb {
+  width: 44px;
+  height: 44px;
+}
+
+:root[data-res-view="large"] .res-grid {
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+}
+
+:root[data-res-view="large"] .res-thumb {
+  width: 96px;
+  height: 96px;
+}
+
+:root[data-res-view="list"] .res-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 4px 4px;
+}
+
+:root[data-res-view="list"] .res-tile {
+  flex-direction: row;
+  gap: 8px;
+  padding: 2px 4px;
+  text-align: left;
+}
+
+:root[data-res-view="list"] .res-thumb {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+:root[data-res-view="list"] .res-label {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+:root[data-res-view="list"] .res-kind-label {
+  display: block;
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-2);
+}
+
+:root[data-res-view="list"] .res-none {
+  font-size: 8px;
+}

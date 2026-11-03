@@ -1,0 +1,7 @@
+.git
+**/node_modules
+samples
+# sample drawings are real client work: never part of an image
+**/*.vwx
+web/dist
+server/data

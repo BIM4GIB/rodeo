@@ -1,0 +1,798 @@
+/* The menu panels (the top bar's Menu button, context menus) and the number
+   dialog. Colours come from the tokens in styles.css, so both themes follow. */
+
+/* ---- menu panels ------------------------------------------------------- */
+
+.menu-panel {
+  position: fixed;
+  z-index: 30;
+  min-width: 200px;
+  /* no taller than the window (menu.ts caps a panel placed lower, and its rows scroll) */
+  max-height: calc(100vh - 8px);
+  max-height: calc(100dvh - 8px - env(safe-area-inset-bottom, 0px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+/* a right-click menu (menu.ts openContextMenu) */
+.menu-panel.context-menu {
+  min-width: 200px;
+}
+
+/* a phone's menu from a button: the window's width less a margin, clear of a notch at the sides */
+.menu-panel.menu-wide {
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.menu-item:hover:not(:disabled),
+.menu-item.checked {
+  background: var(--fill-strong);
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+}
+
+/* a row with an icon (the top bar's tool groups) */
+.menu-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  margin-left: 2px;
+  color: var(--text-soft);
+}
+
+.menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.menu-check {
+  flex: none;
+  width: 12px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-keys {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  font: 11px var(--font);
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.menu-item:hover:not(:disabled) .menu-keys {
+  color: var(--text-2);
+}
+
+.menu-arrow {
+  flex: none;
+  margin-left: 12px;
+  color: var(--text-2);
+}
+
+.menu-arrow svg {
+  display: block;
+  width: 11px;
+  height: 11px;
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--divider);
+}
+
+/* a submenu on a phone: its back row heads the rows that replace the panel's (menu.ts drill) */
+.menu-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.menu-back .menu-arrow {
+  margin: 0 2px 0 0;
+  transform: rotate(180deg);
+}
+
+/* a finger: rows 44 px tall, taller than the touch layer's 40 px rows */
+@media (pointer: coarse) {
+  .menu-panel .menu-item,
+  .menu-back {
+    height: 44px;
+  }
+}
+
+/* a phone (menu.ts isPhone): no shortcut hints beside the rows */
+@media (max-width: 560px), (pointer: coarse) and (max-height: 500px) {
+  .menu-keys {
+    display: none;
+  }
+}
+
+/* a touch screen has no hover: a row lights while it is pressed, not where a tap last left the pointer */
+@media (hover: none) {
+  .menu-item:not(.checked):hover:not(:disabled) {
+    background: none;
+  }
+
+  .menu-item:active:not(:disabled) {
+    background: var(--fill-strong);
+  }
+}
+
+/* ---- number dialog (Move, Scale) --------------------------------------- */
+
+.menu-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  /* one row the window's height, so a box can be no taller than the window */
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.menu-dialog {
+  width: min(320px, 100%);
+  max-height: 100%;
+  margin: 0;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--chrome);
+  border: 1px solid var(--chrome-border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+/* a box taller than the window (a long tool's Preferences) scrolls inside it, its buttons kept at
+   the foot; the footer fills the box's bottom padding (sticking at -16px, the padding's edge, or it
+   would ride up over what is above it) so nothing scrolls by under it */
+.menu-dialog > .menu-dialog-actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 2;
+  margin: 4px -16px -16px;
+  padding: 10px 16px 16px;
+  background: var(--chrome);
+}
+
+.menu-dialog-title {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.menu-dialog-heading {
+  margin: 14px 0 8px;
+}
+
+.menu-dialog-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.menu-dialog-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.menu-dialog-input {
+  width: 96px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom Selection: criterion rows of field, is or is not, and value */
+.menu-dialog.cs-dialog {
+  width: min(480px, 100%);
+}
+
+.cs-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.cs-row .cs-field {
+  width: 104px;
+}
+
+.cs-row .cs-op {
+  width: 72px;
+}
+
+.cs-row .cs-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.cs-add {
+  margin: 2px 0 12px;
+}
+
+.cs-dialog .cs-action {
+  width: 190px;
+}
+
+/* Find and Replace: wide text fields */
+.menu-dialog.fr-dialog {
+  width: min(380px, 100%);
+}
+
+.fr-dialog .fr-text {
+  width: 200px;
+  text-align: left;
+}
+
+/* Tool Shortcuts: every tool with its key, two columns */
+.menu-dialog.tk-dialog {
+  width: min(520px, 100%);
+}
+
+.tk-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 18px;
+  max-height: min(56vh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tk-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-dialog .tk-input {
+  width: 44px;
+  text-align: center;
+}
+
+.tk-actions {
+  margin-top: 10px;
+}
+
+/* Menu Shortcuts: a filter, then every menu command with its combination */
+.menu-dialog.mk-dialog {
+  width: min(560px, 100%);
+}
+
+.mk-dialog .mk-filter {
+  width: 100%;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.mk-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 18px;
+  max-height: min(56vh, 440px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.mk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mk-row[hidden] {
+  display: none;
+}
+
+.mk-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mk-menu {
+  color: var(--text-2);
+}
+
+.mk-dialog .mk-input {
+  width: 64px;
+  text-align: center;
+  caret-color: transparent;
+  cursor: pointer;
+}
+
+.mk-dialog .mk-input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* a choice among a few options, in a tool's preferences */
+.menu-dialog-select {
+  width: 128px;
+  text-align: left;
+}
+
+/* a select whose options are phrases (Export STL's scope, Export Worksheet's format) */
+.menu-dialog-select.wide {
+  width: 196px;
+}
+
+.menu-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.menu-dialog-unit {
+  flex: none;
+  min-width: 28px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.menu-dialog-text {
+  margin: 0;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+/* a checkbox with its label on one line */
+.menu-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.menu-dialog .muted {
+  max-width: 320px;
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+
+.menu-dialog-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.menu-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* Edit > Preferences…: a tab strip over one pane at a time, the box as wide as the widest */
+.prefs-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+/* the panes listed down the left, as Vectorworks 2026 lists them; across the top when narrow */
+.prefs-body {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.prefs-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.prefs-nav-btn {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.prefs-nav-btn:hover {
+  background: var(--fill);
+  color: var(--text);
+}
+
+.prefs-nav-btn.active {
+  background: var(--select);
+  color: var(--text);
+}
+
+.prefs-panes {
+  min-width: 0;
+}
+
+.prefs-pane {
+  min-height: 300px;
+}
+
+.prefs-pane > .menu-dialog-field:first-child,
+.prefs-pane > .menu-dialog-check:first-child {
+  margin-top: 0;
+}
+
+.prefs-range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.prefs-readout {
+  flex: none;
+  width: 48px;
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+  .prefs-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .prefs-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+.prefs-pane .menu-dialog-check {
+  margin: 10px 0 0;
+}
+
+.menu-dialog .prefs-note {
+  margin: 2px 0 0 24px;
+  font-size: 11px;
+}
+
+/* Appearance: a swatch per colour, its field's label beside it */
+.prefs-colour {
+  flex: none;
+  width: 44px;
+  height: 24px;
+  padding: 0 2px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--fill);
+  cursor: pointer;
+}
+
+.prefs-colour:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.prefs-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/* Help > Keyboard Shortcuts */
+.shortcuts-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.shortcut-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 5px 14px;
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.shortcut-list dt {
+  color: var(--text-2);
+}
+
+.shortcut-list dd {
+  margin: 0;
+}
+
+.shortcut-head {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* every menu command with a key: scrolls when long */
+.shortcut-commands {
+  max-height: min(40vh, 300px);
+  overflow-y: auto;
+}
+
+.shortcut-commands .shortcut-keys {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tools > Organization… (organization.ts) */
+.menu-dialog.org-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.org-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.org-tabs .seg-btn.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.org-search {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.org-table {
+  overflow-y: auto;
+  height: min(360px, calc(100vh - 260px));
+  height: min(360px, calc(100dvh - 260px));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.org-row {
+  display: grid;
+  grid-template-columns: 22px 22px 22px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 1px;
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.org-table[data-tab="design"] .org-row {
+  grid-template-columns: 22px 22px 22px minmax(0, 1fr) 96px 84px 56px;
+}
+
+.org-table[data-tab="design"][data-stories="true"] .org-row {
+  grid-template-columns: 22px 22px 22px minmax(0, 1fr) 96px 84px minmax(0, 0.7fr) 56px;
+}
+
+.org-table[data-tab="stories"] .org-row {
+  grid-template-columns: minmax(0, 1fr) 72px 104px 56px;
+}
+
+/* a phone: the design layers' columns narrow, and the list scrolls sideways so the name keeps room */
+@media (max-width: 560px) {
+  .org-table {
+    overflow-x: auto;
+  }
+
+  .org-table[data-tab="design"] .org-row {
+    grid-template-columns: 22px 22px 22px minmax(120px, 1fr) 72px 64px 40px;
+    min-width: 400px;
+  }
+
+  .org-table[data-tab="design"][data-stories="true"] .org-row {
+    grid-template-columns: 22px 22px 22px minmax(120px, 1fr) 72px 64px minmax(88px, 0.8fr) 40px;
+    min-width: 490px;
+  }
+
+  .org-table[data-tab="stories"] .org-row {
+    grid-template-columns: minmax(0, 1fr) 48px 72px 40px;
+  }
+}
+
+.org-select {
+  padding: 0 2px;
+  text-overflow: ellipsis;
+}
+
+.org-table[data-tab="sheet"] .org-row {
+  grid-template-columns: 22px 22px 22px minmax(0, 1fr) minmax(0, 1fr) 56px;
+}
+
+.org-table[data-tab="viewports"] .org-row {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 96px 96px;
+}
+
+.org-table[data-tab="views"] .org-row {
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1.2fr);
+}
+
+.org-text {
+  overflow: hidden;
+  padding-left: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-check {
+  display: flex;
+  justify-content: center;
+}
+
+.org-row.sel {
+  background: var(--surface-active);
+}
+
+.org-row.new .org-num {
+  color: var(--accent);
+}
+
+.org-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.org-head > span {
+  padding-left: 6px;
+}
+
+.org-input {
+  width: 100%;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.org-input:hover:not(:disabled),
+.org-input:focus {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.org-input:disabled {
+  color: var(--text-2);
+}
+
+.org-scale-field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.org-num {
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.org-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.org-note {
+  margin: 0 0 0 auto;
+  font-size: 11px;
+}
+
+/* Tools > Find and Modify… (findModify.ts): the criteria as Custom Selection, then the changes */
+.fm-then {
+  margin-top: 4px;
+}
+
+.fm-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.fm-row .fm-kind {
+  width: 120px;
+  flex: none;
+}
+
+.fm-to {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.fm-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.fm-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fm-number {
+  width: 90px;
+}
+
+/* a colour palette opened from a dialog shows above the dialog's backdrop */
+.menu-dialog-backdrop ~ .cp-pop {
+  z-index: 45;
+}

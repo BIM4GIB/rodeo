@@ -1,0 +1,17 @@
+/* Tools > Records > Change All Fields: the record's fields, each ticked to change, in a list that
+   scrolls when long (Vectorworks pages them 16 at a time). Inside the shared dialog shell (menubar.css). */
+
+.menu-dialog.change-fields-dialog {
+  width: min(440px, 100%);
+}
+
+.change-fields {
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.change-fields .menu-dialog-input {
+  width: 160px;
+  text-align: left;
+}

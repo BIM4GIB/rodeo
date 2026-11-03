@@ -1,0 +1,82 @@
+/* The Visualization palette (visualization.ts): Object Info's sections, fields and sliders. */
+
+.viz-seg {
+  width: 100%;
+}
+
+/* the two halves share a narrow dock, shortening their names before they push it wider */
+.viz-seg .seg-btn {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.viz-readout {
+  flex: none;
+  width: 48px;
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+
+.viz-off {
+  padding: 12px 12px 0;
+  margin: 0;
+}
+
+.viz-check {
+  margin-bottom: 8px;
+}
+
+.viz-axis {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.viz-axis .viz-readout {
+  width: 36px;
+}
+
+/* the cameras' names line up with the section's other text, their hover reaching past it */
+.viz-cameras {
+  padding: 0;
+  margin: 0 -10px;
+}
+
+/* points a camera the way the 3D view looks */
+.viz-match {
+  flex: none;
+}
+
+/* a light's colour, before its name */
+.viz-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--divider);
+}
+
+.viz-off-light .name {
+  color: var(--text-2);
+}
+
+/* turns a light the drawing places itself on and off */
+.viz-light-on {
+  flex: none;
+  margin: 0;
+}

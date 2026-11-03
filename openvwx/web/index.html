@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>openvwx</title>
+<style>
+  :root {
+    --bg: #f4f4f2; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e2e2df;
+    --accent: #2f6fdb; --accent-soft: #e6eefc; --sheet: #8a5a00; --sheet-soft: #fbf1df;
+    --canvas: #ffffff; --danger: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161618; --panel: #1f1f22; --ink: #ececee; --muted: #9a9aa0; --line: #2e2e33;
+      --accent: #6c9bff; --accent-soft: #23304a; --sheet: #e0b25c; --sheet-soft: #3a2f1c;
+      --canvas: #fbfbf8;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         display: grid; grid-template-rows: 44px 1fr 26px; grid-template-columns: 320px 1fr; }
+  header { grid-column: 1 / 3; display: flex; align-items: center; gap: 12px; padding: 0 14px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header .file { font-weight: 600; }
+  header .ver { color: var(--muted); font-size: 12px; }
+  header .spacer { flex: 1; }
+  .dirty { color: var(--sheet); font-size: 12px; display: none; }
+  .dirty.on { display: inline; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+           border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; border: 0; border-radius: 0; padding: 9px; color: var(--muted); background: none; }
+  .tabs button.on { color: var(--ink); box-shadow: inset 0 -2px var(--accent); }
+  .pane { overflow: auto; flex: 1; min-height: 0; display: none; }
+  .pane.on { display: block; }
+  .hint { color: var(--muted); font-size: 11.5px; padding: 8px 12px 4px; }
+  .row { display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 4px; border-bottom: 1px solid var(--line); cursor: default; }
+  .row:hover { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+  .row.active { background: var(--accent-soft); }
+  .row.dragging { opacity: .4; }
+  .row.drop-above { box-shadow: inset 0 2px var(--accent); }
+  .row.drop-below { box-shadow: inset 0 -2px var(--accent); }
+  .grip { color: var(--muted); cursor: grab; padding: 0 2px; user-select: none; }
+  .eye { border: 0; background: none; padding: 2px; width: 26px; height: 22px; display: grid; place-items: center; color: var(--ink); }
+  .eye svg { width: 16px; height: 16px; }
+  .eye.hidden { color: var(--muted); opacity: .55; }
+  .eye.grayed { color: var(--muted); }
+  .names { flex: 1; min-width: 0; }
+  .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .names input { width: 100%; font: inherit; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  .badge { font-size: 10.5px; padding: 1px 6px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .badge.sheet { background: var(--sheet-soft); color: var(--sheet); }
+  .count { color: var(--muted); font-size: 11px; min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+  .search { margin: 8px; width: calc(100% - 16px); padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+  main { position: relative; overflow: hidden; background: var(--canvas); }
+  #canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  #canvas.panning { cursor: grabbing; }
+  #canvas path, #canvas ellipse, #canvas rect.placeholder { fill: none; stroke: #1d1d1f; stroke-width: .7; vector-effect: non-scaling-stroke; }
+  #canvas rect.placeholder { stroke-dasharray: 4 3; }
+  #canvas text { fill: #1d1d1f; font-family: Arial, Helvetica, sans-serif; }
+  #canvas .layer.grayed { opacity: .28; }
+  .tools { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+  .tools button { background: var(--panel); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #8a8a8a; pointer-events: none; }
+  footer { grid-column: 1 / 3; display: flex; gap: 18px; align-items: center; padding: 0 12px; border-top: 1px solid var(--line);
+           background: var(--panel); color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+           padding: 8px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 80vw; }
+  .toast.on { opacity: 1; }
+  .toast.err { background: var(--danger); color: #fff; }
+  @media (max-width: 720px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 44px 45vh 1fr 26px; }
+    header, footer { grid-column: 1; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="file" id="file">openvwx</span>
+  <span class="ver" id="ver"></span>
+  <span class="spacer"></span>
+  <span class="dirty" id="dirty">Unsaved changes</span>
+  <button class="primary" id="save">Save copy</button>
+</header>
+<aside>
+  <div class="tabs">
+    <button class="on" data-tab="layers">Layers</button>
+    <button data-tab="classes">Classes</button>
+  </div>
+  <div class="pane on" id="layers">
+    <div class="hint">Click to view · double-click to rename · drag to reorder</div>
+    <div id="layer-list"></div>
+  </div>
+  <div class="pane" id="classes">
+    <input class="search" id="class-search" placeholder="Filter classes">
+    <div id="class-list"></div>
+  </div>
+</aside>
+<main>
+  <svg id="canvas" xmlns="http://www.w3.org/2000/svg"><g id="world"></g></svg>
+  <div class="empty" id="empty">Nothing visible on this layer</div>
+  <div class="tools"><button id="fit">Fit</button></div>
+</main>
+<footer><span id="pos">x — y —</span><span id="view"></span><span id="stats"></span></footer>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const EYES = {
+  visible: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  grayed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  hidden: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.9 17.9A10.5 10.5 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.1-5.9M9.9 5.2A9.6 9.6 0 0 1 12 5c7 0 11 7 11 7a18.6 18.6 0 0 1-2.2 3.2M1 1l22 22"/></svg>',
+};
+const NEXT_VIS = { visible: "grayed", grayed: "hidden", hidden: "visible" };
+let doc = null, active = null, vb = null;
+const layerCache = new Map();
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function toast(msg, err) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = "toast on" + (err ? " err" : "");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.className = "toast", err ? 4500 : 2600);
+}
+
+async function mutate(path, body) {
+  try { setDoc(await api(path, body)); } catch (e) { toast(e.message, true); }
+}
+
+function setDoc(d) {
+  doc = d;
+  $("#file").textContent = d.file;
+  $("#ver").textContent = d.version;
+  $("#dirty").classList.toggle("on", d.dirty);
+  $("#stats").textContent = `${d.records.toLocaleString()} records · ${d.layers.length} layers · ${d.classes.length} classes`;
+  if (!active || !d.layers.find(l => l.id === active)) {
+    const vis = d.layers.find(l => l.kind === "design" && l.visibility === "visible");
+    active = (vis || d.layers[0]).id;
+  }
+  renderLayers(); renderClasses(); draw();
+}
+
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function eyeButton(vis, onClick) {
+  const b = el("button", "eye " + vis, EYES[vis] || EYES.visible);
+  b.title = `${vis} — click to make ${NEXT_VIS[vis]}`;
+  b.onclick = (e) => { e.stopPropagation(); onClick(NEXT_VIS[vis]); };
+  return b;
+}
+
+function startEdit(target, value, save) {
+  const input = el("input"); input.value = value;
+  target.replaceWith(input); input.focus(); input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return; done = true;
+    if (commit && input.value.trim() && input.value !== value) save(input.value.trim()); else renderLayers();
+  };
+  input.onkeydown = (e) => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); };
+  input.onblur = () => finish(true);
+}
+
+let dragId = null;
+function renderLayers() {
+  const list = $("#layer-list"); list.innerHTML = "";
+  doc.layers.forEach((l) => {
+    const row = el("div", "row" + (l.id === active ? " active" : ""));
+    row.draggable = true; row.dataset.id = l.id;
+    row.append(el("span", "grip", "⋮⋮"));
+    row.append(eyeButton(l.visibility, (v) => mutate(`/api/layer/${l.id}`, { visibility: v })));
+    const names = el("div", "names");
+    const name = el("div", "name", esc(l.name)); name.title = "Double-click to rename";
+    name.ondblclick = (e) => { e.stopPropagation(); startEdit(name, l.name, (v) => mutate(`/api/layer/${l.id}`, { name: v })); };
+    names.append(name);
+    if (l.kind === "sheet") {
+      const title = el("div", "title", esc(l.title || "untitled sheet")); title.title = "Double-click to edit the sheet title";
+      title.ondblclick = (e) => { e.stopPropagation(); startEdit(title, l.title, (v) => mutate(`/api/layer/${l.id}`, { title: v })); };
+      names.append(title);
+    }
+    row.append(names);
+    row.append(el("span", "badge" + (l.kind === "sheet" ? " sheet" : ""), l.kind === "sheet" ? "sheet" : `1:${+l.scale.toFixed(2)}`));
+    row.append(el("span", "count", l.objects.toLocaleString()));
+    row.onclick = () => {
+      if (active === l.id) return;
+      active = l.id;
+      list.querySelectorAll(".row").forEach(r => r.classList.toggle("active", r.dataset.id === active));
+      draw(true);
+    };
+    row.ondragstart = (e) => { dragId = l.id; row.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; };
+    row.ondragend = () => { dragId = null; row.classList.remove("dragging"); };
+    row.ondragover = (e) => {
+      if (!dragId || dragId === l.id) return;
+      e.preventDefault();
+      const below = e.offsetY > row.offsetHeight / 2;
+      row.classList.toggle("drop-below", below); row.classList.toggle("drop-above", !below);
+    };
+    row.ondragleave = () => row.classList.remove("drop-above", "drop-below");
+    row.ondrop = (e) => {
+      e.preventDefault();
+      const below = row.classList.contains("drop-below");
+      row.classList.remove("drop-above", "drop-below");
+      const order = doc.layers.map(x => x.id).filter(id => id !== dragId);
+      order.splice(order.indexOf(l.id) + (below ? 1 : 0), 0, dragId);
+      mutate("/api/order", { order });
+    };
+    list.append(row);
+  });
+}
+
+function renderClasses() {
+  const q = $("#class-search").value.toLowerCase();
+  const list = $("#class-list"); list.innerHTML = "";
+  doc.classes.filter(c => c.name.toLowerCase().includes(q)).forEach((c) => {
+    const row = el("div", "row");
+    row.append(eyeButton(c.visibility, (v) => mutate(`/api/class/${c.index}`, { visibility: v })));
+    const names = el("div", "names"); names.append(el("div", "name", esc(c.name || "(unnamed)")));
+    row.append(names);
+    row.append(el("span", "count", c.objects ? c.objects.toLocaleString() : ""));
+    list.append(row);
+  });
+}
+
+async function loadLayer(id) {
+  if (!layerCache.has(id)) layerCache.set(id, api(`/api/layer/${id}`));
+  return layerCache.get(id);
+}
+
+function shownLayers() {
+  const act = doc.layers.find(l => l.id === active);
+  if (act.kind === "sheet") return [act];
+  return doc.layers.filter(l => l.kind === "design" && (l.id === active || l.visibility !== "hidden"));
+}
+
+let drawSeq = 0;
+async function draw(fit) {
+  if (!doc) return;
+  const seq = ++drawSeq;
+  const layers = shownLayers();
+  const data = await Promise.all(layers.map(l => loadLayer(l.id)));
+  if (seq !== drawSeq) return;
+  const world = $("#world");
+  world.innerHTML = layers.map((l, i) => {
+    const gray = l.id !== active && l.visibility === "grayed";
+    return data[i].svg.replace('class="layer"', `class="layer${gray ? " grayed" : ""}"`);
+  }).join("");
+  const rules = doc.classes.filter(c => c.visibility !== "visible").map(c =>
+    `#world [data-class="${c.index}"]{${c.visibility === "hidden" ? "display:none" : "opacity:.28"}}`).join("");
+  world.insertAdjacentHTML("afterbegin", `<style>${rules}</style>`);
+  const boxes = data.map(d => d.bounds).filter(Boolean);
+  $("#empty").style.display = boxes.length ? "none" : "grid";
+  if (fit || !vb) fitTo(boxes);
+}
+
+function fitTo(boxes) {
+  if (!boxes.length) { vb = { x: 0, y: -1000, w: 1000, h: 1000 }; return applyVB(); }
+  const x0 = Math.min(...boxes.map(b => b[0])), y0 = Math.min(...boxes.map(b => b[1]));
+  const x1 = Math.max(...boxes.map(b => b[2])), y1 = Math.max(...boxes.map(b => b[3]));
+  const svg = $("#canvas"), aspect = svg.clientWidth / Math.max(1, svg.clientHeight);
+  let w = (x1 - x0) * 1.06 || 1, h = (y1 - y0) * 1.06 || 1;
+  if (w / h > aspect) h = w / aspect; else w = h * aspect;
+  vb = { x: (x0 + x1) / 2 - w / 2, y: -(y0 + y1) / 2 - h / 2, w, h };
+  applyVB();
+}
+
+function applyVB() {
+  $("#canvas").setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  $("#view").textContent = `view ${(vb.w / 1000).toFixed(2)} m wide`;
+}
+
+function toWorld(e) {
+  const r = $("#canvas").getBoundingClientRect();
+  return { x: vb.x + (e.clientX - r.left) / r.width * vb.w, y: vb.y + (e.clientY - r.top) / r.height * vb.h };
+}
+
+const canvas = $("#canvas");
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const p = toWorld(e), k = Math.exp(e.deltaY * 0.0015);
+  vb = { x: p.x - (p.x - vb.x) * k, y: p.y - (p.y - vb.y) * k, w: vb.w * k, h: vb.h * k };
+  applyVB();
+}, { passive: false });
+let pan = null;
+canvas.addEventListener("pointerdown", (e) => { pan = { x: e.clientX, y: e.clientY, vb: { ...vb } }; canvas.setPointerCapture(e.pointerId); canvas.classList.add("panning"); });
+canvas.addEventListener("pointermove", (e) => {
+  const p = toWorld(e);
+  $("#pos").textContent = `x ${p.x.toFixed(1)}  y ${(-p.y).toFixed(1)} mm`;
+  if (!pan) return;
+  const r = canvas.getBoundingClientRect();
+  vb = { ...pan.vb, x: pan.vb.x - (e.clientX - pan.x) / r.width * pan.vb.w, y: pan.vb.y - (e.clientY - pan.y) / r.height * pan.vb.h };
+  applyVB();
+});
+canvas.addEventListener("pointerup", () => { pan = null; canvas.classList.remove("panning"); });
+canvas.addEventListener("dblclick", () => draw(true));
+$("#fit").onclick = () => draw(true);
+window.addEventListener("resize", () => draw(true));
+
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button, .pane").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); $("#" + b.dataset.tab).classList.add("on");
+});
+$("#class-search").oninput = renderClasses;
+$("#save").onclick = async () => {
+  try {
+    const r = await api("/api/save", {});
+    toast(`Saved ${(r.bytes / 1e6).toFixed(2)} MB to ${r.path}`);
+    setDoc(await api("/api/doc"));
+  } catch (e) { toast(e.message, true); }
+};
+
+api("/api/doc").then(setDoc).catch(e => toast(e.message, true));
+</script>
+</body>
+</html>

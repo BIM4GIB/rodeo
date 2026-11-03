@@ -1,0 +1,39 @@
+/* Select Similar Preferences: the attribute groups two to a row, each a heading box (All) over its
+   attributes, dense as Vectorworks lays them out; one column on a phone. */
+
+.menu-dialog.similar-dialog {
+  width: min(540px, 100%);
+}
+
+.menu-dialog.similar-dialog .muted {
+  max-width: none;
+}
+
+.similar-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 24px;
+  margin-top: 8px;
+}
+
+.similar-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.menu-dialog-check.similar-all {
+  margin: 6px 0 2px;
+  font-weight: 600;
+}
+
+.menu-dialog-check.similar-item {
+  margin: 3px 0 3px 22px;
+}
+
+@media (max-width: 560px) {
+  .similar-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

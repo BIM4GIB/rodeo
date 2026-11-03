@@ -1,0 +1,147 @@
+/* ---- document tabs: the open drawings, over the drawing once two or more are open ---- */
+
+.stage {
+  --doc-tabs-h: 30px;
+}
+
+.doc-tabs {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: var(--doc-tabs-h);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  z-index: 3;
+}
+
+.doc-tabs[hidden] {
+  display: none;
+}
+
+.doc-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* the drawing and what floats over it move down by the strip */
+.stage.has-tabs .canvas-wrap {
+  top: calc(var(--doc-tabs-h) + 2px);
+}
+
+.stage.has-tabs .hud-top {
+  top: calc(var(--doc-tabs-h) + 14px);
+}
+
+.doc-tab {
+  flex: 0 1 auto;
+  min-width: 72px;
+  max-width: 220px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 10px;
+  border-radius: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: default;
+  user-select: none;
+}
+
+.doc-tab:hover {
+  background: var(--fill-hover);
+  color: var(--text-soft);
+}
+
+.doc-tab.front {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--chrome-border);
+}
+
+.doc-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.doc-tab-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-tab-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+  display: none;
+}
+
+.doc-tab.dirty .doc-tab-dot {
+  display: block;
+}
+
+/* the dot gives way to the close button where the pointer is */
+.doc-tab.dirty:hover .doc-tab-dot {
+  display: none;
+}
+
+.doc-tab-close,
+.doc-tab-new {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.doc-tab-close svg {
+  width: 10px;
+  height: 10px;
+}
+
+.doc-tab-new svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* a tab's × shows on the front tab and where the pointer is, so the names keep their room */
+.doc-tab:not(.front):not(:hover) .doc-tab-close {
+  visibility: hidden;
+}
+
+.doc-tab.dirty:not(:hover) .doc-tab-close {
+  display: none;
+}
+
+.doc-tab-close:hover,
+.doc-tab-new:hover {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.doc-tab-new {
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+}
+
+/* no hover on a touch screen: every tab keeps its × */
+@media (pointer: coarse) {
+  .doc-tab:not(.front):not(:hover) .doc-tab-close {
+    visibility: visible;
+  }
+}

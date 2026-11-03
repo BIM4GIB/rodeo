@@ -1,0 +1,7 @@
+.menu-dialog.adjacency-dialog { width: min(480px, calc(100vw - 32px)); }
+.adjacency-pick { display: flex; align-items: center; gap: 8px; }
+.adjacency-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adjacency-preview { max-height: 180px; overflow: auto; }
+.adjacency-preview table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.adjacency-preview th { text-align: left; font-weight: 600; }
+.adjacency-preview th, .adjacency-preview td { padding: 2px 8px 2px 0; white-space: nowrap; }

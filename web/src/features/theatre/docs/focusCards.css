@@ -1,0 +1,150 @@
+/* The focus cards (focusCardHtml.ts): black ink on white in the window and on the printed sheet alike, whatever
+   the app's theme. Sizes are in mm and text in pt, so the window shows each card at its printed size. */
+
+.docs-paper-A4 {
+  --docs-card-w: 93mm;
+  --docs-card-h: 88mm;
+  --docs-gap: 4mm;
+}
+
+.docs-paper-Letter {
+  --docs-card-w: 95mm;
+  --docs-card-h: 83mm;
+  --docs-gap: 6mm;
+}
+
+.docs-grid,
+.docs-page {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--docs-gap, 4mm);
+}
+
+.docs-page {
+  width: calc(2 * var(--docs-card-w, 93mm) + var(--docs-gap, 4mm));
+}
+
+.docs-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: var(--docs-card-w, 93mm);
+  height: var(--docs-card-h, 88mm);
+  padding: 3mm;
+  overflow: hidden;
+  color: #000;
+  background: #fff;
+  border: 0.25mm solid #000;
+  font: 8pt/1.25 Helvetica, Arial, sans-serif;
+  text-align: left;
+  break-inside: avoid;
+}
+
+.docs-head {
+  flex: none;
+  padding-bottom: 1.2mm;
+  border-bottom: 0.2mm solid #000;
+}
+
+.docs-title {
+  font-size: 11pt;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.docs-sub {
+  font-size: 7.5pt;
+  overflow-wrap: anywhere;
+}
+
+.docs-mid {
+  display: flex;
+  flex: 1;
+  gap: 3mm;
+  min-height: 0;
+  padding-top: 2mm;
+}
+
+.docs-facts {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 14mm minmax(0, 1fr);
+  align-content: start;
+  gap: 0.7mm 1.6mm;
+  min-width: 0;
+}
+
+.docs-k {
+  font-weight: 700;
+}
+
+.docs-v {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.docs-plan {
+  flex: none;
+  width: 36mm;
+  height: 36mm;
+}
+
+.docs-plan svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* a white halo under each label, so a pool or the person circle crossing it doesn't blur the figure */
+.docs-plan svg text {
+  fill: #000;
+  stroke: #fff;
+  stroke-width: 0.6;
+  paint-order: stroke;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+.docs-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 3mm;
+  padding-top: 2mm;
+  border-top: 0.2mm solid #000;
+}
+
+.docs-qr {
+  flex: none;
+  width: 21mm;
+  height: 21mm;
+}
+
+.docs-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.docs-spotbox {
+  flex: 1;
+  min-width: 0;
+}
+
+.docs-label {
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.docs-spot {
+  font-size: 10pt;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.docs-unfocused {
+  font-style: italic;
+}

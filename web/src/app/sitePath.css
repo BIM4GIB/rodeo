@@ -1,0 +1,34 @@
+.menu-dialog.site-path-dialog {
+  width: 420px;
+  max-width: 92vw;
+}
+.site-path-plot {
+  display: block;
+  width: 100%;
+  height: 90px;
+  margin-bottom: 8px;
+  color: var(--text, currentColor);
+}
+.site-path-scroll {
+  max-height: 36vh;
+  overflow: auto;
+  margin-bottom: 8px;
+}
+.site-path-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.site-path-table th {
+  padding: 2px 4px;
+  font-weight: 500;
+  font-size: 11px;
+  text-align: left;
+  opacity: 0.7;
+}
+.site-path-table td {
+  padding: 1px 2px;
+}
+.site-path-table input {
+  width: 100%;
+  box-sizing: border-box;
+}

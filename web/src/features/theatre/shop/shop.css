@@ -1,0 +1,108 @@
+/* The Scene Shop's windows: the cut list's tabs, stick bars and sheet pictures, in the app's tokens, in solid colours. */
+
+.shop-tab {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.shop-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}
+
+.shop-field input {
+  width: 140px;
+  padding: 3px 6px;
+  color: var(--text);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.shop-field input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.shop-results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.shop-stick {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.shop-stick-head {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.shop-bar {
+  display: flex;
+  flex: none;
+  height: 22px;
+  overflow: hidden;
+  background: var(--fill);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.shop-bar > div {
+  flex: none;
+  height: 100%;
+  min-width: 1px;
+}
+
+.shop-cut {
+  background: var(--accent);
+}
+
+.shop-kerf {
+  background: var(--surface);
+}
+
+.shop-offcut {
+  background: var(--fill-strong);
+}
+
+.shop-cuts {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.shop-sheet {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shop-sheet img {
+  display: block;
+  align-self: flex-start;
+  width: auto;
+  max-width: 600px;
+  max-height: 460px;
+  height: auto;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.shop-picked td {
+  background: var(--fill-strong);
+}

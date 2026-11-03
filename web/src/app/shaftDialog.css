@@ -1,0 +1,110 @@
+/* The Shaft Configuration dialog (shaftDialog.ts): the preview, the segment buttons, the tabs and
+   their two-column groups inside the shared dialog shell (menubar.css). Colours come from the
+   tokens in styles.css, so both themes follow. */
+
+.menu-dialog.shaft-dialog {
+  width: min(620px, 100%);
+}
+
+.shaft-preview {
+  height: 120px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--viewport);
+  color: var(--text);
+}
+
+.shaft-preview svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.shaft-preview path {
+  vector-effect: non-scaling-stroke;
+}
+
+.shaft-preview .hidden {
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
+}
+
+.shaft-preview .current {
+  stroke: var(--danger);
+  stroke-width: 2px;
+}
+
+.shaft-problem {
+  min-height: 1.2em;
+  margin: 0 0 6px;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.shaft-nav,
+.shaft-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.shaft-head > .menu-dialog-field {
+  flex: 1 1 220px;
+  margin-bottom: 0;
+}
+
+.shaft-gap {
+  flex: 1 1 auto;
+}
+
+.shaft-count {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.shaft-tabs {
+  margin-bottom: 8px;
+}
+
+.shaft-panel {
+  min-height: 180px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider);
+  margin-bottom: 8px;
+}
+
+.shaft-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0 12px;
+}
+
+.shaft-group {
+  min-width: 0;
+  margin: 0 0 8px;
+  padding: 6px 10px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.shaft-group legend {
+  padding: 0 4px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.shaft-dialog .menu-dialog-input.invalid {
+  border-color: var(--danger);
+}
+
+.shaft-dialog .menu-dialog-input:disabled {
+  opacity: 0.5;
+}

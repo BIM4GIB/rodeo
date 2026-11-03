@@ -1,0 +1,16 @@
+.menu-dialog.site-section-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.site-colour-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.site-side-drawing {
+  display: block;
+  margin: 4px auto 8px;
+  color: var(--text-muted, #888);
+}

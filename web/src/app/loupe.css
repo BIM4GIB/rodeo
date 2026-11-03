@@ -1,0 +1,46 @@
+/* The Snap Loupe (loupe.ts): a round magnified window over the drawing, clicks passing to the drawing under it. */
+
+.snap-loupe {
+  position: absolute;
+  z-index: 5;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--shadow);
+  pointer-events: none;
+}
+
+.snap-loupe[hidden] {
+  display: none;
+}
+
+.snap-loupe-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.snap-loupe-badge {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+/* View > Dark Canvas: ink and paper swap here as on the drawing */
+.dark-canvas .snap-loupe {
+  background: #0f0f0f;
+}
+
+.dark-canvas .snap-loupe-canvas {
+  filter: invert(1) hue-rotate(180deg);
+}

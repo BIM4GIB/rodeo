@@ -1,0 +1,501 @@
+/* Plug-ins: the Manager, the editor, the Script Console, prompts and progress. The
+   dialogs use the shared shell (menubar.css: .menu-dialog, .menu-dialog-backdrop);
+   colours come from the tokens in styles.css, so light and dark both follow. */
+
+/* ---- dialog sizes --------------------------------------------------------- */
+
+.menu-dialog.pi-dialog {
+  width: min(380px, 100%);
+}
+
+.menu-dialog.pi-manager {
+  width: min(680px, 100%);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.menu-dialog.pi-help-dialog {
+  width: min(640px, 100%);
+  max-height: min(78vh, 720px);
+  overflow: auto;
+}
+
+.menu-dialog.pi-editor {
+  width: min(880px, 100%);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.pi-note {
+  margin: -4px 0 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.pi-warning {
+  margin: 6px 0;
+  color: var(--warn);
+  line-height: 1.45;
+}
+
+.pi-alert {
+  margin: 0 0 4px;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.menu-dialog-input.pi-input {
+  width: 190px;
+  text-align: left;
+}
+
+.pi-spacer {
+  flex: 1 1 auto;
+}
+
+.pi-link {
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pi-link:hover {
+  text-decoration: underline;
+}
+
+/* ---- Manager ------------------------------------------------------------- */
+
+.pi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 52vh;
+  margin: 10px 0 0;
+  overflow: auto;
+}
+
+.pi-empty {
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.pi-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--fill);
+}
+
+.pi-row.off .pi-row-name {
+  color: var(--text-soft);
+}
+
+.pi-switch {
+  padding-top: 2px;
+}
+
+.pi-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pi-row-name {
+  font-weight: 600;
+}
+
+.pi-row-meta,
+.pi-row-desc {
+  font-size: 11.5px;
+}
+
+.pi-row-desc {
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.pi-row-status {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.pi-row-status.error {
+  color: var(--danger);
+}
+
+.pi-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 78px;
+}
+
+.btn.pi-small {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+
+.pi-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pi-manager-note {
+  margin-top: 10px;
+  font-size: 11px;
+}
+
+.pi-import-name {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ---- editor --------------------------------------------------------------- */
+
+.pi-editor-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.pi-editor-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-status {
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.pi-status.dirty {
+  color: var(--warn);
+}
+
+.pi-elapsed {
+  min-width: 6em;
+  text-align: right;
+  font: 12px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.pi-code {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  height: min(46vh, 400px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.pi-gutter {
+  padding: 8px 10px 8px 8px;
+  overflow: hidden;
+  white-space: pre;
+  text-align: right;
+  font: 12px/18px var(--mono);
+  color: var(--text-3);
+  user-select: none;
+  background: var(--fill);
+  border-right: 1px solid var(--divider);
+}
+
+.pi-text {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font: 12px/18px var(--mono);
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+
+.pi-console {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pi-console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--divider);
+}
+
+.pi-console-lines {
+  height: 118px;
+  overflow: auto;
+  padding: 6px 10px;
+  font: 11.5px/1.5 var(--mono);
+}
+
+.pi-line,
+.pi-repl-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pi-line-text,
+.pi-repl-text {
+  min-width: 0;
+}
+
+.pi-line.pi-error,
+.pi-repl-line.pi-error {
+  color: var(--danger);
+}
+
+.pi-line.pi-warn,
+.pi-repl-line.pi-warn {
+  color: var(--warn);
+}
+
+.pi-line.pi-log,
+.pi-repl-line.pi-log {
+  color: var(--text-soft);
+}
+
+.pi-line.pi-system,
+.pi-repl-line.pi-system {
+  color: var(--text-3);
+  font-family: var(--font);
+}
+
+.pi-repl-line.pi-in {
+  color: var(--text);
+}
+
+.pi-repl-line.pi-result {
+  color: var(--accent);
+}
+
+.pi-line-no {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger);
+  font: inherit;
+  text-decoration: underline dotted;
+  white-space: nowrap;
+}
+
+button.pi-line-no {
+  cursor: pointer;
+}
+
+.menu-dialog.pi-editor .menu-dialog-actions {
+  margin-top: 0;
+  align-items: center;
+}
+
+.pi-editor.running .pi-elapsed {
+  color: var(--accent);
+}
+
+/* ---- Script Console -------------------------------------------------------- */
+
+.pi-repl {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  width: min(440px, calc(100vw - 32px));
+  height: min(340px, 50vh);
+  overflow: hidden;
+  border: 1px solid var(--chrome-border);
+  border-radius: 12px;
+  background: var(--chrome);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.pi-repl[hidden] {
+  display: none;
+}
+
+.pi-repl-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.pi-repl-title {
+  font-weight: 600;
+}
+
+.pi-repl .pi-close {
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-2);
+}
+
+.pi-repl-output {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  font: 11.5px/1.5 var(--mono);
+}
+
+.pi-repl-output .pi-system {
+  margin-bottom: 4px;
+}
+
+.pi-repl-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.pi-repl-prompt {
+  font: 13px var(--mono);
+  color: var(--accent);
+}
+
+.pi-repl-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: 12px var(--mono);
+}
+
+/* ---- Help ------------------------------------------------------------------ */
+
+.pi-help-h {
+  margin: 16px 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pi-help-h:first-child {
+  margin-top: 0;
+}
+
+.pi-help-p,
+.pi-help-list {
+  margin: 4px 0;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.pi-help-list {
+  padding-left: 18px;
+}
+
+.pi-help-code {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--fill);
+  font: 11.5px/1.5 var(--mono);
+  white-space: pre;
+  overflow: auto;
+}
+
+/* ---- progress ---------------------------------------------------------------- */
+
+.pi-progress {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 35;
+  width: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.pi-progress-track {
+  height: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--fill-strong);
+}
+
+.pi-progress-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s ease;
+}
+
+@media (max-width: 600px) {
+  .pi-code {
+    height: 240px;
+  }
+
+  .pi-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pi-row-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+/* a finger's target: the Manager's small Run, Edit, Export and Delete buttons grow on a touch screen */
+@media (pointer: coarse) {
+  .menu-dialog .btn.pi-small {
+    height: 36px;
+  }
+}

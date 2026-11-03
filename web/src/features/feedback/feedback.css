@@ -1,0 +1,364 @@
+/* The feedback form (report.ts), the check after a file comes in (check.ts), the admins' inbox
+   (inbox.ts) and error reports (errors.ts). */
+
+.menu-dialog.fb-dialog {
+  width: min(460px, 100%);
+}
+
+.fb-kinds {
+  margin-bottom: 10px;
+}
+
+.fb-message {
+  width: 100%;
+  min-height: 120px;
+  margin-bottom: 10px;
+}
+
+.fb-include {
+  margin: 10px 0 2px;
+  font-size: 12px;
+}
+
+/* what's wrong, in a click */
+.fb-chips-row {
+  margin-bottom: 10px;
+}
+
+.fb-chips-row[hidden] {
+  display: none;
+}
+
+.fb-chips-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.fb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fb-chip {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.fb-chip:hover {
+  background: var(--fill);
+}
+
+.fb-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--select);
+  color: var(--accent);
+}
+
+/* the screenshot and the file */
+.fb-attach {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--fill);
+  font-size: 12px;
+}
+
+.fb-attach .menu-dialog-check {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fb-attach-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.fb-attach .menu-dialog-check .fb-attach-note {
+  margin-left: 6px;
+}
+
+.fb-shot {
+  display: block;
+  max-width: 100%;
+  max-height: 120px;
+  margin-left: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  object-fit: contain;
+  object-position: left top;
+}
+
+.fb-shot[hidden] {
+  display: none;
+}
+
+.fb-details {
+  margin: 0 0 4px 24px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.fb-details.off {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* the bot trap: off screen, out of reach of the keyboard and screen readers */
+.fb-trap {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* ---- the inbox ---------------------------------------------------------------- */
+
+.menu-dialog.fb-inbox-dialog {
+  width: min(620px, 100%);
+}
+
+.fb-tabs {
+  margin-bottom: 10px;
+}
+
+.fb-inbox-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+}
+
+.fb-inbox-empty {
+  margin: 16px 0;
+  font-size: 12px;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.fb-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--fill);
+}
+
+.fb-item.done {
+  opacity: 0.7;
+}
+
+.fb-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+}
+
+.fb-kind {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-weight: 600;
+}
+
+.fb-kind-bug {
+  background: rgba(255, 107, 99, 0.16);
+  color: var(--danger);
+}
+
+.fb-kind-idea {
+  background: var(--select);
+  color: var(--accent);
+}
+
+.fb-kind-other {
+  background: var(--fill-strong);
+  color: var(--text-soft);
+}
+
+.fb-item-from {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-item-date {
+  flex: none;
+  color: var(--text-3);
+}
+
+.fb-item-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fb-item-details {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.fb-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fb-item-actions a.btn {
+  text-decoration: none;
+}
+
+.fb-item-attach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fb-item-attach a.btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.fb-item-shot img {
+  display: block;
+  max-width: 220px;
+  max-height: 140px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.fb-diag {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.fb-diag summary {
+  cursor: pointer;
+}
+
+/* ---- the check after a file comes in ------------------------------------------- */
+
+.fb-check {
+  position: absolute;
+  top: 56px;
+  right: 20px;
+  z-index: 5;
+  width: min(340px, calc(100% - 40px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 12px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.stage.rulers .fb-check {
+  top: 72px;
+}
+
+.fb-check-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fb-check-title {
+  flex: 1;
+  min-width: 0;
+  margin: 2px 0 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb-check-close {
+  flex: none;
+  margin: -4px -4px 0 0;
+}
+
+.fb-check-text {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.fb-check-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* a phone: near the foot of the drawing, clear of the bars across its top and above the toasts
+   (styles.css .toasts), which say what came in as the card shows */
+@media (max-width: 600px) {
+  .fb-check {
+    top: auto;
+    bottom: 64px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+}
+
+/* ---- error reports -------------------------------------------------------------- */
+
+.er-kind-crash,
+.er-kind-server {
+  background: rgba(255, 107, 99, 0.16);
+  color: var(--danger);
+}
+
+.er-kind-failure {
+  background: rgba(255, 176, 32, 0.16);
+  color: var(--text);
+}
+
+.er-kind-slow {
+  background: var(--select);
+  color: var(--accent);
+}
+
+.er-report {
+  max-height: 320px;
+  margin: 6px 0 8px;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

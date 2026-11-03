@@ -1,0 +1,47 @@
+.menu-dialog.survey-z-dialog {
+  width: fit-content;
+  min-width: 360px;
+  max-width: 92vw;
+}
+.survey-z-scroll {
+  max-height: 46vh;
+  overflow: auto;
+}
+.survey-z-table {
+  border-collapse: collapse;
+}
+.survey-z-table th {
+  padding: 2px 6px;
+  font-weight: 500;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.survey-z-table td {
+  padding: 1px;
+}
+.survey-z-table input {
+  width: 72px;
+}
+.menu-dialog.survey-import-dialog {
+  width: min(560px, 92vw);
+}
+.survey-line {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  min-height: 24px;
+  font-size: 12px;
+}
+.survey-line span {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(127, 127, 127, 0.15));
+  white-space: nowrap;
+}
+.survey-line-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 12px;
+}

@@ -1,0 +1,78 @@
+/* Window > View Panes: the panes are placed from viewPanes.ts; the dividers between them, the
+   pictures of the 3D panes without the live view, and the ring round the active pane. */
+
+/* the gaps between panes that share a side evenly, as the dividers are */
+.canvas-wrap.panes,
+.dark-canvas .canvas-wrap.panes {
+  background: var(--chrome);
+}
+
+.pane-divider {
+  position: absolute;
+  z-index: 4;
+  background: var(--chrome);
+  touch-action: none;
+}
+
+.pane-divider.upright {
+  cursor: col-resize;
+}
+
+.pane-divider.level {
+  cursor: row-resize;
+}
+
+/* a grip in its middle, in the accent while it is dragged */
+.pane-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 1px;
+  background: var(--chrome-border);
+  transform: translate(-50%, -50%);
+}
+
+.pane-divider.upright::after {
+  width: 2px;
+  height: 28px;
+}
+
+.pane-divider.level::after {
+  width: 28px;
+  height: 2px;
+}
+
+.pane-divider:hover::after,
+.pane-divider.dragging::after {
+  background: var(--accent);
+}
+
+.pane-picture {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  background: #e6e7ea;
+  cursor: pointer;
+}
+
+.pane-ring {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0.6;
+}
+
+.pane-divider[hidden],
+.pane-picture[hidden],
+.pane-ring[hidden] {
+  display: none;
+}
+
+/* before a drawing is open, the welcome shows: no panes */
+.stage.no-doc .pane-divider,
+.stage.no-doc .pane-picture,
+.stage.no-doc .pane-ring {
+  display: none;
+}

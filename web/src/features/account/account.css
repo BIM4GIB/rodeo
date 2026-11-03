@@ -1,0 +1,470 @@
+/* Accounts, Rodeo Plus, donations and the start hub's ad (features/account).
+   Colours are the editor's tokens, so the light and dark themes both work. */
+
+/* ---- top bar: the account control at the end of the bar ------------------- */
+
+.acct-slot {
+  order: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  flex: none;
+}
+
+.acct-signin-icon {
+  display: none;
+}
+
+/* on a phone the bar has no room for the words: Sign in is its icon */
+@media (max-width: 560px) {
+  .acct-signin {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    padding: 0;
+  }
+
+  .acct-signin[hidden] {
+    display: none;
+  }
+
+  .acct-signin-icon {
+    display: inline-grid;
+  }
+
+  .acct-signin-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .acct-signin-label {
+    display: none;
+  }
+}
+
+.acct-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  overflow: hidden;
+  cursor: default;
+}
+
+.acct-avatar:hover:not(:disabled) {
+  box-shadow: 0 0 0 2px var(--fill-strong);
+}
+
+.acct-avatar-img,
+.acct-initials {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.acct-avatar-img {
+  object-fit: cover;
+}
+
+.acct-initials {
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ---- dialogs ------------------------------------------------------------- */
+
+.menu-dialog.account-dialog {
+  width: min(400px, 100%);
+}
+
+.menu-dialog.admin-dialog {
+  width: min(480px, 100%);
+}
+
+.menu-dialog.supporter-dialog {
+  width: min(420px, 100%);
+}
+
+.acct-subtitle {
+  margin: -6px 0 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.acct-lead {
+  margin: 0 0 12px;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.acct-headline {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.acct-status {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.acct-note {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.acct-section {
+  margin: 14px 0 6px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.acct-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.acct-field-label {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.acct-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.acct-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.acct-input:disabled {
+  opacity: 0.45;
+}
+
+.acct-textarea {
+  height: auto;
+  min-height: 56px;
+  padding: 6px 8px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.acct-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.acct-row > .acct-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.acct-row > .acct-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.acct-wide {
+  width: 100%;
+}
+
+.acct-form {
+  margin: 0;
+}
+
+.acct-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.acct-provider {
+  width: 100%;
+  height: 32px;
+}
+
+.acct-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.acct-divider::before,
+.acct-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--divider);
+}
+
+/* Account…: name, email, plan and usage as a two-column list */
+
+.acct-info {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px 12px;
+  align-items: center;
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.acct-info dt {
+  color: var(--text-2);
+}
+
+.acct-info dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.acct-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--select);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.acct-storage {
+  min-width: 0;
+}
+
+.acct-bar {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--fill-strong);
+}
+
+.acct-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.acct-danger-zone {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.acct-danger-zone .acct-note {
+  margin-bottom: 8px;
+}
+
+/* Rodeo Plus */
+
+.acct-perks {
+  margin: 0 0 14px;
+  padding: 0 0 0 16px;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.acct-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.acct-buttons .btn {
+  flex: 1 1 0;
+  height: 34px;
+  font-size: 12px;
+}
+
+/* AI credit */
+
+.acct-credit {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.acct-history-list {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.acct-history-list li {
+  display: grid;
+  grid-template-columns: 7.5em 1fr auto;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--divider);
+  color: var(--text-soft);
+}
+
+.acct-history-amount {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* funding: the donation links are buttons that open in a new tab */
+
+.acct-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.acct-links .btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* ---- the start hub's ad (ad.ts): the sponsor, or Carbon's ad, in a row under Recent ---- */
+
+.hub-ad-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hub-ad-remove {
+  font-size: 11px;
+}
+
+.hub-ad-body {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+/* the sponsor: picture, name and line, then its button; the whole row is the link */
+.hub-ad-sponsor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.hub-ad-sponsor:hover {
+  background: var(--fill-hover);
+}
+
+.hub-ad-img {
+  flex: none;
+  width: 72px;
+  height: 48px;
+  border-radius: 6px;
+  background: var(--fill);
+  object-fit: contain;
+}
+
+.hub-ad-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.hub-ad-text span {
+  color: var(--text-2);
+}
+
+.hub-ad-sponsor .btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Carbon's ad (#carbonads, its own markup): its picture, its line, then "ads via Carbon" */
+.hub-ad-carbon #carbonads > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 12px;
+}
+
+.hub-ad-carbon .carbon-wrap {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hub-ad-carbon .carbon-img {
+  display: block;
+  flex: none;
+  line-height: 0;
+}
+
+.hub-ad-carbon .carbon-img img {
+  width: 100px;
+  height: auto;
+  border-radius: 6px;
+}
+
+.hub-ad-carbon .carbon-text {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  text-decoration: none;
+}
+
+.hub-ad-carbon .carbon-poweredby {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.hub-ad-carbon a:hover {
+  color: var(--text);
+}

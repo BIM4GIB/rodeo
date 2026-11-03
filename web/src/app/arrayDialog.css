@@ -1,0 +1,48 @@
+/* Edit > Duplicate Array… and Modify > Create Symbol…: the mode select, the groups of fields and the
+   name field, inside the shared dialog shell (menubar.css). Colours come from the tokens in
+   styles.css, so both themes follow. */
+
+.menu-dialog.array-dialog {
+  width: min(340px, 100%);
+}
+
+.array-select {
+  flex: none;
+  width: 170px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.array-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+.menu-dialog-input.array-name {
+  width: 170px;
+  text-align: left;
+}
+
+/* a group of fields for one mode; hidden groups must stay out of the layout */
+.array-group[hidden] {
+  display: none;
+}
+
+.array-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.array-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}

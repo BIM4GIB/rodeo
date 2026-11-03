@@ -1,0 +1,70 @@
+/* AEC > Machine Design's calculators (calculators.ts) and Simple Beam Calculator (simpleBeam.ts) */
+.conv-out {
+  flex: none;
+  width: 96px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: text;
+}
+
+/* Solution of Triangles: a side and the angle opposite it on one row */
+.tri-row .menu-dialog-input {
+  width: 72px;
+}
+
+.tri-row .menu-dialog-input:disabled {
+  opacity: 0.45;
+}
+
+/* room for the longest beam configuration or kind of triangle */
+.menu-dialog-select.calc-wide {
+  width: 280px;
+}
+
+.beam-preview {
+  display: block;
+  width: 100%;
+  height: 72px;
+  margin: 2px 0 8px;
+  color: var(--text-2);
+}
+
+.beam-preview .load {
+  color: var(--accent);
+}
+
+/* Conduit Sizing Calculator: its conductors' list, across the dialog under their buttons */
+.conduit-buttons {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.menu-dialog-field.conduit-list-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.menu-dialog-input.conduit-list {
+  width: 100%;
+  height: auto;
+  padding: 4px;
+  text-align: left;
+}
+
+/* Spring Calculator: the four types of ends listed under their label */
+.spring-ends {
+  align-items: flex-start;
+}
+
+.spring-ends .menu-dialog-check {
+  margin: 0 0 2px;
+}
+
+/* the values the method works out, shown but not typed */
+.spring-dialog .menu-dialog-input:disabled {
+  color: var(--text-2);
+  background: transparent;
+  opacity: 1;
+}

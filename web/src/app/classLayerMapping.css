@@ -1,0 +1,6 @@
+.menu-dialog.mapping-dialog { width: min(520px, calc(100vw - 32px)); }
+.mapping-table { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 8px; align-items: center; max-height: 340px; overflow: auto; }
+.mapping-table .menu-dialog-input { width: 100%; min-width: 0; }
+.mapping-head { font-weight: 600; }
+.mapping-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapping-buttons { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -1,0 +1,2303 @@
+/* openvwx editor shell, after Spline's editor: dark chrome round an inset
+   drawing card. Colours are tokens on :root (dark); [data-theme="light"] and
+   [data-theme="system"] (theme.ts) swap them. The drawing keeps its own paper
+   colour in every theme, unless View > Dark Canvas inverts it. */
+
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font: 12px/1.35 var(--font);
+  color: var(--text);
+  background: var(--chrome);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+code {
+  font: 11px var(--mono);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ---- app frame -------------------------------------------------------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  /* the dynamic viewport: it follows the browser's address bar as it shows and hides, so the bottom is never under it */
+  height: 100dvh;
+  min-width: 0;
+}
+
+/* The top bar: its ends are as wide as the side panels under them (--dock-left, --dock-right) */
+.topbar {
+  display: flex;
+  align-items: stretch;
+  height: var(--topbar-h);
+  flex: none;
+  min-width: 0;
+  background: var(--chrome);
+  position: relative;
+  z-index: 10;
+}
+
+.tb-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+/* Both ends are never narrower than their buttons (the file name stops at .file-info's
+   max-width): past the dock's width when they must be, and .tb-center scrolls instead. */
+.tb-left {
+  width: var(--dock-left, auto);
+  min-width: max-content;
+  padding-left: 8px;
+}
+
+.tb-right {
+  width: var(--dock-right, auto);
+  min-width: max-content;
+  gap: 6px;
+}
+
+/* over an open dock, the end is boxed off from it and from the drawing's part of the bar */
+.topbar.left-dock .tb-left {
+  border-right: 1px solid var(--chrome-border);
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.topbar.right-dock .tb-right {
+  border-left: 1px solid var(--chrome-border);
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.tb-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* the tools sit in the middle of the bar */
+.tb-tools {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: max-content;
+}
+
+.tb-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  flex: none;
+  background: var(--chrome-border);
+}
+
+.tb-icon,
+.bar-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 11px;
+  cursor: default;
+}
+
+.tb-icon svg,
+.bar-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tb-icon:hover:not(:disabled),
+.bar-btn:hover:not(:disabled) {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.tb-icon:disabled,
+.bar-btn:disabled {
+  opacity: 0.35;
+}
+
+.tb-icon.active,
+.bar-btn.active {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+/* a button that drops a menu: icon, short label and caret */
+.bar-btn.bar-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 6px;
+  white-space: nowrap;
+}
+
+.bar-btn.bar-menu svg:last-child {
+  width: 10px;
+  height: 10px;
+  opacity: 0.6;
+}
+
+.bar-btn.caret-only {
+  min-width: 18px;
+  padding: 0 3px;
+}
+
+/* Spline's Share and Export */
+.tb-btn {
+  height: 28px;
+  padding: 0 10px;
+  flex: none;
+  border: none;
+  border-radius: 6px;
+  background: var(--btn);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.tb-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.tb-btn.primary {
+  background: var(--btn-strong);
+  color: var(--text);
+}
+
+:root[data-theme="light"] .tb-btn.primary {
+  color: #ffffff;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] .tb-btn.primary {
+    color: #ffffff;
+  }
+}
+
+.tb-btn:disabled {
+  opacity: 0.4;
+}
+
+/* Save and its caret (the export, share and print menu): one control, its two halves flush */
+.tb-split {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.tb-btn.tb-split-main {
+  border-radius: 6px 0 0 6px;
+}
+
+.tb-btn.tb-split-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  padding: 0;
+  border-radius: 0 6px 6px 0;
+  border-left: 1px solid var(--chrome);
+}
+
+.tb-split-caret svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* a long name ellipsizes past this width, so it cannot push the Menu button or the tools along */
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 200px;
+  padding-left: 2px;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: none;
+}
+
+.spacer {
+  flex: 1;
+  min-width: 4px;
+}
+
+/* ---- buttons ---------------------------------------------------------- */
+
+.btn {
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--btn);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--fill-strong);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+}
+
+.btn.primary {
+  background: var(--text);
+  color: var(--chrome);
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: var(--text);
+  opacity: 0.9;
+}
+
+.btn.active {
+  background: var(--select);
+  color: var(--text);
+}
+
+.btn.danger {
+  color: var(--danger);
+}
+
+.btn.small {
+  height: 24px;
+  padding: 0 8px;
+}
+
+/* ---- the workspace: side panels at its edges, the drawing card between them (dock.ts) ---- */
+
+.workspace {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--chrome);
+}
+
+/* ---- tool buttons (top bar and the tool palettes) --------------------- */
+
+/* icon buttons in as many columns as the panel is wide; names in tooltips */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+  align-content: start;
+  gap: 2px;
+  padding: 6px;
+}
+
+.tool-grid [role="separator"] {
+  grid-column: 1 / -1;
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--divider);
+}
+
+.tool {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.tool-icon {
+  display: grid;
+  place-items: center;
+}
+
+.tool-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tool:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.tool.active {
+  background: var(--fill-strong);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* the shortcut, tucked in the corner; the tooltip names the tool */
+.tool-key {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font: 600 7px var(--font);
+  color: var(--text-3);
+}
+
+/* Tool Sets: a row of set buttons over the set's tools */
+.toolset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 6px 0;
+}
+
+/* a top bar tool: the group's current tool, and a caret that drops the rest of the group */
+.tb-tool {
+  display: inline-flex;
+  align-items: stretch;
+  flex: none;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.tb-tool .tool {
+  width: 28px;
+}
+
+.tb-tool.has-more .tool {
+  width: 24px;
+  border-radius: 6px 0 0 6px;
+}
+
+.tb-tool-more {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 0 6px 6px 0;
+  background: none;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.tb-tool-more svg {
+  width: 10px;
+  height: 10px;
+}
+
+.tb-tool:hover .tool,
+.tb-tool:hover .tb-tool-more {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.tb-tool.active .tool,
+.tb-tool.active .tb-tool-more {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.tb-tool.active {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* ---- stage: the drawing card between the side panels ------------------ */
+
+.stage {
+  position: absolute;
+  /* under and over the docking bars, when there are any (dock.ts) */
+  top: var(--dock-top, 0px);
+  bottom: var(--dock-bottom, 0px);
+  left: var(--dock-left, 0px);
+  right: var(--dock-right, 0px);
+  padding: 0 8px 8px;
+}
+
+.canvas-wrap {
+  position: absolute;
+  inset: 0 8px 8px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--chrome-border);
+}
+
+/* no paper before a drawing is open: the viewport's colour, faded behind the start hub (the
+   canvas would paint an empty sheet of paper there) */
+.stage.no-doc .canvas-wrap {
+  background: var(--viewport);
+}
+
+.stage.no-doc #canvas {
+  visibility: hidden;
+}
+
+/* View > Dark Canvas: the drawing's ink and paper swap, its colours keep their hue */
+.dark-canvas .canvas-wrap {
+  background: #0f0f0f;
+}
+
+.dark-canvas #canvas {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Preferences > Interactive > Full-screen cursor (crosshair.ts): hairlines across the drawing at the pointer */
+.crosshair {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+  /* Preferences > Appearance's cursor colour, else dark on the white canvas */
+  background: var(--cursor-color, rgba(0, 0, 0, 0.32));
+}
+
+.crosshair.across {
+  width: 100%;
+  height: 1px;
+}
+
+.crosshair.down {
+  width: 1px;
+  height: 100%;
+}
+
+.crosshair[hidden] {
+  display: none;
+}
+
+.dark-canvas .crosshair {
+  background: var(--cursor-color, rgba(255, 255, 255, 0.36));
+}
+
+/* Preferences > Interactive: the selection and snap boxes at the pointer (crosshair.ts) */
+.cursor-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: 1px solid var(--cursor-color, rgba(0, 0, 0, 0.45));
+}
+
+.cursor-box.snap {
+  border-style: dashed;
+  border-color: var(--snap-color, var(--accent));
+}
+
+.cursor-box[hidden] {
+  display: none;
+}
+
+.dark-canvas .cursor-box.select {
+  border-color: var(--cursor-color, rgba(255, 255, 255, 0.5));
+}
+
+#canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.text-host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The 3D view covers the drawing while it is shown. */
+.view3d-host {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.view3d-host[hidden] {
+  display: none;
+}
+
+.text-editor {
+  position: absolute;
+  margin: 0;
+  padding: 0 2px;
+  min-width: 40px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #1d1d1f;
+  line-height: 1.15;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: auto;
+  box-shadow: var(--shadow);
+}
+
+/* ---- heads-up bars over the drawing: View bar, Mode bar, cursor, snapping ---- */
+
+.hud {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.hud > * {
+  pointer-events: auto;
+}
+
+.hud-top {
+  top: 12px;
+}
+
+/* View > Rulers: the bars over the drawing stand clear of the rulers along its top and left (16 px) */
+.stage.rulers .hud {
+  left: 36px;
+}
+
+.stage.rulers .hud-top {
+  top: 28px;
+}
+
+/* the cursor at the left, the Mode bar in the middle, snapping at the right */
+.hud-bottom {
+  bottom: 20px;
+  display: grid;
+  /* the side pills keep their size; the Mode bar gives way, its hint first */
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+}
+
+.hud-bottom > .sb-cursor {
+  justify-self: start;
+  grid-column: 1;
+}
+
+.hud-bottom > .modebar {
+  grid-column: 2;
+}
+
+.hud-bottom > .sb-snaps {
+  justify-self: end;
+  grid-column: 3;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  min-width: 0;
+  height: 36px;
+  padding: 0 4px;
+  border: 1px solid var(--pill-border);
+  border-radius: 10px;
+  background: var(--pill);
+  color: var(--text-soft);
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.pill-quiet {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.pill-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  flex: none;
+  background: var(--chrome-border);
+}
+
+/* Window > View Bar Options: compact (tighter, without the layer's scale), auto-hidden (a short
+   mark where it is till the pointer comes near) and captions over its groups */
+#viewbar.vb-compact > .pill {
+  height: 28px;
+  padding: 0 2px;
+  border-radius: 8px;
+}
+
+#viewbar.vb-compact .vb-scale {
+  display: none;
+}
+
+#viewbar.vb-compact .bar-btn {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 2px;
+}
+
+#viewbar.vb-compact .bar-select {
+  height: 22px;
+  max-width: 112px;
+}
+
+#viewbar.vb-compact .pill-sep {
+  margin: 0 2px;
+}
+
+#viewbar.vb-autohide > .pill {
+  position: relative;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+#viewbar.vb-autohide:not(.vb-out) > .pill {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+
+#viewbar.vb-autohide:not(.vb-out) > .pill > * {
+  visibility: hidden;
+}
+
+#viewbar.vb-autohide:not(.vb-out) > .pill::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 2px;
+  background: var(--pill);
+  box-shadow: 0 0 0 1px var(--pill-border);
+}
+
+.vb-label {
+  display: none;
+  flex: none;
+  padding: 0 2px 0 4px;
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#viewbar.vb-labels .vb-label {
+  display: inline;
+}
+
+/* a bar's grip: drag it to move the bar over the drawing, click to roll the bar up to it */
+.hud-grip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 28px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.hud-grip svg {
+  width: 8px;
+  height: 14px;
+}
+
+.hud-grip:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.hud-grip > span {
+  display: none;
+}
+
+.hud-moving,
+.hud-moving .hud-grip {
+  cursor: grabbing;
+}
+
+/* rolled up: the grip and the bar's name (the Mode bar: its tool's icon instead) */
+.hud-rolled > :not(.hud-grip) {
+  display: none !important;
+}
+
+.hud-rolled > .hud-grip > span {
+  display: inline;
+}
+
+.modebar.hud-rolled > .mode-tool {
+  display: flex !important;
+}
+
+.modebar.hud-rolled > .mode-tool > span,
+.modebar.hud-rolled > .hud-grip > span {
+  display: none;
+}
+
+.hud-rolled {
+  padding: 0 4px;
+}
+
+/* the 2D bars give way in 3D (unless the plan shows beside it), and before a drawing is open */
+.stage.is-3d:not(.two-panes) .hud-bottom,
+.stage.no-doc .hud {
+  display: none;
+}
+
+/* but the 3D viewing tools keep the Mode bar, for their modes and preferences */
+.stage.is-3d.steering:not(.two-panes, .no-doc) .hud-bottom {
+  display: grid;
+}
+
+.stage.is-3d.steering:not(.two-panes) .hud-bottom > :not(.modebar) {
+  visibility: hidden;
+}
+
+/* the View bar: active layer and class with their options, and the saved views */
+.hud-top .pill {
+  height: 32px;
+}
+
+.vb-scale {
+  padding: 0 4px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the Mode bar: tool, modes, preferences, then what to do next */
+.modebar {
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+.mb-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.mb-group > .seg + .seg {
+  margin-left: 8px;
+}
+
+.mb-group::before,
+.mode-hint::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 6px 0 2px;
+  background: var(--chrome-border);
+}
+
+.mode-tool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding-right: 6px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.mode-tool svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* too narrow for every mode: the tool's icon alone, and each mode group a menu */
+.modebar.compact .mode-tool > span {
+  display: none;
+}
+
+.mb-menu {
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.mb-menu svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-3);
+}
+
+.mode-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 6px;
+  overflow: hidden;
+}
+
+.mode-step {
+  flex: none;
+  color: var(--text);
+}
+
+.mode-key {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--fill);
+  color: var(--text-2);
+}
+
+.mode-hint > :last-child {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* snap and grid toggles: icon buttons over hidden checkboxes */
+.sb-toggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: default;
+}
+
+.sb-toggle:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.sb-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sb-toggle:has(input:checked) {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.sb-toggle:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+}
+
+.sb-icon svg,
+.sb-more svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.sb-more {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+}
+
+.sb-more:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+/* ---- panel contents --------------------------------------------------- */
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.toolbar.sub {
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.list {
+  flex: 1 0 auto;
+  padding: 4px 6px 8px;
+}
+
+.empty,
+.note {
+  padding: 12px;
+  color: var(--text-2);
+}
+
+.muted {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+/* fields: Spline's value chips, no border until focused */
+.search,
+.num,
+.select,
+.inline-edit,
+.info-text,
+.text-content {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font-size: 11px;
+  outline: none;
+}
+
+.search::placeholder,
+.text-content::placeholder {
+  color: var(--text-3);
+}
+
+.search:hover,
+.num:hover:not(:disabled),
+.select:hover:not(:disabled),
+.info-text:hover,
+.text-content:hover {
+  background: var(--fill-hover);
+}
+
+.search:focus,
+.num:focus,
+.select:focus,
+.inline-edit,
+.info-text:focus,
+.text-content:focus {
+  border-color: var(--accent);
+  background: var(--fill);
+}
+
+.search {
+  flex: 1;
+  min-width: 90px;
+}
+
+.num {
+  width: 84px;
+  font-variant-numeric: tabular-nums;
+}
+
+.num:disabled,
+.select:disabled {
+  opacity: 0.45;
+}
+
+.scale-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.select {
+  width: 100%;
+  padding: 0 4px;
+}
+
+.inline-edit {
+  width: 100%;
+  min-width: 0;
+}
+
+/* ---- layers and classes lists: Spline's object tree rows ---------------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--row-h);
+  padding: 2px 6px 2px 10px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.row:hover {
+  background: var(--fill);
+  color: var(--text);
+}
+
+.row.active {
+  background: var(--select);
+  color: var(--text);
+}
+
+.row.selected {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.row.dragging {
+  opacity: 0.45;
+}
+
+.row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.names {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.grip {
+  width: 8px;
+  color: var(--text-3);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: -1px;
+  cursor: grab;
+  flex: none;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-2);
+}
+
+.icon-btn:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.icon-btn.vis-hidden {
+  color: var(--text-3);
+}
+
+.badge {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--fill);
+  font-size: 10px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge.sheet {
+  color: var(--accent);
+}
+
+/* a feature's mark on a layer row (Project Sharing: who has the layer checked out) */
+.layer-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 2px 3px;
+  border-radius: 4px;
+  background: var(--fill);
+  color: var(--text-2);
+}
+
+.layer-mark.mine {
+  color: var(--accent);
+}
+
+.layer-mark.theirs {
+  color: var(--warn);
+}
+
+.layer-mark svg {
+  flex: none;
+  width: 11px;
+  height: 11px;
+}
+
+.count {
+  flex: none;
+  min-width: 22px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* a sheet's name over its viewports in Navigation > Viewports */
+.list-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 10px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.list-head.active {
+  color: var(--accent);
+}
+
+.list-head .name {
+  flex: none;
+}
+
+.list-head .sub {
+  min-width: 0;
+  font-weight: 400;
+}
+
+.viewport-row .names {
+  padding-left: 6px;
+}
+
+.story-row .name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* the design layers on a story, under it */
+.row.story-layer {
+  padding-left: 22px;
+}
+
+.class-row input[type="radio"] {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* ---- Object Info: Spline's property sections ---------------------------- */
+
+.info {
+  padding-bottom: 12px;
+}
+
+.info-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.info-head strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.info-section {
+  padding: 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.info-section h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+/* a field on its own: label beside the value, as Spline's Position, Scale, Rotation */
+.info-section > .field {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+/* a colour of its own, not one of the drawing's (a light's) */
+.info-colour {
+  width: 100%;
+  height: var(--row-h, 24px);
+  padding: 0 2px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 6px;
+  background: var(--fill);
+  cursor: pointer;
+}
+
+.class-style {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.class-style-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.field > .select,
+.field > .num,
+.field > .text-content {
+  width: 100%;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.row-end {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* Object Info's vertex editor: ◀ Vertex n of m ▶, its fields, then Closed and Add / Delete */
+.vertex-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.vertex-step {
+  min-width: 26px;
+  padding: 0 6px;
+}
+
+.vertex-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.vertex-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.text-content {
+  width: 100%;
+  height: auto;
+  min-height: 56px;
+  padding: 5px 7px;
+  resize: vertical;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.color-row .num {
+  width: 84px;
+}
+
+.swatch {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* ---- palettes: Spline packs its panels at 11px ---------------------------- */
+
+.pal .btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.pal .muted {
+  font-size: 11px;
+}
+
+/* ---- segmented control: 2D | 3D, a tool's modes (Spline's Preview, Edit, Code) ---- */
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.seg-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.seg-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.seg-btn:disabled {
+  opacity: 0.35;
+}
+
+.seg-btn.active {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.pill .seg-btn {
+  height: 26px;
+  padding: 0 8px;
+}
+
+.bar-select {
+  height: 26px;
+  max-width: 170px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.bar-select:hover:not(:disabled) {
+  background: var(--fill-hover);
+}
+
+.bar-select:disabled {
+  opacity: 0.45;
+}
+
+.zoom-field {
+  width: 52px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.zoom-field:focus {
+  border-color: var(--accent);
+}
+
+.zoom-field:disabled {
+  opacity: 0.45;
+}
+
+/* ---- toasts and the drop overlay ------------------------------------------ */
+
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 80vw;
+  padding: 8px 12px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 8px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  transition: opacity 0.4s;
+}
+
+.toast.error {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+
+.toast.out {
+  opacity: 0;
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: 8px;
+  z-index: 60;
+  display: none;
+  place-items: center;
+  border: 1px dashed var(--accent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--chrome) 70%, transparent);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.drop-overlay.on {
+  display: grid;
+}
+
+/* ---- narrow windows: the bars drop what matters least ------------------ */
+
+@media (max-width: 1240px) {
+  .bar-btn.bar-menu > span {
+    display: none;
+  }
+
+  .bar-select {
+    max-width: 120px;
+  }
+
+  .mode-hint > :not(.mode-step) {
+    display: none;
+  }
+}
+
+/* the 3D view's direction and render mode stay in the View menu */
+@media (max-width: 1180px) {
+  #tb-view .bar-menu {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .tb-left .file-info,
+  .vb-scale,
+  .sb-cursor {
+    display: none;
+  }
+}
+
+/* a tablet or a landscape phone: the tool row scrolls inside the top bar, its edges fading where more
+   tools lie beyond them (toolbar.ts sets the classes that set the fades' widths) */
+@media (max-width: 899px) {
+  #tb-tools {
+    --fade-start: 0px;
+    --fade-end: 0px;
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 4px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+  }
+
+  #tb-tools::-webkit-scrollbar {
+    display: none;
+  }
+
+  #tb-tools.more-start {
+    --fade-start: 24px;
+  }
+
+  #tb-tools.more-end {
+    --fade-end: 24px;
+  }
+
+  #tb-tools .tb-tool {
+    scroll-snap-align: start;
+  }
+}
+
+/* a phone: the tool row is a bar along the bottom, in the strip that the drawing leaves for it above
+   the home indicator (touch.css pads the app by the safe area); the top bar keeps the Menu, search,
+   2D or 3D, Palettes and Save. Each tool is a 44 px target. */
+@media (max-width: 560px) {
+  /* a phone's bars stay where they are */
+  .hud-grip {
+    display: none;
+  }
+
+  .tb-left,
+  .tb-right {
+    width: auto;
+  }
+
+  .workspace {
+    margin-bottom: 52px;
+  }
+
+  /* the start hub has nothing to draw on: the tool bar waits for a drawing, and the hub takes its strip */
+  body:has(.stage.no-doc) #tb-tools {
+    display: none;
+  }
+
+  body:has(.stage.no-doc) .workspace {
+    margin-bottom: 0;
+  }
+
+  /* the top bar's centre holds 2D or 3D alone: the quick bar beside the drawing has Undo and Redo, and
+     the bar's right end keeps room for Palettes and Save */
+  .tb-center {
+    justify-content: center;
+  }
+
+  .tb-center > .tb-group:has(#btn-undo) {
+    display: none;
+  }
+
+  #tb-tools {
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left, 0px));
+    right: max(8px, env(safe-area-inset-right, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    height: 44px;
+    padding: 0 2px;
+  }
+
+  #tb-tools .tb-tool {
+    height: 44px;
+  }
+
+  #tb-tools .tb-tool .tool {
+    width: 44px;
+    height: 44px;
+  }
+
+  #tb-tools .tb-tool .tool svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  #tb-tools .tb-tool.has-more .tool {
+    width: 44px;
+  }
+
+  #tb-tools .tb-tool-more {
+    width: 22px;
+    height: 44px;
+  }
+
+  #tb-tools .tb-sep {
+    align-self: center;
+    height: 22px;
+    margin: 0 4px;
+  }
+
+  /* the View bar and the status pills keep to the phone's width */
+  .hud-top {
+    top: 8px;
+    left: 10px;
+    right: 10px;
+  }
+
+  .hud-bottom {
+    bottom: 12px;
+    left: 10px;
+    right: 10px;
+  }
+
+  #viewbar > .pill {
+    width: 100%;
+  }
+
+  #viewbar .bar-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 2px 0 4px;
+  }
+
+  #viewbar .bar-select {
+    flex: 1 1 0;
+    width: 0;
+    min-width: 48px;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* the narrowest phones: the top bar's buttons close up, and Save leaves its menu to File (Save As,
+   Export and Print are there) */
+@media (max-width: 389px) {
+  html #topbar .tb-icon {
+    width: 34px;
+    min-width: 34px;
+  }
+
+  html #topbar .seg-btn {
+    padding: 0 6px;
+  }
+
+  html #topbar .tb-split-main {
+    padding: 0 10px;
+    border-radius: 6px;
+  }
+
+  #btn-save-menu {
+    display: none;
+  }
+}
+
+/* narrower still, the comment button goes: the Crit palette holds the comments */
+@media (max-width: 349px) {
+  #topbar .crit-top {
+    display: none;
+  }
+}
+
+/* a touch phone in landscape: the quick keys stand in a column at the drawing's right edge, which
+   is as tall as the drawing, so the status pills keep clear of it */
+@media (pointer: coarse) and (max-height: 500px) {
+  .hud-bottom {
+    right: 84px;
+  }
+}
+
+/* Object Info: records and viewports */
+
+.info-section .note,
+.info-fold-body .note {
+  padding: 0 0 8px;
+}
+
+.info-fold > summary {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: default;
+}
+
+.info-fold-body {
+  padding-top: 2px;
+}
+
+.info-filter {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.info-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.info-check input,
+.info-row > input[type="checkbox"] {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.info-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.info-row[hidden] {
+  display: none;
+}
+
+.info-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.info-row > input[type="checkbox"] {
+  justify-self: start;
+}
+
+.info-row > .num,
+.info-row > .select,
+.info-row > .info-text {
+  width: 100%;
+  min-width: 0;
+}
+
+/* an installed plug-in's own layout of its parameters: dividers, buttons, indents, greyed and hidden rows */
+.info-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.info-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--divider);
+}
+
+.info-widget {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.info-row,
+.info-divider,
+.info-widget {
+  padding-left: calc(var(--indent, 0) * 12px);
+}
+
+.info-greyed {
+  opacity: 0.45;
+}
+
+.info-section .info-off {
+  display: none;
+}
+
+/* a toggle that has no effect while its master toggle is off (Snapping palette) */
+.tool.dimmed {
+  opacity: 0.4;
+}
+
+/* the View bar's layer and class visibility lists (visibilityList.ts) */
+.vl-pop {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 280px;
+  max-height: min(460px, calc(100vh - 16px));
+  max-height: min(460px, calc(100dvh - 16px));
+  padding: 6px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  box-shadow: var(--shadow);
+}
+
+.vl-search {
+  flex: none;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--fill);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.vl-search:focus {
+  border-color: var(--accent);
+}
+
+.vl-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.vl-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.vl-row:not(.vl-headrow):hover {
+  background: var(--fill);
+  color: var(--text);
+}
+
+.vl-row.active .vl-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.vl-headrow {
+  flex: none;
+  border-bottom: 1px solid var(--divider);
+  border-radius: 0;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.vl-col {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+}
+
+.vl-col svg {
+  width: 14px;
+  height: 14px;
+}
+
+.vl-col:hover {
+  background: var(--fill-hover);
+}
+
+/* an empty cell shows a faint dot, so the three columns read as choices */
+.vl-col:not(.on):not(.vl-head)::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-3);
+  opacity: 0.6;
+}
+
+.vl-col.on {
+  background: var(--fill-strong);
+}
+
+.vl-col.vis-hidden {
+  color: var(--text-3);
+}
+
+.vl-name {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  padding-left: 8px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.vl-empty {
+  margin: 8px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* the tool palettes' display (their title bar's menu): Large Icons above; Small Icons packs more
+   to a row; Icons and Names lists a tool a row */
+.tool-name {
+  display: none;
+}
+
+:root[data-tool-display="small"] .pal-tools {
+  grid-template-columns: repeat(auto-fill, minmax(22px, 1fr));
+  gap: 1px;
+  padding: 4px;
+}
+
+:root[data-tool-display="small"] .pal-tools .tool {
+  height: 22px;
+}
+
+:root[data-tool-display="small"] .pal-tools .tool-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+:root[data-tool-display="small"] .pal-tools .tool-key {
+  display: none;
+}
+
+:root[data-tool-display="named"] .pal-tools {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root[data-tool-display="named"] .pal-tools .tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px;
+}
+
+:root[data-tool-display="named"] .pal-tools .tool-name {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-tool-display="named"] .pal-tools .tool-key {
+  position: static;
+  font-size: 9px;
+}
+
+/* ---- compact density (Window > Compact Interface, the Dense workspace) ---- */
+/* Vectorworks' tighter rows: the top bar, palette titles, rows, fields and bars
+   give their spacing to the drawing; text stays 11px. */
+
+:root[data-density="compact"] {
+  --topbar-h: 36px;
+  --row-h: 20px;
+}
+
+:root[data-density="compact"] .tb-icon,
+:root[data-density="compact"] .bar-btn,
+:root[data-density="compact"] .tb-btn,
+:root[data-density="compact"] .tb-tool,
+:root[data-density="compact"] .tool,
+:root[data-density="compact"] .btn {
+  height: 24px;
+}
+
+:root[data-density="compact"] .tb-icon,
+:root[data-density="compact"] .bar-btn {
+  min-width: 24px;
+}
+
+:root[data-density="compact"] .tb-tool .tool {
+  width: 26px;
+}
+
+:root[data-density="compact"] .tb-side,
+:root[data-density="compact"] .tb-center {
+  padding-right: 8px;
+}
+
+:root[data-density="compact"] .stage {
+  padding: 0 4px 4px;
+}
+
+:root[data-density="compact"] .canvas-wrap {
+  inset: 0 4px 4px;
+  border-radius: 8px;
+}
+
+:root[data-density="compact"] .hud {
+  left: 10px;
+  right: 10px;
+}
+
+:root[data-density="compact"] .hud-top {
+  top: 6px;
+}
+
+:root[data-density="compact"] .hud-bottom {
+  bottom: 10px;
+}
+
+:root[data-density="compact"] .pill,
+:root[data-density="compact"] .hud-top .pill {
+  height: 28px;
+  border-radius: 8px;
+}
+
+:root[data-density="compact"] .pill-quiet {
+  height: 22px;
+}
+
+:root[data-density="compact"] .seg-btn {
+  height: 22px;
+  padding: 0 7px;
+}
+
+:root[data-density="compact"] .pill .seg-btn,
+:root[data-density="compact"] .bar-select,
+:root[data-density="compact"] .zoom-field {
+  height: 20px;
+}
+
+:root[data-density="compact"] .sb-toggle,
+:root[data-density="compact"] .sb-more {
+  height: 22px;
+}
+
+:root[data-density="compact"] .sb-toggle {
+  width: 22px;
+}
+
+/* palettes */
+:root[data-density="compact"] .pal-head {
+  height: 26px;
+  padding: 0 4px 0 10px;
+}
+
+:root[data-density="compact"] .pal.tabbed .pal-head {
+  padding-left: 4px;
+}
+
+:root[data-density="compact"] .pal-btn {
+  width: 18px;
+  height: 18px;
+}
+
+:root[data-density="compact"] .pal-htab,
+:root[data-density="compact"] .pal-tab {
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 4px;
+}
+
+:root[data-density="compact"] .pal-tabs {
+  flex-wrap: wrap;
+  padding: 0 4px 4px;
+}
+
+:root[data-density="compact"] .pal:not(.collapsed) {
+  min-height: 48px;
+}
+
+:root[data-density="compact"] .search,
+:root[data-density="compact"] .num,
+:root[data-density="compact"] .select,
+:root[data-density="compact"] .inline-edit,
+:root[data-density="compact"] .info-text,
+:root[data-density="compact"] .text-content,
+:root[data-density="compact"] .pal .btn,
+:root[data-density="compact"] .swatch {
+  height: 20px;
+  border-radius: 4px;
+}
+
+:root[data-density="compact"] .swatch {
+  width: 20px;
+}
+
+:root[data-density="compact"] .search,
+:root[data-density="compact"] .num,
+:root[data-density="compact"] .info-text,
+:root[data-density="compact"] .text-content {
+  padding: 0 5px;
+}
+
+:root[data-density="compact"] .icon-btn {
+  width: 18px;
+  height: 18px;
+}
+
+:root[data-density="compact"] .row {
+  gap: 5px;
+  padding: 1px 4px 1px 8px;
+  border-radius: 4px;
+}
+
+:root[data-density="compact"] .info-head {
+  padding: 6px 8px;
+}
+
+:root[data-density="compact"] .info-section {
+  padding: 6px 8px;
+}
+
+:root[data-density="compact"] .info-section h3 {
+  margin-bottom: 5px;
+}
+
+:root[data-density="compact"] .grid {
+  gap: 4px;
+}
+
+:root[data-density="compact"] .field {
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+:root[data-density="compact"] .info-section > .field {
+  grid-template-columns: 60px minmax(0, 1fr);
+}
+
+/* the View bar's layer and class lists */
+:root[data-density="compact"] .vl-row {
+  height: 20px;
+}
+
+:root[data-density="compact"] .vl-col {
+  height: 18px;
+}
+
+:root[data-density="compact"] .vl-search {
+  height: 22px;
+}

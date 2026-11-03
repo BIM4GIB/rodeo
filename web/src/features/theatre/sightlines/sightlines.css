@@ -1,0 +1,111 @@
+/* The Sightlines windows (audienceWindow.ts, coverageMap.ts, maskingWindow.ts, rakeWindow.ts) and their
+   sketches (shared.ts): solid panels in the app's tokens, so both themes follow. */
+
+.sightlines-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.sightlines-summary {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-2);
+}
+
+.sightlines-summary p {
+  margin: 0;
+}
+
+.sightlines-summary strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sightlines-selected td {
+  background: var(--fill-strong);
+}
+
+.sightlines-sketches {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sightlines-sketch {
+  flex: 1 1 360px;
+  margin: 0;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sightlines-sketch svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sightlines-sketch line,
+.sightlines-sketch polyline,
+.sightlines-sketch circle {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.2px;
+}
+
+.sightlines-sketch .sl-wall {
+  stroke-width: 3px;
+}
+
+.sightlines-sketch .sl-thin {
+  stroke: var(--text-3);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+}
+
+.sightlines-sketch .sl-leg {
+  stroke-width: 1.6px;
+}
+
+.sightlines-sketch .sl-ray {
+  stroke: var(--accent);
+  stroke-width: 1px;
+  stroke-dasharray: 5 3;
+}
+
+.sightlines-sketch .sl-cloth {
+  stroke-width: 5px;
+  stroke-linecap: butt;
+}
+
+.sightlines-sketch .sl-dot {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.sightlines-sketch .sl-eye {
+  fill: var(--warn);
+  stroke: none;
+}
+
+.sightlines-sketch .sl-fill {
+  fill: var(--fill);
+  stroke: none;
+}
+
+.sightlines-sketch text {
+  fill: var(--text-2);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.sightlines-sketch text.sl-accent {
+  fill: var(--accent);
+}

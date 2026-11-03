@@ -1,0 +1,332 @@
+/* The Looks palette and the Gel and Paint Matrix: solid panels in the app's tokens, so both themes follow. */
+
+.looks-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.looks-palette .btn {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+
+.looks-palette .th-cell {
+  border-color: var(--border);
+}
+
+.looks-palette .looks-row .btn:disabled {
+  opacity: 0.4;
+}
+
+.looks-note {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.looks-tools {
+  gap: 6px;
+}
+
+.looks-tools .btn {
+  flex: 1 1 auto;
+}
+
+.looks-head {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.looks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.looks-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.looks-row.on {
+  background: var(--fill);
+  border-color: var(--accent);
+}
+
+.looks-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.looks-no {
+  flex: none;
+  width: 16px;
+  color: var(--text-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.looks-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.looks-row-top .btn {
+  flex: none;
+  width: 22px;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  line-height: 1;
+}
+
+.looks-row-btns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.looks-fade-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-2);
+}
+
+.looks-fade {
+  width: 56px;
+}
+
+.looks-empty {
+  color: var(--text-3);
+  list-style: none;
+}
+
+.looks-progress {
+  height: 4px;
+  overflow: hidden;
+  background: var(--fill-strong);
+  border-radius: 2px;
+}
+
+.looks-progress-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+}
+
+.looks-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.looks-group {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.looks-chan {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 96px 36px;
+  align-items: center;
+  gap: 6px;
+}
+
+.looks-swatch {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+}
+
+.looks-chan-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.looks-purpose {
+  margin-left: 4px;
+  color: var(--text-3);
+}
+
+.looks-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.looks-pct {
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.looks-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.looks-matrix {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.looks-grid-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.looks-grid-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.looks-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.looks-grid th,
+.looks-grid td {
+  padding: 4px 6px;
+  border-top: 1px solid var(--divider);
+  border-left: 1px solid var(--divider);
+  vertical-align: middle;
+}
+
+.looks-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-width: 96px;
+  max-width: 160px;
+  padding-top: 6px;
+  color: var(--text-2);
+  font-weight: 500;
+  text-align: left;
+  background: var(--surface);
+}
+
+.looks-grid tbody th {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-right: 8px;
+  white-space: nowrap;
+  font-weight: 500;
+  text-align: left;
+  background: var(--surface);
+}
+
+.looks-chip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.looks-cell {
+  text-align: center;
+}
+
+.looks-split {
+  display: inline-flex;
+  flex-direction: column;
+  width: 64px;
+  height: 36px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.looks-split > span {
+  flex: 1;
+}
+
+.looks-tag {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.looks-cell.dead .looks-tag {
+  color: var(--danger);
+}
+
+.looks-cell.shifted .looks-tag {
+  color: var(--warn);
+}
+
+.looks-x {
+  width: 20px;
+  min-width: 0;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0;
+  line-height: 1;
+}
+
+.looks-add {
+  flex: none;
+  flex-wrap: wrap;
+}
+
+.looks-add-label {
+  min-width: 70px;
+  color: var(--text-2);
+}
+
+.looks-colour {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+}
+
+.looks-matrix .th-cell {
+  border-color: var(--border);
+}
+
+.looks-paint-name-input {
+  width: 150px;
+}
+
+.looks-gel-pick {
+  min-width: 220px;
+}

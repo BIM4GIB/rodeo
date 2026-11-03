@@ -1,0 +1,51 @@
+/* View > Rendering > Start Batch Render…: the two job lists side by side with the moves between
+   them, and the job buttons under them. Solid, in the tokens of styles.css; no glass or blur. */
+
+.menu-dialog.batch-dialog {
+  width: min(520px, 100%);
+}
+
+.batch-lists {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.batch-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.menu-dialog-input.batch-list {
+  width: 100%;
+  height: auto;
+  padding: 4px;
+  text-align: left;
+}
+
+.batch-moves {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* a phone: the lists one above the other, the moves in a row between them */
+@media (max-width: 560px) {
+  .batch-lists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .batch-moves {
+    flex-direction: row;
+  }
+}

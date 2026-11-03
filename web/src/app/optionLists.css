@@ -1,0 +1,66 @@
+/* Tools > Options > Edit Marker List… and Line Thickness… (optionLists.ts): a list of editable rows */
+.menu-dialog.option-list-dialog {
+  width: min(540px, 100%);
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(340px, 50vh);
+  overflow-y: auto;
+  margin: 4px 0 8px;
+  padding: 6px;
+  border-radius: 6px;
+  background: var(--fill);
+}
+
+.option-list-head,
+.option-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 72px 72px auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.option-list-head {
+  color: var(--text-2);
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+/* names and styles read from the left, numbers from the right, as their fields do */
+.option-list-head span:nth-child(-n + 2),
+.option-list-row input[aria-label="Marker name"] {
+  text-align: left;
+}
+
+.option-list-head span:nth-child(n + 3) {
+  text-align: right;
+}
+
+.option-list-row.thickness {
+  grid-template-columns: 96px auto 1fr;
+}
+
+.option-list-row.thickness .btn {
+  justify-self: start;
+}
+
+.option-list-row .menu-dialog-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.option-list-row .btn {
+  padding: 2px 8px;
+}
+
+.option-list-unit {
+  color: var(--text-2);
+}
+
+.option-list-actions {
+  display: flex;
+  gap: 6px;
+}
