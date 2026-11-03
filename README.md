@@ -2690,9 +2690,9 @@ its thumbnail, which can be placed in a drawing that takes pictures
   window that keeps the script in this browser, opens and saves `.py` files,
   and shows what it prints, with a failing line linked. It runs in Pyodide in
   a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs`
-  module of 157 of Vectorworks' calls: drawing (Rect, Oval, Arc, Poly,
-  BeginPoly with ArcTo, CurveTo and CurveThrough, Locus, CreateText,
-  BeginGroup…), walking the drawing by handle (FSActLayer, NextObj,
+  module of more than 220 of Vectorworks' calls: drawing (Rect, Oval, Arc,
+  Poly, BeginPoly with ArcTo, CurveTo and CurveThrough, Poly3D, BeginPoly3D
+  with Add3DPt, Locus, CreateText, BeginGroup…), walking the drawing by handle (FSActLayer, NextObj,
   ForEachObject and Count with search criteria, ForEachObjectInLayer), reading
   and setting geometry, class, name, attributes, records and selection,
   moving, turning, scaling, mirroring and duplicating, layers and classes, and
@@ -2732,6 +2732,10 @@ its thumbnail, which can be placed in a drawing that takes pictures
   (symbols, plug-in objects, 3D, images, sheet layers) and what it writes
   plainer (hatches and dashes as solid), and it refuses to run in a drawing
   of other units, since its coordinates are in the drawing's own.
+- **Export Simple VectorScript (3D only)** (File > Export): the 3D objects on
+  the visible design layers as a plain script of 3D polygons, one per flat
+  face and grouped by object, in Front view or the current view, for other
+  programs to read; it runs back in Rodeo too.
 
 The format library in `web/src/core` has no DOM dependencies:
 

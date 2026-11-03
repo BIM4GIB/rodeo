@@ -110,6 +110,7 @@ class _State(object):
         self.relative = False
         self.closed = True
         self.poly = None
+        self.poly3d = None
         self.groups = []
         self.attrs = {}
         self.attr_stack = []
@@ -356,7 +357,7 @@ def _arc_length(g):
 
 # ---- adding objects --------------------------------------------------------------------------
 
-_TYPE_OF_KIND = {"line": 2, "rect": 3, "polygon": 5, "arc": 6, "text": 10, "roundrect": 13, "locus": 17, "polyline": 21}
+_TYPE_OF_KIND = {"line": 2, "rect": 3, "polygon": 5, "arc": 6, "text": 10, "roundrect": 13, "locus": 17, "polyline": 21, "poly3d": 25}
 
 
 def _add(shape, copy, extra=None):
@@ -409,6 +410,15 @@ def _add_poly(pts, closed):
     if len(pts) < 2:
         raise ValueError("a polygon needs at least two vertices")
     return _add({"kind": "polygon", "points": [_pt(p) for p in pts], "closed": closed}, {"kind": "polygon", "pts": pts, "closed": closed})
+
+
+def _add_poly3d(pts):
+    """A 3D polygon through pts (x, y, z in millimetres), open or closed as the next polygon is."""
+    if len(pts) < 2:
+        raise ValueError("a 3D polygon needs at least two vertices")
+    closed = _S.closed
+    flat = [c for p in pts for c in p]
+    return _add({"kind": "poly3d", "points": flat, "closed": closed}, {"kind": "polygon", "pts": [[p[0], p[1]] for p in pts], "closed": closed})
 
 
 _VERTEX_KIND = {0: "corner", 1: "bezier", 2: "cubic", 3: "arc", 4: "through"}
@@ -514,6 +524,34 @@ def Poly(*args):
 
 def BeginPoly():
     _S.poly = []
+
+
+def Poly3D(*args):
+    v = [_mm(x) for x in _flat(args)]
+    if len(v) % 3 or len(v) < 6:
+        raise TypeError("vs.Poly3D takes x, y, z triples, at least two points")
+    _add_poly3d([v[i:i + 3] for i in range(0, len(v), 3)])
+
+
+def BeginPoly3D():
+    _S.poly3d = []
+
+
+def Add3DPt(*args):
+    if _S.poly3d is None:
+        raise RuntimeError("vs.Add3DPt adds a vertex between vs.BeginPoly3D() and vs.EndPoly3D()")
+    v = _flat(args)
+    if len(v) < 3:
+        raise TypeError("vs.Add3DPt takes x, y and z")
+    _S.poly3d.append([_mm(v[0]), _mm(v[1]), _mm(v[2])])
+
+
+def EndPoly3D():
+    pts = _S.poly3d or []
+    _S.poly3d = None
+    if len(pts) < 2:
+        raise ValueError("vs.EndPoly3D needs at least two vertices since vs.BeginPoly3D()")
+    _add_poly3d(pts)
 
 
 def _vertex(args, kind, what):

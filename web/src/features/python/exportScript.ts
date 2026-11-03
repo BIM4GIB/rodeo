@@ -5,13 +5,19 @@
 // their class, with their name and attributes, turned where they are turned. Coordinates are in
 // the drawing's units, so the script first checks the drawing it runs in has the same units.
 // Symbols, plug-in objects, 3D objects, images and sheet layers aren't written: the script's
-// header counts them, as the message after the export does.
+// header counts them, as the message after the export does. Export Simple VectorScript (3D only)
+// writes the 3D objects instead, as simpleScript.ts words them, in Front view or the current view.
 
 import type { Attributes, ByClassGroup, ObjectInfo, Pt, Shape, VwxDocument } from "../../core/index.ts";
+import { h } from "../../app/dom.ts";
+import { appContext } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
+import { withoutHidden } from "../../app/hiddenObjects.ts";
+import { showDialog } from "../../app/menubar.ts";
 import { store } from "../../app/state.ts";
 import { toast } from "../../app/toast.ts";
 import { scriptUnits } from "./runner.ts";
+import { FRONT_BASIS, simpleScript, viewBasis, type Basis } from "./simpleScript.ts";
 
 /** Objects a procedure of the script draws, so no procedure grows past what Vectorworks compiles quickly. */
 const PART = 400;
@@ -355,7 +361,7 @@ export function drawingScript(doc: VwxDocument, file: string): ScriptExport {
 export function exportScript(): void {
   const s = store.session;
   if (!s) return;
-  const base = (store.fileName || "Untitled").replace(/\.[^.]*$/, "").replace(/[\\/:*?"<>|]+/g, "-") || "Untitled";
+  const base = fileBase();
   const got = drawingScript(s.doc, `${base}.vwx`);
   downloadBlob(`${base}.vs`, new Blob([got.text], { type: "text/plain;charset=utf-8" }));
   const left = [...got.left.values()].reduce((a, b) => a + b, 0);
@@ -365,4 +371,69 @@ export function exportScript(): void {
       ".",
     "info",
   );
+}
+
+/** The drawing's file name without its extension, safe for a download's name. */
+function fileBase(): string {
+  return (store.fileName || "Untitled").replace(/\.[^.]*$/, "").replace(/[\\/:*?"<>|]+/g, "-") || "Untitled";
+}
+
+/** File > Export > Export Simple VectorScript (3D only): Front view or the current view, then the 3D objects on the visible design layers as a .vs file. */
+export async function exportSimpleScript(): Promise<void> {
+  const s = store.session;
+  const ctx = appContext();
+  if (!s || !ctx) return;
+  let layers = ctx.scene.drawnLayers(store.activeLayerId).filter((l) => l.kind === "design");
+  if (!layers.length) layers = ctx.scene.layers().filter((l) => l.kind === "design" && l.visibility !== "hidden");
+  const shown = new Set(layers.map((l) => l.id));
+  // each top-level object's triangles together, whatever parts and materials it shows them in
+  const byObject = new Map<string, number[]>();
+  for (const m of withoutHidden(s.doc).model3d()) {
+    if (!shown.has(m.layerId) || !m.triangles.length) continue;
+    let list = byObject.get(m.objectId);
+    if (!list) byObject.set(m.objectId, (list = []));
+    for (const v of m.triangles) list.push(v);
+  }
+  if (!byObject.size) {
+    toast("No 3D objects on the visible design layers.", "info");
+    return;
+  }
+  const v3 = ctx.view3d();
+  const in3d = !!v3?.visible;
+  const rotation = ctx.view.rotation;
+  const here = in3d ? "the 3D view" : rotation ? "Rotated Top/Plan" : "Top/Plan";
+  const radio = (on: boolean, label: string): HTMLInputElement => h("input", { checked: on, attrs: { type: "radio", name: "simple-script-view", "aria-label": label } }) as HTMLInputElement;
+  const front = radio(true, "Front view");
+  const current = radio(false, "Current view");
+  const asFront = await showDialog<boolean>({
+    title: "Export Simple VectorScript",
+    okLabel: "Export",
+    body: [
+      h("p", { cls: "menu-dialog-label", text: "Export in" }),
+      h("label", { cls: "menu-dialog-check" }, front, "Front view"),
+      h("label", { cls: "menu-dialog-check" }, current, `Current view (${here})`),
+      h("p", { cls: "muted", text: "The 3D objects on the visible design layers, each flat face a 3D polygon, turned so the view chosen looks down on them." }),
+    ],
+    check: () => ({ value: front.checked }),
+  });
+  if (asFront === null) return;
+  let basis: Basis = FRONT_BASIS;
+  if (!asFront && in3d && v3) {
+    const c = v3.cameraState();
+    basis = viewBasis(c.position, c.target);
+  } else if (!asFront) {
+    // Top/Plan as it shows on screen, turned by the plan's rotation
+    basis = [
+      [Math.cos(rotation), -Math.sin(rotation), 0],
+      [Math.sin(rotation), Math.cos(rotation), 0],
+      [0, 0, 1],
+    ];
+  }
+  const units = scriptUnits(s.doc.info.units);
+  const base = fileBase();
+  // feet and inches are written as inches
+  const unitName = units.mm === 25.4 ? "inches" : (s.doc.info.units || units.mark).toLowerCase();
+  const got = simpleScript([...byObject.values()].map((triangles) => ({ triangles })), basis, units.mm, unitName, `${base}.vwx`, asFront ? "Front view" : here);
+  downloadBlob(`${base}.vs`, new Blob([got.text], { type: "text/plain;charset=utf-8" }));
+  toast(`Exported ${base}.vs: ${got.objects} ${got.objects === 1 ? "object" : "objects"} as ${got.faces} 3D ${got.faces === 1 ? "polygon" : "polygons"}.`, "info");
 }

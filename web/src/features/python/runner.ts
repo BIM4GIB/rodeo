@@ -367,6 +367,13 @@ const ARRANGE: ReadonlySet<string> = new Set(["front", "back", "forward", "backw
 const VISIBILITY: ReadonlySet<string> = new Set(["visible", "hidden", "grayed"]);
 const BY_CLASS: ReadonlySet<string> = new Set(["fill", "lineStyle", "penColor", "lineWeight", "opacity"]);
 
+/** A 3D polygon a script adds, as vsModule's _add_poly3d sends it. */
+interface Poly3DStep {
+  readonly kind: "poly3d";
+  readonly points: readonly number[];
+  readonly closed: boolean;
+}
+
 const str = (v: unknown): string => String(v);
 const ids = (v: unknown): string[] => (Array.isArray(v) ? v.map(str) : []);
 
@@ -408,10 +415,18 @@ function applySteps(s: EditSession, steps: readonly unknown[][], around: Around 
       const [kind, ...a] = step;
       switch (kind) {
         case "add": {
-          const shape = a[2] as NewShape;
-          if (!SHAPE_KINDS.has(shape?.kind)) throw new Error(`a script can't add a ${String(shape?.kind)}`);
+          const shape = a[2] as NewShape | Poly3DStep;
           const attrs = (a[4] ?? undefined) as Record<string, number> | undefined;
-          made.set(str(a[0]), s.addObject(real(a[1]), shape, a[3] === null ? undefined : classIndex(str(a[3])), attrs));
+          const cls = a[3] === null ? undefined : classIndex(str(a[3]));
+          if (shape?.kind === "poly3d") {
+            // a 3D polygon (vs.Poly3D, vs.BeginPoly3D ... vs.EndPoly3D): its points as x, y, z in mm
+            const id = s.add3DPolygons(real(a[1]), [{ points: shape.points.map(Number), closed: !!shape.closed }], cls);
+            if (attrs) s.setAttributes([id], attrs);
+            made.set(str(a[0]), id);
+            break;
+          }
+          if (!SHAPE_KINDS.has(shape?.kind)) throw new Error(`a script can't add a ${String(shape?.kind)}`);
+          made.set(str(a[0]), s.addObject(real(a[1]), shape, cls, attrs));
           break;
         }
         case "group":

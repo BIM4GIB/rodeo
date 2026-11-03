@@ -1,7 +1,8 @@
 // Python scripts: Run Script… (the Plug-ins menu, and Tools > Plug-ins where Vectorworks keeps it)
 // opens a window that runs Python or Vectorscript written for Vectorworks on the open drawing.
 // File > Import > Import Script… runs a script file in it; File > Export > Export Script writes the
-// drawing as a Vectorscript that draws it again. Python and the window load when first asked for.
+// drawing as a Vectorscript that draws it again, and Export Simple VectorScript (3D only) its 3D
+// objects as 3D polygons. Python and the window load when first asked for.
 // Window > Script Palettes keeps named palettes of scripts to run with a double-click (scriptPalettes.ts).
 
 import { registerMenu, registerPalette } from "../../app/ext.ts";
@@ -40,7 +41,10 @@ function importScript(): void {
 registerMenu("File › Import", () => [{ label: "Import Script…", enabled: () => !!store.session, run: importScript }], { after: "Import Worksheet…" });
 registerMenu(
   "File › Export",
-  () => [{ label: "Export Script", enabled: () => !!store.session, run: () => void import("./exportScript.ts").then((m) => m.exportScript()) }],
+  () => [
+    { label: "Export Script", enabled: () => !!store.session, run: () => void import("./exportScript.ts").then((m) => m.exportScript()) },
+    { label: "Export Simple VectorScript (3D only)…", enabled: () => !!store.session, run: () => void import("./exportScript.ts").then((m) => m.exportSimpleScript()) },
+  ],
   { after: "Export Database…" },
 );
 

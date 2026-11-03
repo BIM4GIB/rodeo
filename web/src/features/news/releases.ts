@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:09:00Z",
+    "simple-vectorscript-3d",
+    "Export Simple VectorScript (3D only)",
+    `File > Export > Export Simple VectorScript (3D only)… writes the 3D model as a plain script.
+- Each flat face becomes a 3D polygon, each object's faces a group, in Front view or the view you're looking from.
+- Other programs can read it, and Import Script runs it back into a drawing.
+- Scripts can now draw 3D polygons themselves with Poly3D, or BeginPoly3D, Add3DPt and EndPoly3D.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:08:00Z",
     "lighting-device-menu",
     "Lighting device right-click menu",
