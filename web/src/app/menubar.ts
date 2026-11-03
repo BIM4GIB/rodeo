@@ -708,6 +708,11 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           enabled: () => canCreateViewport() && store.selection.size === 1,
           run: () => void import("./interiorElevation.ts").then((m) => m.createInteriorElevationDialog()),
         },
+        {
+          label: "Create Horizontal Section Viewport…",
+          enabled: () => canCreateViewport() && store.session?.doc.layers().find((l) => l.id === store.activeLayerId)?.kind === "design",
+          run: () => void import("./sectionViewport.ts").then((m) => m.createHorizontalSectionDialog()),
+        },
         { label: "Set Sun Position…", enabled: hasDoc, run: () => void setSunPosition() },
         { label: "Set Lighting Options…", enabled: hasDoc, run: () => void import("./lightingOptions.ts").then((m) => m.lightingOptionsDialog()) },
         "-",

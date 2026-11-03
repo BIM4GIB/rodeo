@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { Pt } from "../core/index.ts";
-import { nearestHit, sectionDrawing, type CutMesh, type SectionPiece } from "./sectionCut.ts";
+import { nearestHit, sectionDrawing, sectionView, type CutMesh, type SectionPiece } from "./sectionCut.ts";
 
 type V3 = [number, number, number];
 
@@ -222,6 +222,24 @@ const east = { a: { x: -500, y: 500 }, b: { x: 1500, y: 500 }, look: "left" as c
   const d = sectionDrawing([mesh("G", a.triangles, a.edges, "#ff0000"), mesh("G", b.triangles, b.edges, "#00ff00")], { a: { x: -500, y: 500 }, b: { x: 3500, y: 500 }, look: "left", depth: Infinity });
   assert.equal(d.pieces.length, 1);
   assert.deepEqual(d.pieces[0].cuts.map((c) => c.color).sort(), ["#00ff00", "#ff0000"]);
+}
+
+// a horizontal section: cut at 500 up, looking down, in plan's own x and y
+{
+  const tall = box(0, 0, 0, 1000, 1000, 1000);
+  const low = box(2000, 0, 0, 3000, 1000, 300);
+  const high = box(0, 2000, 800, 1000, 3000, 1200);
+  const all = [mesh("T", tall.triangles, tall.edges), mesh("L", low.triangles, low.edges), mesh("H", high.triangles, high.edges)];
+  const down = { origin: [0, 0, 500] as const, right: [1, 0, 0] as const, up: [0, 1, 0] as const, toward: [0, 0, -1] as const, depth: Infinity, across: { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity } };
+  const d = sectionView(all, down);
+  const T = piece(d.pieces, "T")!;
+  assert.equal(T.cuts.length, 1);
+  assert.ok(near(area(T.cuts[0].outer), 1e6, 1));
+  assert.deepEqual(d.box, { x0: 0, y0: 0, x1: 3000, y1: 1000 }, "the low box below seen, the high one above not");
+  assert.equal(segments(piece(d.pieces, "L")!.lines).reduce((n, [p, q]) => n + Math.hypot(q.x - p.x, q.y - p.y), 0), 4000, "the low box's top");
+  assert.equal(piece(d.pieces, "H"), undefined);
+  // below the cut only so far
+  assert.equal(piece(sectionView(all, { ...down, depth: 100 }).pieces, "L"), undefined);
 }
 
 // the nearest face along a ray, either way it's wound

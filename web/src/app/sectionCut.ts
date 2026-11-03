@@ -1,5 +1,6 @@
 // What a section viewport draws (View > Create Section Viewport, sectionViewport.ts): the 3D model cut
-// by an upright plane standing on a line on plan, looked at square to it from the line's left or right.
+// by an upright plane standing on a line on plan, looked at square to it from the line's left or right
+// (or, for a horizontal section, by a level plane looked down on: sectionView takes any plane).
 // What the plane cuts is filled: each object's faces crossing the plane chained into outlines, an
 // outline inside another a hole in it. Beyond the plane, the edges the 3D view draws and the outlines
 // curved surfaces show against what's behind them are drawn where nothing nearer hides them; that is
@@ -215,17 +216,42 @@ export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane):
   // looking to the line's left it runs left to right across the view; to its right, right to left
   const nx = plane.look === "left" ? -uy / length : uy / length;
   const ny = plane.look === "left" ? ux / length : -ux / length;
-  const rx = ny;
-  const ry = -nx;
-  const x0 = plane.look === "left" ? 0 : -length;
-  const x1 = plane.look === "left" ? length : 0;
-  const y0 = plane.bottom ?? -Infinity;
-  const y1 = plane.top ?? Infinity;
-  const far = Math.max(0, plane.depth);
+  return sectionView(meshes, {
+    origin: [plane.a.x, plane.a.y, 0],
+    right: [ny, -nx, 0],
+    up: [0, 0, 1],
+    toward: [nx, ny, 0],
+    depth: plane.depth,
+    across: { x0: plane.look === "left" ? 0 : -length, x1: plane.look === "left" ? length : 0, y0: plane.bottom ?? -Infinity, y1: plane.top ?? Infinity },
+  });
+}
+
+/** A cut plane in any direction and the view square to it: what Create Horizontal Section Viewport looks down with. */
+export interface SectionFrame {
+  /** a point on the plane, and the view's unit axes: across it, up it, and away from the viewer through the plane */
+  readonly origin: V;
+  readonly right: V;
+  readonly up: V;
+  readonly toward: V;
+  /** how far beyond the plane to draw: Infinity for all of it, 0 for the cut alone */
+  readonly depth: number;
+  /** what's drawn, in the view's across and up (sides may be infinite) */
+  readonly across: BBox;
+}
+
+/** The section a plane makes of the meshes, in the view's own across and up. */
+export function sectionView(meshes: readonly CutMesh[], frame: SectionFrame): SectionDrawing {
+  const { x0, y0, x1, y1 } = frame.across;
+  const far = Math.max(0, frame.depth);
+  const [ox, oy, oz] = frame.origin;
+  const [rx, ry, rz] = frame.right;
+  const [vx, vy, vz] = frame.up;
+  const [nx, ny, nz] = frame.toward;
   const view = (f: Float32Array, i: number): V => {
-    const dx = f[i] - plane.a.x;
-    const dy = f[i + 1] - plane.a.y;
-    return [dx * rx + dy * ry, f[i + 2], dx * nx + dy * ny];
+    const dx = f[i] - ox;
+    const dy = f[i + 1] - oy;
+    const dz = f[i + 2] - oz;
+    return [dx * rx + dy * ry + dz * rz, dx * vx + dy * vy + dz * vz, dx * nx + dy * ny + dz * nz];
   };
 
   // how near counts as the same: the model's size in float precision, or a twentieth of a millimetre

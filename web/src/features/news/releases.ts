@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:15:00Z",
+    "horizontal-section",
+    "Create Horizontal Section Viewport",
+    `View > Create Horizontal Section Viewport… cuts the model level at a height and draws the plan it makes on a sheet.
+- Walls and anything else the cut passes through are filled; what lies below is drawn in thin lines.
+- Set the cut height above the active layer, and how far down to look.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:14:00Z",
     "interior-elevations",
     "Create Interior Elevation Viewport",

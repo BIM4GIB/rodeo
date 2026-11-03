@@ -28,6 +28,12 @@ Each elevation runs from the wall behind the look to the wall in front, across f
 
 **Limits:** the walls are found straight out from the marker's middle, 1 m above its layer, so something in the way (a column, a tall cupboard) stops a look short; draw a shape round the room to set the walls yourself. The viewports are drawn once and aren't linked to the marker.
 
+### Create Horizontal Section Viewport…
+
+**View › Create Horizontal Section Viewport…** cuts the 3D model level at a height above the active design layer and draws the plan it makes on a sheet: walls and other objects the cut passes through filled, and what lies below drawn in thin lines where nothing nearer hides it. Set the Cut Plane height in the dialog (1200 mm at first), and how far below to look.
+
+**Limits:** the cut is drawn once and isn't kept up to date. Nothing above the cut plane is drawn, the height is measured from the active layer only, and 2D objects aren't cut.
+
 ### How viewports draw
 
 Plan viewports draw the design layers they list, live (edits on a design layer show on every sheet), with the viewport's class overrides and grayed layers. Section, elevation and detail viewports draw their cached drawings, with a cached Renderworks render under their line work.

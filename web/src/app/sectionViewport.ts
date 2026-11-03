@@ -5,7 +5,8 @@
 // a section viewport live with the model; Rodeo's viewports draw only plans live, so the section is
 // drawn into the new viewport's annotations as the model stands when it's made, as Create Rack
 // Elevation's are, and its design layers are hidden. A line with corners is cut straight between its
-// ends, and only across its length.
+// ends, and only across its length. View > Create Horizontal Section Viewport… is here too, and Create
+// Interior Elevation Viewport (interiorElevation.ts) places its viewports with addSectionViewport.
 
 import type { Attributes, BBox, EditSession, NewShape, Pt } from "../core/index.ts";
 import { attempt, setActiveLayer, setSelection, zoomToSelection } from "./commands.ts";
@@ -17,7 +18,7 @@ import { withoutHidden } from "./hiddenObjects.ts";
 import { showLoading } from "./loading.ts";
 import { drawingLabel } from "./markerShapes.ts";
 import { colorMatcher } from "./pdfImport.ts";
-import { sectionDrawing, type CutMesh, type SectionDrawing } from "./sectionCut.ts";
+import { sectionDrawing, sectionView, type CutMesh, type SectionDrawing } from "./sectionCut.ts";
 import { store } from "./state.ts";
 import { errorMessage, toast } from "./toast.ts";
 import { toolPrefs } from "./toolPrefs.ts";
@@ -313,4 +314,99 @@ export async function createSectionViewportDialog(): Promise<void> {
   if (ctx) zoomToSelection(ctx.scene, ctx.view);
   const cut = drawing.pieces.filter((p) => p.cuts.length || p.cutLines.length).length;
   toast(`Section viewport ${name ? `“${name}” ` : ""}made: ${cut} ${cut === 1 ? "object" : "objects"} cut, ${drawing.pieces.length} drawn.`, "info");
+}
+
+/** the cut's height above the active layer at first, mm (a little above a window sill) */
+const CUT_HEIGHT_MM = 1200;
+
+/**
+ * View > Create Horizontal Section Viewport…: the 3D model cut level at a height above the active
+ * design layer and looked down on, on a sheet layer as Create Section Viewport draws: what's cut filled,
+ * what lies below drawn where nothing nearer hides it, as far down as the limit. Vectorworks can also
+ * draw what's above the cut; this doesn't.
+ */
+export async function createHorizontalSectionDialog(): Promise<void> {
+  const session = store.session;
+  if (!session) return;
+  const doc = session.doc;
+  const all = doc.layers();
+  const layer = all.find((l) => l.id === store.activeLayerId);
+  if (!layer || layer.kind !== "design") {
+    toast("Make the design layer to cut active first.", "error");
+    return;
+  }
+  const sheets = all.filter((l) => l.kind === "sheet");
+  const newSheetName = firstFree("Sheet", new Set(all.map((l) => l.name)));
+  const taken = viewportNamesTaken(doc);
+  const first = sheets[0];
+  let n = (first ? doc.viewports(first.id).length : 0) + 1;
+  while (taken.has(`${n}/${first?.name ?? newSheetName}`)) n++;
+  const v = await toolPrefs(
+    "Create Horizontal Section Viewport",
+    [
+      { kind: "check", key: "byNumber", label: "Name viewport as Dwg No./Sheet No.", value: true },
+      { kind: "text", key: "name", label: "Viewport Name", value: firstFree("Horizontal Section", taken) },
+      {
+        kind: "choice",
+        key: "sheet",
+        label: "Create on Layer",
+        value: first?.id ?? NEW_SHEET,
+        options: [...sheets.map((l) => ({ value: l.id, label: l.name })), { value: NEW_SHEET, label: "New Sheet Layer" }],
+      },
+      { kind: "text", key: "number", label: "Drawing Number", value: String(n) },
+      { kind: "text", key: "title", label: "Drawing Title", value: `${layer.name} Section` },
+      { kind: "number", key: "scale", label: "Scale 1:", value: layer.scale || 1, min: 0.001, max: 1e6 },
+      { kind: "length", key: "cut", label: `Cut Plane (above ${layer.name})`, value: CUT_HEIGHT_MM },
+      { kind: "check", key: "below", label: "Display extents below cut plane", value: true },
+      { kind: "length", key: "far", label: "Limited to (0 is unlimited)", value: 0 },
+      { kind: "check", key: "label", label: "Use drawing label", value: true },
+    ],
+    "The visible design layers' 3D objects, their classes shown, cut level at the height given above the active layer and looked down on: the cut filled in each object's colour, what's below drawn where nothing nearer hides it. It's drawn into the viewport's annotations as the model is now; it isn't kept up to date.",
+  );
+  if (!v || store.session !== session) return;
+  const chosen = v.choice("sheet");
+  const sheetName = chosen === NEW_SHEET ? newSheetName : (sheets.find((l) => l.id === chosen)?.name ?? "");
+  const number = v.choice("number").trim();
+  const title = v.choice("title").trim();
+  const name = v.flag("byNumber") ? `${number}/${sheetName}` : v.choice("name").trim();
+  if (name && taken.has(name)) {
+    toast(`“${name}” is already a layer's, resource's or viewport's name.`, "error");
+    return;
+  }
+  const scale = v.num("scale");
+  const height = (layer.elevation ?? 0) + v.num("cut");
+  const depth = !v.flag("below") ? 0 : v.num("far") > 0 ? v.num("far") : Infinity;
+  const done = showLoading("Cutting the section…");
+  let drawing: SectionDrawing;
+  try {
+    await nextPaint();
+    const everywhere = { x0: -Infinity, y0: -Infinity, x1: Infinity, y1: Infinity };
+    drawing = sectionView(sectionMeshes(), { origin: [0, 0, height], right: [1, 0, 0], up: [0, 1, 0], toward: [0, 0, -1], depth, across: everywhere });
+  } catch (err) {
+    toast(`The section couldn't be cut: ${errorMessage(err)}`);
+    return;
+  } finally {
+    done();
+  }
+  const box = drawing.box;
+  if (!box || store.session !== session) {
+    if (!box) toast("Nothing on the visible design layers is cut or seen below the cut plane.", "info");
+    return;
+  }
+  const { halfW, halfH } = sectionHalves(box, scale);
+  const mid = nextSpot(chosen === NEW_SHEET ? null : chosen, halfW, halfH);
+  const made = attempt("Create Horizontal Section Viewport", (s) =>
+    s.batch(() => {
+      const sheetId = chosen === NEW_SHEET ? s.createLayer(newSheetName, "sheet") : chosen;
+      const view = { drawing: { ...drawing, box }, scale, mid, at: { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 }, name, label: v.flag("label") ? { number, sheet: sheetName, title } : null };
+      return { sheetId, id: addSectionViewport(s, sheetId, view) };
+    }),
+  );
+  if (!made) return;
+  if (store.activeLayerId !== made.value.sheetId) setActiveLayer(made.value.sheetId);
+  setSelection([made.value.id]);
+  const ctx = appContext();
+  if (ctx) zoomToSelection(ctx.scene, ctx.view);
+  const cut = drawing.pieces.filter((p) => p.cuts.length || p.cutLines.length).length;
+  toast(`Horizontal section ${name ? `“${name}” ` : ""}made: ${cut} ${cut === 1 ? "object" : "objects"} cut, ${drawing.pieces.length} drawn.`, "info");
 }
