@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:14:00Z",
+    "script-math-geometry",
+    "More script calls",
+    `Python scripts and Vectorscripts get Vectorworks' math, string, vector and 2D geometry calls, over 300 calls in all.
+- Sqrt, Round, SubString, Num2StrF and the rest of the math and string calls.
+- Vectors: Ang2Vec, Vec2Ang, CrossProduct, DotProduct, UnitVec and more.
+- Geometry: LineLineIntersection, CircleCircleInters, PtOnLine, PtInPoly, Centroid and more.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:13:00Z",
     "custom-tool-attribute",
     "Custom Tool/Attribute",

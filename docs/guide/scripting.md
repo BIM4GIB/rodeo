@@ -12,13 +12,14 @@ Python written for Vectorworks runs on the open drawing from **Plug-ins › Run 
 - opens and saves `.py` files
 - shows what it prints, with a failing line linked.
 
-The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs` module of more than 220 of Vectorworks' calls:
+The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs` module of more than 300 of Vectorworks' calls:
 
 - drawing: Rect, Oval, Arc, Poly, BeginPoly with ArcTo, CurveTo and CurveThrough, Poly3D, BeginPoly3D with Add3DPt, Locus, CreateText, BeginGroup…
 - walking the drawing by handle: FSActLayer, NextObj, ForEachObject and Count with search criteria, ForEachObjectInLayer
 - reading and setting geometry, class, name, attributes, records and selection
 - moving, turning, scaling, mirroring and duplicating
 - layers and classes
+- math, strings, vectors and 2D geometry: Sqrt, Num2StrF, SubString, Ang2Vec, Vec2Ang, CrossProduct, LineLineIntersection, CircleCircleInters, PtInPoly, Centroid…
 - the dialogs: StrDialog and the others wait for the answer where the browser can pause WebAssembly, as Chrome can.
 
 The script works on a copy of the drawing taken as it starts, so it sees its own changes. They are applied when it ends, as one undo step, and a script that fails or is stopped changes nothing.
@@ -39,6 +40,7 @@ Lengths are in the drawing's units (inches for feet and inches), and colours are
 - Lengths written with `'` and `"` become the drawing's units.
 - The vs procedures that hand values back through VAR parameters (GetBBox, GetUnits…) fill the variables from what the Python call returns.
 - Search criteria written out (`((T=RECT) & (SEL=TRUE))`) are passed as text.
+- A POINT argument can be a VECTOR variable or x and y, and a point or vector a call returns fills a VECTOR's x, y and z.
 - Errors are given at the Vectorscript's own lines.
 
 **Limits:** `{$INCLUDE}`, WITH and GOTO are refused.

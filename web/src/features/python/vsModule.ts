@@ -2421,4 +2421,481 @@ for _n in ("SetObjPropCharVS", "SetObjPropRealVS", "SetPrefInt", "vsoSetEventRes
            "SetHelpString"):
     globals()[_n] = _accepted
 del _n
+
+
+# ---- math, strings, vectors and 2D geometry (Vectorworks' Math, Strings and Graphic Calculation calls) ----
+
+class _Vec(tuple):
+    """A point or vector a vs call returns: a tuple, as Python gets it, with Vectorscript's VECTOR fields."""
+
+    def __new__(cls, *xyz):
+        t = tuple.__new__(cls, [float(v) for v in xyz])
+        t.v_x, t.v_y = t[0], t[1]
+        t.v_z = t[2] if len(t) > 2 else 0.0
+        return t
+
+
+def _vec(v):
+    """A POINT or VECTOR argument as (x, y, z): a tuple or list, or a Vectorscript VECTOR."""
+    if hasattr(v, "v_x"):
+        return (float(v.v_x), float(v.v_y), float(getattr(v, "v_z", 0.0)))
+    t = [float(x) for x in _flat([v])]
+    return (t[0], t[1], t[2] if len(t) > 2 else 0.0)
+
+
+def Abs(v):
+    return abs(v)
+
+
+def ArcCos(v):
+    return _math.acos(float(v))
+
+
+def ArcSin(v):
+    return _math.asin(float(v))
+
+
+def ArcTan(v):
+    return _math.atan(float(v))
+
+
+def Cos(v):
+    return _math.cos(float(v))
+
+
+def Sin(v):
+    return _math.sin(float(v))
+
+
+def Tan(v):
+    return _math.tan(float(v))
+
+
+def Deg2Rad(degreeValue):
+    return _math.radians(float(degreeValue))
+
+
+def Rad2Deg(radianValue):
+    return _math.degrees(float(radianValue))
+
+
+def Exp(v):
+    return _math.exp(float(v))
+
+
+def Ln(v):
+    return _math.log(float(v))
+
+
+def Max(val1, val2):
+    return max(float(val1), float(val2))
+
+
+def Min(val1, val2):
+    return min(float(val1), float(val2))
+
+
+def Random():
+    import random
+    return random.random()
+
+
+def Round(v):
+    """To the nearest whole number, a half away from zero, as Pascal rounds."""
+    v = float(v)
+    return int(_math.floor(abs(v) + 0.5)) * (1 if v >= 0 else -1)
+
+
+def Trunc(v):
+    return int(float(v))
+
+
+def Sqr(v):
+    return float(v) * float(v)
+
+
+def Sqrt(v):
+    return _math.sqrt(float(v))
+
+
+def Chr(v):
+    return chr(int(v))
+
+
+def UniChr(v):
+    return chr(int(v))
+
+
+def Ord(v):
+    return ord(str(v)[0]) if str(v) else 0
+
+
+def Len(v):
+    return len(str(v))
+
+
+def Concat(*txt):
+    return "".join(str(t) for t in txt)
+
+
+def Copy(source, index, count):
+    i = max(int(index), 1)
+    return str(source)[i - 1:i - 1 + max(int(count), 0)]
+
+
+def Delete(source, index, count):
+    s, i = str(source), max(int(index), 1)
+    return s[:i - 1] + s[i - 1 + max(int(count), 0):]
+
+
+def Insert(source, dest, index):
+    """Vectorscript's Insert(source, VAR dest, index): dest with source put in at index."""
+    d, i = str(dest), max(int(index), 1)
+    return d[:i - 1] + str(source) + d[i - 1:]
+
+
+def Pos(subStr, str_):
+    return str(str_).find(str(subStr)) + 1
+
+
+def UprString(s):
+    return str(s).upper()
+
+
+def SubString(text, delimiter, index):
+    """The index-th token of text split at any of delimiter's characters, or '' when there is none."""
+    toks, cur, d = [], "", str(delimiter)
+    for ch in str(text):
+        if d and ch in d:
+            toks.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    toks.append(cur)
+    i = int(index)
+    return toks[i - 1] if 1 <= i <= len(toks) else ""
+
+
+def Num2StrF(vDistance):
+    """A length in the drawing's units as it shows them: feet and inches to a sixteenth, else to its decimal places."""
+    v = float(vDistance)
+    if _S.format == 3:
+        inches = v * (_S.U / 25.4)
+        sign = "-" if inches < 0 else ""
+        n16 = int(round(abs(inches) * 16))
+        ft, rest = divmod(n16, 192)
+        whole, frac = divmod(rest, 16)
+        part = ""
+        if frac:
+            den = 16
+            while frac % 2 == 0:
+                frac, den = frac // 2, den // 2
+            part = " %d/%d" % (frac, den)
+        return "%s%d'-%d%s\"" % (sign, ft, whole, part)
+    if _S.format == 1:
+        return ("%.3f" % v).rstrip("0").rstrip(".") + '"'
+    return "%.*f" % (max(0, min(int(_S.display), 9)), v)
+
+
+def Angle2Str(value):
+    return ("%.2f" % float(value)).rstrip("0").rstrip(".") + "°"
+
+
+def Str2Angle(str_):
+    """Degrees from 45, 45° or degrees, minutes and seconds (45°30'15")."""
+    import re
+    nums = [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", str(str_))]
+    if not nums:
+        return 0.0
+    d = nums[0]
+    rest = (nums[1] if len(nums) > 1 else 0.0) / 60.0 + (nums[2] if len(nums) > 2 else 0.0) / 3600.0
+    return d - rest if d < 0 else d + rest
+
+
+def Ang2Vec(angleR, Length):
+    a, l = _math.radians(float(angleR)), float(Length)
+    return _Vec(l * _math.cos(a), l * _math.sin(a), 0.0)
+
+
+def Vec2Ang(Vect):
+    x, y, z = _vec(Vect)
+    if x == 0 and y == 0 and z == 0:
+        return -90.0
+    if z:
+        return _math.degrees(_math.atan2(_math.hypot(y, z), x))
+    return _math.degrees(_math.atan2(y, x))
+
+
+def Norm(Vec):
+    x, y, z = _vec(Vec)
+    return _math.sqrt(x * x + y * y + z * z)
+
+
+def UnitVec(Vect):
+    x, y, z = _vec(Vect)
+    n = _math.sqrt(x * x + y * y + z * z)
+    return _Vec(x / n, y / n, z / n) if n else _Vec(0.0, 0.0, 0.0)
+
+
+def Perp(Vec):
+    """At the vector's angle less 90 degrees, as long, in the plan."""
+    x, y, _ = _vec(Vec)
+    return _Vec(y, -x, 0.0)
+
+
+def DotProduct(v1, v2):
+    a, b = _vec(v1), _vec(v2)
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def CrossProduct(v1, v2):
+    a, b = _vec(v1), _vec(v2)
+    return _Vec(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def AngBVec(v1, v2):
+    a, b = _vec(v1), _vec(v2)
+    na, nb = Norm(a), Norm(b)
+    if not na or not nb:
+        return 0.0
+    c = max(-1.0, min(1.0, DotProduct(a, b) / (na * nb)))
+    return _math.degrees(_math.acos(c))
+
+
+def Comp(v1, v2):
+    """v1's part along v2, and its part square to v2."""
+    a, b = _vec(v1), _vec(v2)
+    bb = DotProduct(b, b)
+    k = DotProduct(a, b) / bb if bb else 0.0
+    along = (b[0] * k, b[1] * k, b[2] * k)
+    return (_Vec(*along), _Vec(a[0] - along[0], a[1] - along[1], a[2] - along[2]))
+
+
+def Distance(x1, y1, x2, y2):
+    return _math.hypot(float(x2) - float(x1), float(y2) - float(y1))
+
+
+def Distance3D(x1, y1, z1, x2, y2, z2):
+    return _math.sqrt((float(x2) - float(x1)) ** 2 + (float(y2) - float(y1)) ** 2 + (float(z2) - float(z1)) ** 2)
+
+
+def Eq(value1, value2, tolerance):
+    return abs(float(value1) - float(value2)) <= float(tolerance)
+
+
+def EqPercent(value1, value2, percent):
+    a, b = float(value1), float(value2)
+    return abs(a - b) <= max(abs(a), abs(b)) * float(percent) / 100.0
+
+
+def EqPt(pt1, pt2, tolerance):
+    a, b = _vec(pt1), _vec(pt2)
+    return _math.hypot(a[0] - b[0], a[1] - b[1]) <= float(tolerance)
+
+
+EqPt2D = EqPt
+
+
+def EqPt3D(pt1, pt2, tolerance):
+    a, b = _vec(pt1), _vec(pt2)
+    return Distance3D(a[0], a[1], a[2], b[0], b[1], b[2]) <= float(tolerance)
+
+
+def EqualPt(p1, p2):
+    a, b = _vec(p1), _vec(p2)
+    return abs(a[0] - b[0]) < 1e-12 and abs(a[1] - b[1]) < 1e-12
+
+
+def _corners(p1, p2):
+    a, b = _vec(p1), _vec(p2)
+    return (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+
+
+def EqualRect(rectAp1, rectAp2, rectBp1, rectBp2):
+    return all(abs(u - v) < 1e-12 for u, v in zip(_corners(rectAp1, rectAp2), _corners(rectBp1, rectBp2)))
+
+
+def PtInRect(point, rect1, rect2):
+    x, y, _ = _vec(point)
+    x0, y0, x1, y1 = _corners(rect1, rect2)
+    return x0 <= x <= x1 and y0 <= y <= y1
+
+
+def UnionRect(p1, p2, p3, p4):
+    """The box round two boxes, each by its top left and bottom right corners: (top left, bottom right)."""
+    a, b = _corners(p1, p2), _corners(p3, p4)
+    return (_Vec(min(a[0], b[0]), max(a[3], b[3])), _Vec(max(a[2], b[2]), min(a[1], b[1])))
+
+
+def PtPerpLine(pt, begPt, endPt):
+    p, a, b = _vec(pt), _vec(begPt), _vec(endPt)
+    d = (b[0] - a[0], b[1] - a[1])
+    dd = d[0] * d[0] + d[1] * d[1]
+    k = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / dd if dd else 0.0
+    return _Vec(a[0] + d[0] * k, a[1] + d[1] * k, 0.0)
+
+
+def PtPerpLine3D(pt, pt0, pt1):
+    p, a, b = _vec(pt), _vec(pt0), _vec(pt1)
+    d = [b[i] - a[i] for i in range(3)]
+    dd = sum(c * c for c in d)
+    k = sum((p[i] - a[i]) * d[i] for i in range(3)) / dd if dd else 0.0
+    return _Vec(*[a[i] + d[i] * k for i in range(3)])
+
+
+def PtOnLine(pt, begPt, endPt, tolerance):
+    p, a, b = _vec(pt), _vec(begPt), _vec(endPt)
+    q = PtPerpLine(p, a, b)
+    if _math.hypot(p[0] - q[0], p[1] - q[1]) > float(tolerance):
+        return False
+    t = float(tolerance)
+    return min(a[0], b[0]) - t <= q[0] <= max(a[0], b[0]) + t and min(a[1], b[1]) - t <= q[1] <= max(a[1], b[1]) + t
+
+
+def PtPerpCircle(pt, cenPt, radius):
+    p, c = _vec(pt), _vec(cenPt)
+    dx, dy = p[0] - c[0], p[1] - c[1]
+    n = _math.hypot(dx, dy) or 1.0
+    r = float(radius)
+    return _Vec(c[0] + dx / n * r, c[1] + dy / n * r, 0.0)
+
+
+def PtOnArc(pt, cenPt, radius, startAng, sweepAng, tolerance):
+    p, c = _vec(pt), _vec(cenPt)
+    if abs(_math.hypot(p[0] - c[0], p[1] - c[1]) - float(radius)) > float(tolerance):
+        return False
+    sweep = float(sweepAng)
+    if abs(sweep) >= 360:
+        return True
+    a = (_math.degrees(_math.atan2(p[1] - c[1], p[0] - c[0])) - float(startAng)) % 360.0
+    return a <= sweep if sweep >= 0 else (360.0 - a) <= -sweep or a == 0
+
+
+def ThreePtCenter(pt1, pt2, pt3):
+    a, b, c = _vec(pt1), _vec(pt2), _vec(pt3)
+    d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
+    if not d:
+        return _Vec(0.0, 0.0, 0.0)
+    s = [p[0] * p[0] + p[1] * p[1] for p in (a, b, c)]
+    x = (s[0] * (b[1] - c[1]) + s[1] * (c[1] - a[1]) + s[2] * (a[1] - b[1])) / d
+    y = (s[0] * (c[0] - b[0]) + s[1] * (a[0] - c[0]) + s[2] * (b[0] - a[0])) / d
+    return _Vec(x, y, 0.0)
+
+
+def RelativeCoords(pt, begPt, endPt):
+    """pt in the frame with its origin at begPt and its x axis toward endPt."""
+    p, a, b = _vec(pt), _vec(begPt), _vec(endPt)
+    ang = _math.atan2(b[1] - a[1], b[0] - a[0])
+    dx, dy = p[0] - a[0], p[1] - a[1]
+    c, s = _math.cos(ang), _math.sin(ang)
+    return _Vec(dx * c + dy * s, -dx * s + dy * c)
+
+
+def LineLineIntersection(l1start, l1end, l2start, l2end):
+    """(parallel, the point on both segments, the point where the lines cross)."""
+    a, b, c, d = _vec(l1start), _vec(l1end), _vec(l2start), _vec(l2end)
+    r = (b[0] - a[0], b[1] - a[1])
+    s = (d[0] - c[0], d[1] - c[1])
+    den = r[0] * s[1] - r[1] * s[0]
+    if abs(den) < 1e-12:
+        return (True, False, _Vec(0.0, 0.0))
+    t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / den
+    u = ((c[0] - a[0]) * r[1] - (c[1] - a[1]) * r[0]) / den
+    eps = 1e-9
+    return (False, -eps <= t <= 1 + eps and -eps <= u <= 1 + eps, _Vec(a[0] + r[0] * t, a[1] + r[1] * t))
+
+
+def LineCircleIntersect(begPt, endPt, cenPt, radius):
+    """Where the line through the two points meets the circle: (whether it does, the points)."""
+    a, b, c = _vec(begPt), _vec(endPt), _vec(cenPt)
+    d = (b[0] - a[0], b[1] - a[1])
+    f = (a[0] - c[0], a[1] - c[1])
+    A = d[0] * d[0] + d[1] * d[1]
+    B = 2 * (f[0] * d[0] + f[1] * d[1])
+    C = f[0] * f[0] + f[1] * f[1] - float(radius) ** 2
+    disc = B * B - 4 * A * C
+    if not A or disc < 0:
+        return (False, _Vec(0.0, 0.0, 0.0), _Vec(0.0, 0.0, 0.0))
+    q = _math.sqrt(disc)
+    t1, t2 = (-B - q) / (2 * A), (-B + q) / (2 * A)
+    return (True, _Vec(a[0] + d[0] * t1, a[1] + d[1] * t1, 0.0), _Vec(a[0] + d[0] * t2, a[1] + d[1] * t2, 0.0))
+
+
+def CircleCircleInters(cenPt1, cenPt2, radius1, radius2):
+    a, b = _vec(cenPt1), _vec(cenPt2)
+    r1, r2 = float(radius1), float(radius2)
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    d = _math.hypot(dx, dy)
+    if not d or d > r1 + r2 or d < abs(r1 - r2):
+        return (False, _Vec(0.0, 0.0, 0.0), _Vec(0.0, 0.0, 0.0))
+    k = (r1 * r1 - r2 * r2 + d * d) / (2 * d)
+    hgt = _math.sqrt(max(r1 * r1 - k * k, 0.0))
+    mx, my = a[0] + dx * k / d, a[1] + dy * k / d
+    return (True, _Vec(mx + dy * hgt / d, my - dx * hgt / d, 0.0), _Vec(mx - dy * hgt / d, my + dx * hgt / d, 0.0))
+
+
+def _outline(h):
+    """A polygon's, polyline's or rectangle's corners in the drawing's units (a polyline's arcs as their corners)."""
+    return [_pt_out(v) for v in _verts(h)]
+
+
+def PtInPoly(p, h):
+    x, y, _ = _vec(p)
+    pts = _outline(h)
+    inside = False
+    for i in range(len(pts)):
+        (x0, y0), (x1, y1) = pts[i - 1], pts[i]
+        if PtOnLine((x, y), (x0, y0), (x1, y1), 1e-9):
+            return True
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            inside = not inside
+    return inside
+
+
+def Centroid(h):
+    try:
+        pts = _outline(h)
+    except (TypeError, ValueError):
+        return (False, 0.0, 0.0)
+    a = cx = cy = 0.0
+    for i in range(len(pts)):
+        (x0, y0), (x1, y1) = pts[i - 1], pts[i]
+        c = x0 * y1 - x1 * y0
+        a += c
+        cx += (x0 + x1) * c
+        cy += (y0 + y1) * c
+    if not a:
+        return (False, 0.0, 0.0)
+    return (True, cx / (3 * a), cy / (3 * a))
+
+
+def _takes(spec):
+    """Lets a call's POINT arguments (p in spec) come as a point or, as Vectorscript may pass them, as x and y."""
+    def wrap(fn):
+        def call(*args):
+            out, i = [], 0
+            for c in spec:
+                if i >= len(args):
+                    break
+                a = args[i]
+                if c == "p" and not isinstance(a, (tuple, list)) and not hasattr(a, "v_x") and i + 1 < len(args):
+                    out.append((float(a), float(args[i + 1])))
+                    i += 2
+                else:
+                    out.append(a)
+                    i += 1
+            return fn(*out)
+        call.__name__ = fn.__name__
+        call.__doc__ = fn.__doc__
+        return call
+    return wrap
+
+
+for _n, _spec in (("EqPt", "ppr"), ("EqPt2D", "ppr"), ("EqualPt", "pp"), ("EqualRect", "pppp"), ("PtInRect", "ppp"),
+                  ("UnionRect", "pppp"), ("PtPerpLine", "ppp"), ("PtOnLine", "pppr"), ("PtPerpCircle", "ppr"),
+                  ("PtOnArc", "pprrrr"), ("ThreePtCenter", "ppp"), ("RelativeCoords", "ppp"),
+                  ("LineLineIntersection", "pppp"), ("LineCircleIntersect", "pppr"), ("CircleCircleInters", "pprr"),
+                  ("PtInPoly", "ph")):
+    globals()[_n] = _takes(_spec)(globals()[_n])
+del _n, _spec
 `;

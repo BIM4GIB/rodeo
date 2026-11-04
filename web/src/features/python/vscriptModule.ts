@@ -217,6 +217,15 @@ def _byref(fn, flags):
     return call
 
 
+def _spread(r, n):
+    """A vs procedure's results for its n VAR arguments: as they come when there are n (a point to a VECTOR),
+    else spread out (points to their x and y)."""
+    if n == 1:
+        return [r]
+    r = list(r) if isinstance(r, (tuple, list)) else [r]
+    return r if len(r) == n else _flat(r)
+
+
 def _outs(r, refs):
     """A vs function that also fills VAR arguments: those set from its results after the first, which it returns."""
     r = list(r)
@@ -252,6 +261,7 @@ _BUILTINS = {
 _BUILTIN_VAR = {
     "delete": (0, "_delete"), "insert": (1, "_insert"),
     "upperstring": (0, "(lambda s: s.upper())"), "lowerstring": (0, "(lambda s: s.lower())"),
+    "uprstring": (0, "(lambda s: s.upper())"),
 }
 # vs procedures that hand values back through VAR parameters: how many come before them
 _VS_OUT = {
@@ -263,7 +273,11 @@ _VS_OUT = {
     "getchoicetext": 3, "getchoiceindex": 3, "getselectedchoiceinfo": 3, "getselectedchoiceindex": 3,
 }
 # vs functions that also hand values back through their arguments: how many arguments come in
-_VS_FN_OUT = {"getcustomobjectinfo": 0, "getplugininfo": 0, "geteditreal": 3, "geteditinteger": 2}
+_VS_FN_OUT = {"getcustomobjectinfo": 0, "getplugininfo": 0, "geteditreal": 3, "geteditinteger": 2, "centroid": 1}
+# vs procedures and functions with POINT arguments, which a script may pass as a point or as x and y, that
+# hand values back through their last arguments: how many those are
+_VS_OUT_LAST = {"linelineintersection": 3, "comp": 2, "unionrect": 2}
+_VS_FN_OUT_LAST = {"circlecircleinters": 2, "linecircleintersect": 2}
 _PARAM_TYPES = {"bool": ("bool",), "int": ("int",), "real": ("real",), "str": ("str",)}
 # vs calls whose argument is search criteria written as they are, not as a string
 _CRITERIA = {"count": 0, "foreachobject": 1, "selectobj": 0, "dselectobj": 0}
@@ -1013,19 +1027,19 @@ class _Translator(object):
             return
         if isinstance(found, _Var):
             self.err("%s is a variable: assign with :=" % t[1], t)
-        if lname in _VS_OUT:
-            n_in = _VS_OUT[lname]
+        if lname in _VS_OUT or lname in _VS_OUT_LAST:
+            n_in = _VS_OUT[lname] if lname in _VS_OUT else self.arg_count() - _VS_OUT_LAST[lname]
             args = self.ext_args(lname, set(range(n_in, 99)))
             ins = [a for a in args[:n_in]]
             outs = args[n_in:]
             if any(not isinstance(o, tuple) for o in outs):
                 self.err("%s hands values back through its last arguments, which must be variables" % t[1], t)
             o = self.temp()
-            self.emit("%s = _flat(vs.%s(%s))" % (o, self.vs_names.get(lname, t[1]), ", ".join(ins)), line)
+            self.emit("%s = _spread(vs.%s(%s), %d)" % (o, self.vs_names.get(lname, t[1]), ", ".join(ins), len(outs)), line)
             for k, lv in enumerate(outs):
                 self.emit(self.set(lv, "%s[%d]" % (o, k)), line)
             return
-        if lname in _VS_FN_OUT:
+        if lname in _VS_FN_OUT or lname in _VS_FN_OUT_LAST:
             self.emit(self.fn_out_call(t, lname), line)
             return
         if lname in _BUILTIN_VAR:
@@ -1120,8 +1134,27 @@ class _Translator(object):
         self.p += len(toks)
         return self.src[toks[0][3]:toks[-1][4]] if toks else ""
 
+    def arg_count(self):
+        """How many arguments the call about to be read has, counted ahead without reading them."""
+        if not self.atsym("("):
+            return 0
+        depth, n, k = 0, 0, 0
+        while True:
+            tk = self.peek(k)
+            if tk[0] == "eof":
+                return n
+            if tk[0] == "sym" and tk[1] in ("(", "["):
+                depth += 1
+            elif tk[0] == "sym" and tk[1] in (")", "]"):
+                depth -= 1
+                if depth == 0:
+                    return n + (0 if k == 1 else 1)
+            elif depth == 1 and tk[0] == "sym" and tk[1] == ",":
+                n += 1
+            k += 1
+
     def fn_out_call(self, t, lname):
-        n_in = _VS_FN_OUT[lname]
+        n_in = _VS_FN_OUT[lname] if lname in _VS_FN_OUT else self.arg_count() - _VS_FN_OUT_LAST[lname]
         args = self.ext_args(lname, set(range(n_in, 99)))
         outs = args[n_in:]
         if any(not isinstance(o, tuple) for o in outs):
@@ -1254,9 +1287,9 @@ class _Translator(object):
             ptype = vs._param_type(lname[1:]) if lname[:1] == "p" else None
             if ptype:
                 return "vs._param(%r)" % lname[1:], _PARAM_TYPES[ptype]
-        if lname in _VS_FN_OUT:
+        if lname in _VS_FN_OUT or lname in _VS_FN_OUT_LAST:
             return self.fn_out_call(t, lname), _BOOL
-        if lname in _VS_OUT or lname in _BUILTIN_VAR:
+        if lname in _VS_OUT or lname in _VS_OUT_LAST or lname in _BUILTIN_VAR:
             self.err("%s hands values back through its arguments: call it as a statement" % t[1], t)
         typ = _STR if lname in ("concat", "copy", "chr", "num2str", "getname", "getclass", "getlname", "gettext", "strdialog") else None
         return self.ext_call(t, lname), typ
