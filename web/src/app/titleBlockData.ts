@@ -12,7 +12,7 @@
 // A value another field of the title block also holds is left drawn as it is, since its texts
 // can't be told apart. Kept apart from the dialog so it runs without the page.
 
-import type { EditSession, ObjectInfo, ObjectRecord, RecordValue, VwxDocument } from "../core/index.ts";
+import type { EditSession, LayerInfo, ObjectInfo, ObjectRecord, RecordValue, VwxDocument } from "../core/index.ts";
 
 export const BORDER = "Title Block Border";
 export const PROJECT_DATA = "Title Block Project Data";
@@ -144,4 +144,39 @@ export function applyTitleBlockChanges(
     }
   }
   return done;
+}
+
+/** Whether `id` is a title block border: Duplicate on Layers' object. */
+export function isTitleBlock(doc: VwxDocument, id: string): boolean {
+  const o = doc.object(id);
+  return !!o && o.type === PLUGIN && !id.includes("/") && doc.records(id).some((r) => r.parametric && r.name === BORDER);
+}
+
+/** The layers no title block border is on, in the drawing's order: where Duplicate on Layers can put one. */
+export function layersWithoutTitleBlock(doc: VwxDocument): LayerInfo[] {
+  const taken = new Set(findTitleBlocks(doc).map((t) => t.layerId));
+  return doc.layers().filter((l) => !taken.has(l.id));
+}
+
+/**
+ * Duplicate on Layers: a copy of the title block border `id` on each of `layerIds`, where it stands.
+ * On a sheet layer the copy's Sheet Number and Sheet Title become the sheet's, its drawn texts with
+ * them, as Vectorworks' automatic drawing coordination keeps them. Run it inside a batch. Returns
+ * the copies' ids.
+ */
+export function duplicateTitleBlock(s: EditSession, id: string, layerIds: readonly string[]): string[] {
+  const data = s.copyObjects([id]);
+  const out: string[] = [];
+  for (const layerId of layerIds) {
+    const [copy] = s.pasteObjects(layerId, data, 0, 0);
+    if (!copy) continue;
+    out.push(copy);
+    const layer = s.doc.layers().find((l) => l.id === layerId);
+    if (layer?.kind !== "sheet") continue;
+    applyTitleBlockChanges(s, [copy], [
+      { format: SHEET_DATA, field: SHEET_NUMBER, value: layer.name },
+      { format: SHEET_DATA, field: SHEET_TITLE, value: layer.title },
+    ]);
+  }
+  return out;
 }

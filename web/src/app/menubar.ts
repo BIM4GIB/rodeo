@@ -203,6 +203,7 @@ import { arcIntoSegmentsDialog, canArcIntoSegments, canEvenDivide, canLineIntoSe
 import { rulersShown, toggleRulers } from "./rulers.ts";
 import { canEditWorksheet, editWorksheet } from "./worksheetEditor.ts";
 import { createReportDialog } from "./createReport.ts";
+import { isTitleBlock } from "./titleBlockData.ts";
 import { titleBlockManager } from "./titleBlockManager.ts";
 import { canCreateRecordFormat, editRecordFormatRows, newRecordFormat } from "./recordFormatEditor.ts";
 import { alignDistributeDialog, alignDistributeRows } from "./alignDistribute.ts";
@@ -1838,6 +1839,9 @@ function drawingRows(
         ]
       : []),
     ...(canMakeLocalHatch(under) ? [{ label: "New Hatch from Locally Mapped Hatch", run: () => void newHatchFromLocal(under) }] : []),
+    ...(doc && isTitleBlock(doc, under)
+      ? [{ label: "Duplicate on Layers…", run: () => void import("./duplicateOnLayers.ts").then((m) => m.duplicateOnLayersDialog(under)) }]
+      : []),
     ...(isCroppableImage(under) ? [{ label: "Edit Crop…", run: () => void editCropDialog(under) }] : []),
     ...(isSiteModel(under) ? [{ label: "Edit Crop…", run: () => editSiteCrop(under) }] : []),
     ...(isAutoHybrid(under) ? [{ label: "Edit", run: () => editAutoHybrid(under) }] : []),

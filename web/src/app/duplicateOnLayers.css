@@ -1,0 +1,20 @@
+/* A title block border's Duplicate on Layers…: the layers without one, each with a tick. */
+
+.dol-layers {
+  max-height: min(48vh, 320px);
+  overflow-y: auto;
+  margin: 6px 0;
+  padding: 0 8px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+}
+
+.dol-layers .menu-dialog-check {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
+
+.dol-kind {
+  margin-left: auto;
+  color: var(--text-2);
+}

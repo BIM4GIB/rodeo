@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:17:00Z",
+    "duplicate-on-layers",
+    "Duplicate title block borders on layers",
+    `Right-click a title block border and choose Duplicate on Layers… to copy it to every layer you tick.
+- The dialog lists the layers that don't have a title block border yet.
+- On a sheet, the copy's sheet number and title become that sheet's.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:16:00Z",
     "multiple-viewports",
     "Create Multiple Viewports",

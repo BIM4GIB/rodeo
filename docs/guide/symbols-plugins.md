@@ -104,6 +104,12 @@ The copy keeps that object's class, parameters and drawing, since Rodeo can't re
 
 **Limits:** revision data isn't edited yet.
 
+### Duplicate on Layers
+
+Right-click a title block border and choose **Duplicate on Layers…** to copy it to other layers. The dialog lists every layer that has no title block border yet. Tick the ones to copy it to, or use **Select/Deselect All**. Each copy lands where the original stands. On a sheet layer, the copy's Sheet Number and Sheet Title become that sheet's.
+
+**Limits:** it works on title block borders from Vectorworks files, not on the borders Rodeo's own Title Block Border tool draws. Sheet data is always filled in, whatever the border's own setting.
+
 ## Data records
 
 ### Attaching and detaching records
