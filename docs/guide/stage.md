@@ -233,6 +233,12 @@ With the **Equipment Summary Key** tool (Rigging tool set), click to place a tab
 
 The matched instruments update in one undo step. Rows that match none come in as new instruments below the drawing.
 
+### Export ASCII Patch
+
+**File › Export › Export ASCII Patch…** writes the patch as a USITT ASCII file that lighting consoles import. Choose whether the console clears its existing patch first.
+
+Each device goes from its channel to its Dimmer, or to its DMX address when the Dimmer isn't a number. A device of several channels is patched one after another: channel 6 on dimmer 20 with 4 channels patches 6 to 20, 7 to 21, 8 to 22 and 9 to 23. Devices with no channel number are left out, and the message names them.
+
 ## Photometrics and cameras
 
 ### Photometer and Photometric Grid

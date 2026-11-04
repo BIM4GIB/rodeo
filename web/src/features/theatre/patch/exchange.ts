@@ -7,6 +7,7 @@ import { h } from "../../../app/dom.ts";
 import { downloadBlob } from "../../../app/fileio.ts";
 import { store } from "../../../app/state.ts";
 import { errorMessage, toast } from "../../../app/toast.ts";
+import { toolPrefs } from "../../../app/toolPrefs.ts";
 import { zipFiles } from "../../../export/zip.ts";
 import { unzip } from "../../../import/zip.ts";
 import type { FixtureEdit } from "../fixture.ts";
@@ -15,7 +16,7 @@ import { stageFrame } from "../stageTool.ts";
 import { downloadText, csvText } from "../ui.ts";
 import { addressOf, counted, universeOf } from "./patch.ts";
 import { instrumentTypeOf, mvrXml, parseMvr, type MvrFixture } from "./mvr.ts";
-import { PATCH_HEADINGS, patchRows, usittPatch, type Skipped } from "./usitt.ts";
+import { asciiPatch, PATCH_HEADINGS, patchRows, usittPatch, type Skipped } from "./usitt.ts";
 
 /** The drawing's name without its extension, for the names of the files saved. */
 function baseName(): string {
@@ -47,6 +48,39 @@ export function exportUsitt(): void {
   }
   downloadText(`${baseName()} patch.asc`, text, "text/plain");
   toast(`Exported ${counted(patched, "patched instrument")} to ${baseName()} patch.asc.${skippedNote(skipped)}`, "info");
+}
+
+/** File > Export > Export ASCII Patch…: Vectorworks' question whether the console's patch is cleared, then the file. */
+export async function exportAsciiPatch(): Promise<void> {
+  const list = fixtures();
+  if (list.length === 0) {
+    toast("There are no lighting devices in this drawing to export.", "info");
+    return;
+  }
+  const v = await toolPrefs(
+    "Export ASCII Patch",
+    [
+      {
+        kind: "choice",
+        key: "clear",
+        label: "Clear patch",
+        value: "yes",
+        options: [
+          { value: "yes", label: "Yes" },
+          { value: "no", label: "No" },
+        ],
+      },
+    ],
+    "Clear the console's existing patch when it imports this file? Yes deletes all of it first; No keeps it, though the new patch may overwrite some. A device of several channels is patched channel after channel, dimmer after dimmer.",
+  );
+  if (!v) return;
+  const { text, patched, skipped } = asciiPatch(list, v.choice("clear") === "yes");
+  if (patched === 0) {
+    toast(`Nothing to export: no lighting device has a whole-number channel and a dimmer or DMX address.${skippedNote(skipped)}`, "info");
+    return;
+  }
+  downloadText(`${baseName()} patch.asc`, text, "text/plain");
+  toast(`Exported ${counted(patched, "lighting device")} to ${baseName()} patch.asc.${skippedNote(skipped)}`, "info");
 }
 
 /** Stage > Lighting Paperwork > Export to Console > Patch CSV: every instrument's patch and details, as a spreadsheet reads them. */

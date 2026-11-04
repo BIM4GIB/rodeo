@@ -603,6 +603,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Export Worksheet…", enabled: canExportWorksheet, run: () => void exportWorksheetDialog() },
             { label: "Export Database…", enabled: canExportDatabase, run: () => void exportDatabaseDialog() },
             { label: "Export Lighting Device Data…", enabled: hasDoc, run: () => void import("../features/theatre/patch/deviceDataDialogs.ts").then((m) => m.exportDeviceDataDialog()) },
+            { label: "Export ASCII Patch…", enabled: hasDoc, run: () => void import("../features/theatre/patch/exchange.ts").then((m) => m.exportAsciiPatch()) },
             "-",
             { label: "Export OBJ", enabled: hasDoc, run: () => actions.exportModel("obj") },
             { label: "Export glTF", enabled: hasDoc, run: () => actions.exportModel("glb") },

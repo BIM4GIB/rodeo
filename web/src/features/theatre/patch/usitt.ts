@@ -1,7 +1,9 @@
 // The patch as a lighting console reads it: USITT ASCII, the text most consoles import (an Ident block, a Clear
 // Patch, one Patch line per channel and EndData), and the patch as a list for paperwork. Pure: the caller
 // downloads the text. Each instrument contributes its channel and absolute DMX address, at full level. Only
-// whole-number channels go in; an instrument without one, or not patched, comes back as skipped.
+// whole-number channels go in; an instrument without one, or not patched, comes back as skipped. File > Export >
+// Export ASCII Patch writes it as Vectorworks does (asciiPatch): Clear Patch only when asked for, and a device
+// of several channels patched channel after channel to dimmer after dimmer.
 
 import type { Fixture } from "../fixture.ts";
 import { absoluteOf, describeFixture, isPatched } from "./patch.ts";
@@ -54,7 +56,44 @@ export function usittPatch(list: readonly Fixture[]): ConsolePatch {
     channels.set(channel, addresses);
     patched++;
   }
-  const lines = ["Ident 3:0", "Manufacturer Rodeo", "Console Rodeo", "Clear Patch"];
+  return { text: patchText(channels, true), patched, skipped };
+}
+
+/**
+ * File > Export > Export ASCII Patch, as Vectorworks writes it: each device from its channel and its Dimmer
+ * (or, with no whole-number Dimmer, its absolute DMX address), its footprint (Vectorworks' Num Channels)
+ * patched in sequence: channel 6, dimmer 20 and 4 channels patch 6 to 20, 7 to 21, 8 to 22 and 9 to 23.
+ * Clear Patch goes first when `clear`.
+ */
+export function asciiPatch(list: readonly Fixture[], clear: boolean): ConsolePatch {
+  const channels = new Map<number, Set<number>>();
+  const skipped: Skipped[] = [];
+  let patched = 0;
+  for (const f of list) {
+    const label = describeFixture(f);
+    const start = wholeChannel(f.dimmer) ?? (isPatched(f) ? absoluteOf(f.universe, f.address) : null);
+    if (start === null) {
+      skipped.push({ id: f.id, label, reason: "no dimmer or DMX address" });
+      continue;
+    }
+    const channel = wholeChannel(f.channel);
+    if (channel === null) {
+      skipped.push({ id: f.id, label, reason: "no whole-number channel" });
+      continue;
+    }
+    for (let k = 0; k < Math.max(1, Math.floor(f.footprint) || 1); k++) {
+      const addresses = channels.get(channel + k) ?? new Set<number>();
+      addresses.add(start + k);
+      channels.set(channel + k, addresses);
+    }
+    patched++;
+  }
+  return { text: patchText(channels, clear), patched, skipped };
+}
+
+/** The USITT ASCII text of `channels`' addresses, with a Clear Patch first when `clear`. */
+function patchText(channels: ReadonlyMap<number, ReadonlySet<number>>, clear: boolean): string {
+  const lines = ["Ident 3:0", "Manufacturer Rodeo", "Console Rodeo", ...(clear ? ["Clear Patch"] : [])];
   for (const channel of [...channels.keys()].sort((a, b) => a - b)) {
     const head = `Patch 1 ${channel}`;
     let line = "";
@@ -70,7 +109,7 @@ export function usittPatch(list: readonly Fixture[]): ConsolePatch {
     lines.push(line);
   }
   lines.push("EndData");
-  return { text: `${lines.join("\r\n")}\r\n`, patched, skipped };
+  return `${lines.join("\r\n")}\r\n`;
 }
 
 /** The columns of the patch list, as patchRows fills them. */

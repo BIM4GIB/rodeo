@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:09:00Z",
+    "export-ascii-patch",
+    "Export ASCII Patch",
+    `File > Export > Export ASCII Patch writes your lighting patch for a console.
+- Choose whether the console's existing patch is cleared.
+- Multi-channel devices are patched in sequence.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:08:00Z",
     "color-palette-manager",
     "Color Palette Manager",

@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import type { Fixture } from "../fixture.ts";
-import { patchRows, PATCH_HEADINGS, usittPatch, wholeChannel } from "./usitt.ts";
+import { asciiPatch, patchRows, PATCH_HEADINGS, usittPatch, wholeChannel } from "./usitt.ts";
 
 const base: Fixture = {
   id: "",
@@ -98,5 +98,21 @@ assert.deepEqual(patchRows([F2, F5, F1]), [
   ["1", 2, 10, 522, 1, "Profile 26°", "", "", "", "", ""],
   ["3", "", "", "", 1, "Profile 26°", "", "", "", "", ""],
 ]);
+
+// asciiPatch, Vectorworks' Export ASCII Patch: help's example, channel 6, dimmer 20 and 4 channels, patches
+// 6 to 20, 7 to 21, 8 to 22 and 9 to 23; no Clear Patch when it isn't wanted
+const seq = asciiPatch([fx("m", { channel: "6", dimmer: "20", footprint: 4 })], false);
+assert.equal(seq.text, "Ident 3:0\r\nManufacturer Rodeo\r\nConsole Rodeo\r\nPatch 1 6 20@100\r\nPatch 1 7 21@100\r\nPatch 1 8 22@100\r\nPatch 1 9 23@100\r\nEndData\r\n");
+assert.equal(seq.patched, 1);
+// without a whole-number Dimmer, the absolute DMX address (universe 2 address 10 is 522); Clear Patch first when asked
+const byAddress = asciiPatch([fx("a", { channel: "3", dimmer: "A1", universe: 2, address: 10 })], true);
+assert.ok(byAddress.text.includes("Console Rodeo\r\nClear Patch\r\nPatch 1 3 522@100\r\n"), byAddress.text);
+// neither a dimmer nor an address, or no whole-number channel: left out, saying why
+const left = asciiPatch([fx("n", { channel: "4" }), fx("c", { channel: "4.5", dimmer: "9" })], true);
+assert.equal(left.patched, 0);
+assert.deepEqual(
+  left.skipped.map((s) => s.reason),
+  ["no dimmer or DMX address", "no whole-number channel"],
+);
 
 console.log("usitt.check.ts: all checks passed");
