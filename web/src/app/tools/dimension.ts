@@ -22,6 +22,7 @@
 // between two clicks on it; see ArcLengthTool.
 
 import type { Attributes, EditSession, NewShape, ObjectInfo, Pt, VwxDocument } from "../../core/index.ts";
+import { associateDimension } from "../assocDimensions.ts";
 import { attempt, setEditGroup } from "../commands.ts";
 import {
   angularLayout,
@@ -619,7 +620,14 @@ function commit(drawings: readonly DimensionDrawing[]): void {
   if (!session || !layerId) return;
   const classIndex = dimensionClass(session.doc) ?? store.activeClassIndex;
   const attrs = Object.keys(store.drawAttrs).length > 0 ? store.drawAttrs : undefined;
-  const r = attempt("Dimension", (s) => s.batch(() => addDimensionDrawings(s, layerId, drawings, classIndex, attrs)));
+  const r = attempt("Dimension", (s) =>
+    s.batch(() => {
+      const id = addDimensionDrawings(s, layerId, drawings, classIndex, attrs);
+      // a lone linear dimension between two vertices follows them
+      if (drawings.length === 1) associateDimension(s, id, layerId, drawings[0]);
+      return id;
+    }),
+  );
   // the group goes on the layer, not into the group being edited, as addAndSelect does
   if (r) setEditGroup(null, [r.value]);
 }

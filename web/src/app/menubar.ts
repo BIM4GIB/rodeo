@@ -196,6 +196,7 @@ import { hasNextView, hasPreviousView, nextView, previousView } from "./viewHist
 import { importResources } from "./resourceImport.ts";
 import { canTraceBitmap, traceBitmapDialog } from "./traceBitmap.ts";
 import { canEditCrop, editCropDialog, isCroppableImage } from "./imageCrop.ts";
+import { disassociate, isAssociated } from "./assocDimensions.ts";
 import { canSimplifyPolys, simplifyPolysDialog } from "./simplifyPolys.ts";
 import { followHyperlink, isHyperlink } from "./hyperlink.ts";
 import { canMakeAllByClass, canRemoveByClass, canSetDefaultAttributes, canUseDefaultAttributes, setAllByClass, setDefaultAttributes, useDefaultAttributes } from "./attributeCommands.ts";
@@ -1864,6 +1865,7 @@ function drawingRows(
       ? [{ label: "Duplicate on Layers…", run: () => void import("./duplicateOnLayers.ts").then((m) => m.duplicateOnLayersDialog(under)) }]
       : []),
     ...(isCroppableImage(under) ? [{ label: "Edit Crop…", run: () => void editCropDialog(under) }] : []),
+    ...(isAssociated(under) ? [{ label: "Disassociate", run: () => disassociate(under) }] : []),
     ...(isCroppableImage(under) ? [{ label: "Edit Image Effects…", run: () => void import("./imageEffects.ts").then((m) => m.editImageEffectsDialog(under)) }] : []),
     ...(isSiteModel(under) ? [{ label: "Edit Crop…", run: () => editSiteCrop(under) }] : []),
     ...(isAutoHybrid(under) ? [{ label: "Edit", run: () => editAutoHybrid(under) }] : []),

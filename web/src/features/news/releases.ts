@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:20:00Z",
+    "associative-dimensions",
+    "Dimensions that follow",
+    `A linear dimension drawn between two objects' corners now follows them when they move or change shape.
+- It measures again, and keeps its distance from them.
+- Right-click it and choose Disassociate to let it stay put.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:19:00Z",
     "image-effects",
     "Image effects",

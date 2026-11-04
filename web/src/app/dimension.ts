@@ -72,8 +72,8 @@ export interface DimensionDrawing {
   readonly lines: readonly LineSeg[];
   readonly arcs: readonly DimensionArc[];
   readonly text: DimensionText;
-  /** a linear one's measured points, a point on its line and the way the line runs: what a dimension object keeps */
-  readonly linear?: { readonly a: Pt; readonly b: Pt; readonly at: Pt; readonly u: Pt };
+  /** a linear one's measured points, a point on its line and the way the line runs: what a dimension object keeps; and its kind */
+  readonly linear?: { readonly a: Pt; readonly b: Pt; readonly at: Pt; readonly u: Pt; readonly axis?: DimensionAxis };
 }
 
 /**
@@ -122,7 +122,7 @@ export function dimensionFrame(a: Pt, b: Pt, cursor: Pt, aligned: boolean): Dime
 }
 
 /** The way a frame's dimension line is offset from the points it measures. */
-function normalOf(frame: DimensionFrame): Pt {
+export function normalOf(frame: DimensionFrame): Pt {
   return frame.axis === "vertical" ? { x: 1, y: 0 } : { x: -frame.u.y, y: frame.u.x };
 }
 
@@ -223,7 +223,7 @@ export function linearDrawing(layout: DimensionLayout, value: string): Dimension
     lines,
     arcs: [],
     text: { value, at: layout.text.at, angle: layout.text.angle, height: layout.text.height },
-    ...(layout.line ? { linear: { a, b, at: layout.line.a, u: layout.u } } : {}),
+    ...(layout.line ? { linear: { a, b, at: layout.line.a, u: layout.u, axis: layout.axis } } : {}),
   };
 }
 

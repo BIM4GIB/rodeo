@@ -34,7 +34,15 @@ Selected, a linear dimension object (one drawn plainly, as most are) shows a Dim
 
 A change redraws its lines and value in its own standard, in one undo step. Moving a point or turning it leaves the dimension line where it was (or as far from the start point, when it turns), and its value measures again unless it said something else.
 
-**Limits:** dimension objects aren't associative; they are untested in Vectorworks.
+**Limits:** dimension objects are untested in Vectorworks.
+
+### Associative dimensions
+
+A linear dimension drawn from a corner of one object to a corner of the same or another object follows them. Move or reshape the objects and the dimension moves with them, stays as far from them, and measures again. If the value says something of its own, that stays. When objects overlap, the top one is used.
+
+The link breaks when you move the dimension by itself, or delete an object it measures. Right-click the dimension and choose **Disassociate** to break it yourself.
+
+**Limits:** it works one way: moving the dimension doesn't move the objects, as it does in Vectorworks. Only single linear dimensions follow, not chains, baselines, ordinates or radial, diameter and angular ones. Walls and dimensions across layers don't, and there's no setting to turn it off. Vectorworks sees them as plain dimensions.
 
 ### Chain dimensions on the right-click menu
 
