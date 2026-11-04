@@ -6,11 +6,13 @@
 // openings clear, stay within their thickness, cover the rest and meet at mitred corners;
 // rectangular gable and hip roofs put the ridge at the right height and length; thatch is
 // thicker than tile; a window's parts stay inside its opening; bad specs are refused with errors
-// naming the element and the field. Last, a cottage using every kind is built and its parts
+// naming the element and the field; a product's part comes out one closed solid of the volume
+// its shapes make. Last, a cottage using every kind is built and its parts
 // counted by category.
 
 import type { Pt } from "../../core/types.ts";
 import { BUILD_REFERENCE, buildParts, type BuildPart } from "./build.ts";
+import { closureOf } from "./check3d.ts";
 
 let failures = 0;
 function check(ok: boolean, what: string): void {
@@ -373,6 +375,56 @@ refuses({ kind: "box" }, /must be a list/, "elements not in a list");
   check(ab.every((p) => plan(p).every((q) => q.x >= -0.01 && q.x <= 1000.01) || / step$/.test(p.name)) && ab.every((p) => plan(p).every((q) => q.y >= -300.01)), "a door placed by a and b fills the gap between them, inside the wall on the left of a→b");
 }
 
+// ---- a product's part ------------------------------------------------------------------------------
+
+{
+  // a bracket: a rounded plate with two screw holes, an upright along x with a bore along y, and
+  // a counterbore pocket, the shapes overlapping and the cuts nested in what they open
+  const { parts, notes } = buildParts([
+    {
+      kind: "part",
+      name: "Bracket",
+      color: "#3a7bd5",
+      add: [
+        { rect: [0, 0, 60, 40], round: 6, from: 0, to: 5 },
+        { box: [0, 15, 0, 60, 25, 30] },
+      ],
+      cut: [
+        { circle: [8, 8, 1.6], from: -1, to: 6 },
+        { circle: [52, 8, 1.6], from: -1, to: 6 },
+        { circle: [8, 8, 3], sides: 24, from: 3, to: 6 },
+        { plane: "xz", circle: [30, 20, 4], from: 14, to: 26 },
+      ],
+    },
+  ]);
+  check(parts.length === 1 && parts[0].shape.kind === "mesh" && parts[0].category === "Parts" && parts[0].name === "Bracket" && !notes.length, `part: one mesh named Bracket in Parts (${parts.length} parts; ${notes.join("; ")})`);
+  wellFormed("part", parts, false);
+  if (parts[0]?.shape.kind === "mesh") {
+    const tris = parts[0].shape.faces.flatMap((f) => {
+      const v = corners(f);
+      return v.slice(1, -1).flatMap((b, i) => [...v[0], ...b, ...v[i + 2]]);
+    });
+    const shut = closureOf(tris);
+    check(shut.open === 0, `part: closed by check_3d's measure (${shut.open} open edges)`);
+    let vol = 0;
+    for (let i = 0; i < tris.length; i += 9) vol += dot3([tris[i], tris[i + 1], tris[i + 2]], cross3([tris[i + 3], tris[i + 4], tris[i + 5]], [tris[i + 6], tris[i + 7], tris[i + 8]])) / 6;
+    // the plate less its rounded corners, the upright over it, less the holes, the pocket and the bore
+    const n = (r: number, k: number): number => (k / 2) * r * r * Math.sin((2 * Math.PI) / k);
+    const corner = 8 * 0.5 * 6 * 6 * Math.sin(Math.PI / 16);
+    const plate = 60 * 40 * 5 - 4 * (36 - corner) * 5;
+    const upright = 60 * 10 * 25;
+    const want = plate + upright - n(1.6, 32) * 5 * 2 - (n(3, 24) - n(1.6, 32)) * 2 - n(4, 32) * 10;
+    check(Math.abs(vol - want) < 1, `part: volume ${vol.toFixed(1)} mm³ as worked out (${want.toFixed(1)})`);
+    const ys = tris.filter((_, i) => i % 3 === 1);
+    check(Math.min(...ys) > -1e-6 && Math.max(...ys) < 40 + 1e-6, "part: the plate's footprint bounds it in y");
+  }
+  refuses([{ kind: "part" }], /add is needed/, "a part without add");
+  refuses([{ kind: "part", add: [{ circle: [0, 0, 5] }] }], /add 1: from and to are needed/, "a profile without from and to");
+  refuses([{ kind: "part", add: [{ plane: "ab", circle: [0, 0, 5], from: 0, to: 1 }] }], /plane is one of/, "a part with a bad plane");
+  refuses([{ kind: "part", add: [{ cylinder: [0, 0, 5], from: 0, to: 1 }] }], /unknown field cylinder/, "a part shape with an unknown field");
+  refuses([{ kind: "part", add: [{ box: [0, 0, 0, 10, 10, 10] }], cut: [{ box: [-1, -1, -1, 11, 11, 11] }] }], /nothing is left/, "a part cut away entirely");
+}
+
 // ---- a cottage using every kind -------------------------------------------------------------------
 
 const cottage: unknown[] = [
@@ -472,7 +524,7 @@ const cottage: unknown[] = [
 
 check(BUILD_REFERENCE.length < 4500, `the reference is ${BUILD_REFERENCE.length} characters`);
 check(
-  ["walls", "window", "door", "slab", "roof", "chimney", "steps", "lawn", "driveway", "decking", "hedge", "fence", "tree", "shrub", "box", "prism", "cylinder", "sphere", "cone"].every((k) => new RegExp(`\\b${k}\\b`).test(BUILD_REFERENCE)),
+  ["walls", "window", "door", "slab", "roof", "chimney", "steps", "lawn", "driveway", "decking", "hedge", "fence", "tree", "shrub", "box", "prism", "cylinder", "sphere", "cone", "part"].every((k) => new RegExp(`\\b${k}\\b`).test(BUILD_REFERENCE)),
   "the reference names every kind",
 );
 

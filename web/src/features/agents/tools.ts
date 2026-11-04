@@ -656,7 +656,7 @@ const TOOLS: Tool[] = [
   {
     spec: spec(
       "api_docs",
-      "The editor API's reference, from its source: give names (edit or doc methods such as addObjects or objects, or types such as NewShape, Attributes, ObjectInfo, LayerInfo) for their signatures and docs, or a search for every member and type whose name or doc has all its words.",
+      "The editor API's reference, from its source: give names (edit or doc methods such as addObjects or objects, or types such as NewShape, Attributes, ObjectInfo, LayerInfo) for their signatures and docs, or a search for every member and type whose name or doc (a type's whole source) has all its words, else the ones with the most of them. Look up all the names you need in one call.",
       { names: { type: "array", items: { type: "string" } }, search: { type: "string" } },
     ),
     label: (a) => (Array.isArray(a.names) && a.names.length ? `Reading the docs for ${a.names.slice(0, 3).join(", ")}` : `Searching the docs for "${String(a.search ?? "")}"`),
@@ -722,30 +722,33 @@ const TOOLS: Tool[] = [
       "check_3d",
       "Checks that solids are closed, as a modeller checks a model is watertight before calling it done: each object's faces in 3D are joined at their corners, and every edge must border two faces; an edge with a face on one side only is the rim of a hole. Reports a verdict and, worst first, each object's holes (the middle of each rim, world mm, and its size) and edges where three or more faces meet (parts of one object touching along a line, which is fine, or faces overlapping inside one solid, which isn't). Single faces (a pane, a 3D polygon) are open by nature; anything else with holes isn't finished: rebuild or mend it and check again. look_3d with holes: true shows where they are.",
       {
-        layerId: { type: "string", description: "a design layer's id or name: every object on it" },
+        layerId: { type: "string", description: "a design layer's id or name: every object on it; with neither this nor ids, every visible design layer" },
         ids: { type: "array", items: { type: "string" }, description: "only these top-level objects" },
       },
     ),
-    label: () => "Checking the model is closed",
+    label: (a) => (typeof a.layerId === "string" || ids(a.ids).length ? "Checking the model is closed" : "Checking every layer is closed"),
     async run(a) {
       const s = session();
       const key = typeof a.layerId === "string" ? a.layerId : "";
       const layer = key ? (s.doc.layers().find((l) => l.id === key) ?? s.doc.layers().find((l) => l.name === key)) : undefined;
       if (key && !layer) throw new Error(`no layer ${key}`);
       const only = new Set(ids(a.ids));
-      if (!layer && !only.size) throw new Error("give layerId or ids");
-      const meshes = s.doc.model3d().filter((m) => (!layer || m.layerId === layer.id) && (!only.size || only.has(m.objectId)));
+      // neither: the whole model as the user sees it
+      const shown3d = !layer && !only.size ? new Set(s.doc.layers().filter((l) => l.kind === "design" && l.visibility !== "hidden").map((l) => l.id)) : null;
+      const meshes = s.doc.model3d().filter((m) => (!layer || m.layerId === layer.id) && (!only.size || only.has(m.objectId)) && (!shown3d || shown3d.has(m.layerId)));
       const { solids, linesOnly } = checkSolids(meshes);
       const shown = solids.slice(0, 30);
+      const layerName = new Map(s.doc.layers().map((l) => [l.id, l.name]));
       return {
         text: toText({
           verdict: closureVerdict(solids),
           ...(linesOnly.length ? { linesOnly: `${linesOnly.length} object${linesOnly.length === 1 ? " shows" : "s show"} only lines in 3D (no faces)` } : {}),
-          objects: shown.map(({ id, closure: c }) => {
+          objects: shown.map(({ id, layerId, closure: c }) => {
             const o = s.doc.object(id);
             return {
               id,
               ...(o?.name ? { name: o.name } : {}),
+              ...(layer ? {} : { layer: layerName.get(layerId) }),
               type: o?.typeName,
               triangles: c.triangles,
               closed: c.open === 0,
@@ -1125,7 +1128,7 @@ const TOOLS: Tool[] = [
   {
     spec: spec(
       "build",
-      `Models in 3D from a list of elements: walls with their window and door openings cut and filled, windows and doors with frames, glazing and fittings, floors, roofs (gable, hip, lean-to, flat, thatched and more), chimneys, steps, lawns, paths, driveways, hedges, fences, trees and plain solids. Upright parts become extrudes and sloped ones meshes, each in a class named for its category and filled in the drawing's nearest colour; each window, door, tree and the like is a named group; the whole call is one undo step. World mm, plan x right and y up, heights above the layer. Build in stages (walls and floors, then roofs, then openings' details or the garden) and look_3d after each.\n${BUILD_REFERENCE}`,
+      `Models in 3D from a list of elements: walls with their window and door openings cut and filled, windows and doors with frames, glazing and fittings, floors, roofs (gable, hip, lean-to, flat, thatched and more), chimneys, steps, lawns, paths, driveways, hedges, fences, trees, plain solids and products' parts (one closed solid each, holes and slots cut). Upright parts become extrudes and sloped ones meshes, each in a class named for its category and filled in the drawing's nearest colour; each window, door, tree and the like is a named group; the whole call is one undo step. World mm, plan x right and y up, heights above the layer. Build in stages (walls and floors, then roofs, then openings' details or the garden) and look_3d after each.\n${BUILD_REFERENCE}`,
       {
         layer: { type: "string", description: "the design layer to build on: its id or name; a name no layer has makes a new design layer" },
         elements: { type: "array", items: { type: "object" }, description: "the elements, each with its kind and fields as above" },
@@ -1169,7 +1172,7 @@ const TOOLS: Tool[] = [
   {
     spec: spec(
       "run_script",
-      "Runs JavaScript in Rodeo's plug-in sandbox (a worker: no page, no network) with the whole API: `await openvwx.doc.<read>(...)`, `await openvwx.edit.<edit>(...)` (each one undo step), `await openvwx.edit.batch([[method, ...args], ...])` (one step), `openvwx.select(ids)`, `openvwx.zoomTo(ids)`, `openvwx.activeLayer()`. Every call is async and data crosses as plain JSON. The code runs as an async function body: `return` a value (up to 20,000 characters come back) and console.log lines come back too. Use it for loops over many objects, measuring, and edits that need earlier results.",
+      "Runs JavaScript in Rodeo's plug-in sandbox (a worker: no page, no network) with the whole API: `await openvwx.doc.<read>(...)`, `await openvwx.edit.<edit>(...)` (each one undo step), `await openvwx.edit.batch([[method, ...args], ...])` (one step), `openvwx.select(ids)`, `openvwx.zoomTo(ids)`, `openvwx.activeLayer()`. Every call is async and data crosses as plain JSON. The code runs as an async function body: `return` a value (up to 20,000 characters come back) and console.log lines come back too. Use it for loops over many objects, measuring, and edits that need earlier results. Each call starts afresh: nothing (variables, helpers) is kept from earlier calls.",
       { code: { type: "string" }, seconds: { type: "integer", description: `time limit, default ${SCRIPT_SECONDS}` } },
       ["code"],
     ),

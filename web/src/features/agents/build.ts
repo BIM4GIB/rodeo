@@ -10,6 +10,8 @@
 // World millimetres, plan x right and y up, z up from the layer (z = 0 is the ground floor level
 // the agent chooses); angles in degrees counter-clockwise from +x.
 
+import earcut from "earcut";
+import { cleanMesh, outward, subtractMeshes, unionMeshes } from "../../core/csg.ts";
 import type { Pt } from "../../core/types.ts";
 
 // ---- the contract ------------------------------------------------------------------------
@@ -387,6 +389,18 @@ export interface ConeSpec extends BuildCommon {
   sides?: number;
 }
 
+/** A shape of a part: a box, or a profile in a plane run between two levels square to it. */
+export type PartShape =
+  | { box: [number, number, number, number, number, number] }
+  | ({ plane?: "xy" | "xz" | "yz"; from: number; to: number } & ({ outline: [number, number][] } | { rect: [number, number, number, number]; round?: number } | { circle: [number, number, number]; sides?: number }));
+
+/** A product's part (a bracket, a housing, a gear): one closed solid of shapes added, with others cut away. */
+export interface PartSpec extends BuildCommon {
+  kind: "part";
+  add: PartShape[];
+  cut?: PartShape[];
+}
+
 /** One element of the build tool's list, by kind. Aliases: wall for walls, floor for slab, bush for shrub, stairs for steps. */
 export type BuildSpec =
   | WallsSpec
@@ -405,7 +419,8 @@ export type BuildSpec =
   | PrismSpec
   | CylinderSpec
   | SphereSpec
-  | ConeSpec;
+  | ConeSpec
+  | PartSpec;
 
 /** A compact reference of every kind, its fields, units and defaults, for the tool's description shown to the LLM. */
 export const BUILD_REFERENCE = `Elements are {kind, ...fields}. Millimetres; plan x right, y up; z up from this layer (0 = ground floor level); angles in degrees counter-clockwise from +x. Points {x,y}. Every element takes name, category (its class), color "#rrggbb", group. Errors and notes count elements and openings from 1; segment and edge indices are from 0.
@@ -420,7 +435,8 @@ lawn|paving|patio|path|driveway|gravel|planting|water|decking|ground: outline, o
 hedge: path, closed, width 600, height 1500, base 0.
 fence: path, closed, style panel|picket|post-and-rail|close-board, height 1800 (picket 1000, post-and-rail 1200), postSpacing 1800, base 0.
 tree: at, type deciduous|conifer|fruit, height 6000, spread 4000, base 0, color, trunkColor. shrub|bush: at, size 1200 or [diameter, height], base 0.
-box: at (middle), size [x,y,z], base 0, angle 0. prism: outline, base 0, top. cylinder: at, radius, base 0, top, sides 16. sphere: at, z, radius. cone: at, radius, base 0, top (apex), topRadius 0, sides 16.`;
+box: at (middle), size [x,y,z], base 0, angle 0. prism: outline, base 0, top. cylinder: at, radius, base 0, top, sides 16. sphere: at, z, radius. cone: at, radius, base 0, top (apex), topRadius 0, sides 16.
+part (products, machines, anything 3D printed or machined): one closed solid (a mesh, which exports to STL watertight) made of add shapes joined, with cut shapes taken away (holes, slots, pockets, recesses, bores). add (needed) and cut are lists of shapes: {box: [x0,y0,z0,x1,y1,z1]}, or a profile in a plane extruded square to it: {plane "xy"|"xz"|"yz" (default xy), from, to (along z for xy, y for xz, x for yz), and outline [[u,v],...] | rect [u0,v0,u1,v1] + round (corner radius) | circle [u,v,radius] + sides 32}, u and v being the plane's own axes (xy: x,y; xz: x,z; yz: y,z): a shaft along x is a circle in yz. Cuts run a little past the faces they open. One part per element, in class Parts unless category says; give each its name and color.`;
 
 // ---- small geometry ------------------------------------------------------------------------
 
@@ -2403,6 +2419,109 @@ function buildSolid(r: Reader, out: Out, kind: "box" | "prism" | "cylinder" | "s
   out.add("Objects", name, color, shape);
 }
 
+// ---- products ------------------------------------------------------------------------------------
+// A product's part, as a mechanical modeller makes one: blocks and profiles drawn in a plane and
+// extruded square to it, added together, with others cut away (holes, slots, pockets, recesses).
+// The result is one closed mesh, so it checks closed and exports to STL watertight.
+
+/** most triangles a part's shapes may have between them, for the cutting to stay quick */
+const PART_TRIANGLES = 30_000;
+const PLANES = ["xy", "xz", "yz"] as const;
+
+/** A loop's triangles extruded from w0 to w1 along the plane's third axis, x y z each corner. */
+function partPrism(loop: readonly Pt[], plane: (typeof PLANES)[number], w0: number, w1: number): number[] {
+  const place = (u: number, v: number, w: number): number[] => (plane === "xy" ? [u, v, w] : plane === "xz" ? [u, w, v] : [w, u, v]);
+  const out: number[] = [];
+  const flat = loop.flatMap((p) => [p.x, p.y]);
+  const caps = earcut(flat);
+  for (let i = 0; i + 2 < caps.length; i += 3) {
+    const [a, b, c] = [loop[caps[i]], loop[caps[i + 1]], loop[caps[i + 2]]];
+    out.push(...place(a.x, a.y, w1), ...place(b.x, b.y, w1), ...place(c.x, c.y, w1));
+    out.push(...place(a.x, a.y, w0), ...place(c.x, c.y, w0), ...place(b.x, b.y, w0));
+  }
+  for (let i = 0; i < loop.length; i++) {
+    const [a, b] = [loop[i], loop[(i + 1) % loop.length]];
+    out.push(...place(a.x, a.y, w0), ...place(b.x, b.y, w0), ...place(b.x, b.y, w1));
+    out.push(...place(a.x, a.y, w0), ...place(b.x, b.y, w1), ...place(a.x, a.y, w1));
+  }
+  // the cut reads each mesh's own winding (outward), so a plane that mirrors needs no care here
+  return out;
+}
+
+/** A rectangle with its corners rounded by `round` (8 steps a corner), counter-clockwise. */
+function roundedRect(u0: number, v0: number, u1: number, v1: number, round: number): Pt[] {
+  const r = Math.min(round, (u1 - u0) / 2, (v1 - v0) / 2);
+  if (!(r > 0.01)) return [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)];
+  const out: Pt[] = [];
+  const corners: [number, number, number][] = [
+    [u1 - r, v0 + r, -90],
+    [u1 - r, v1 - r, 0],
+    [u0 + r, v1 - r, 90],
+    [u0 + r, v0 + r, 180],
+  ];
+  for (const [cu, cv, a0] of corners) for (let k = 0; k <= 8; k++) out.push(P(cu + r * Math.cos(rad(a0 + (90 * k) / 8)), cv + r * Math.sin(rad(a0 + (90 * k) / 8))));
+  return tidy(out, 0.001);
+}
+
+/** One of a part's shapes as triangles, or an error naming it. */
+function partShape(r: Reader, list: string, i: number, s: Json): number[] {
+  const fail = (m: string): never => r.fail(`${list} ${i + 1}: ${m}`);
+  const nums = (v: unknown, n: number, what: string): number[] => (Array.isArray(v) && v.length === n && v.every(isNum) ? (v as number[]) : fail(`${what} must be ${n} numbers`));
+  const known = new Set(["box", "plane", "from", "to", "outline", "rect", "round", "circle", "sides"]);
+  const extra = Object.keys(s).filter((k) => !known.has(k));
+  if (extra.length) fail(`unknown field${extra.length === 1 ? "" : "s"} ${extra.join(", ")}`);
+  if (s.box !== undefined) {
+    const [a, b, c, d, e, f] = nums(s.box, 6, "box ([x0, y0, z0, x1, y1, z1])");
+    const [x0, x1, y0, y1, z0, z1] = [Math.min(a, d), Math.max(a, d), Math.min(b, e), Math.max(b, e), Math.min(c, f), Math.max(c, f)];
+    if (!(x1 - x0 > 0.01 && y1 - y0 > 0.01 && z1 - z0 > 0.01)) fail("box has no size");
+    return partPrism([P(x0, y0), P(x1, y0), P(x1, y1), P(x0, y1)], "xy", z0, z1);
+  }
+  const plane = (s.plane ?? "xy") as (typeof PLANES)[number];
+  if (!PLANES.includes(plane)) fail(`plane is one of ${PLANES.join(", ")}`);
+  if (!isNum(s.from) || !isNum(s.to)) fail(`from and to are needed: where it runs along ${plane === "xy" ? "z" : plane === "xz" ? "y" : "x"}`);
+  const [w0, w1] = [Math.min(s.from as number, s.to as number), Math.max(s.from as number, s.to as number)];
+  if (!(w1 - w0 > 0.01)) fail("from and to must differ");
+  let loop: Pt[];
+  if (s.outline !== undefined) {
+    const pts = Array.isArray(s.outline) ? s.outline.map((p) => (Array.isArray(p) && p.length === 2 && isNum(p[0]) && isNum(p[1]) ? P(p[0], p[1]) : isObj(p) && isNum(p.x) && isNum(p.y) ? P(p.x, p.y) : null)) : [];
+    if (pts.length < 3 || pts.some((p) => !p)) fail("outline must be at least 3 points [u, v]");
+    loop = tidy(pts as Pt[], 0.001);
+    if (loop.length < 3) fail("outline needs at least 3 distinct corners");
+    if (!isSimple(loop)) fail("outline crosses itself");
+  } else if (s.rect !== undefined) {
+    const [a, b, c, d] = nums(s.rect, 4, "rect ([u0, v0, u1, v1])");
+    if (s.round !== undefined && (!isNum(s.round) || s.round < 0)) fail("round must be a radius");
+    loop = roundedRect(Math.min(a, c), Math.min(b, d), Math.max(a, c), Math.max(b, d), (s.round as number | undefined) ?? 0);
+  } else if (s.circle !== undefined) {
+    const [u, v, radius] = nums(s.circle, 3, "circle ([u, v, radius])");
+    if (!(radius > 0)) fail("circle's radius must be more than 0");
+    const sides = s.sides === undefined ? 32 : isNum(s.sides) && Number.isInteger(s.sides) && s.sides >= 3 && s.sides <= 128 ? s.sides : fail("sides must be a whole number from 3 to 128");
+    loop = circle(P(u, v), radius, sides);
+  } else return fail("give a box, or an outline, rect or circle with a plane, from and to");
+  if (Math.abs(signedArea(loop)) < 0.01) fail("it has no area");
+  return partPrism(ccwLoop(loop), plane, w0, w1);
+}
+
+function buildPart(r: Reader, out: Out): void {
+  const name = out.own("Part");
+  const color = r.color("color", "#d9d9d9");
+  const adds = r.list("add");
+  if (!adds.length) r.fail("add is needed: the shapes the part is made of");
+  const cuts = r.list("cut");
+  const add = adds.map((s, i) => partShape(r, "add", i, s));
+  const cut = cuts.map((s, i) => partShape(r, "cut", i, s));
+  const total = [...add, ...cut].reduce((n, t) => n + t.length / 9, 0);
+  if (total > PART_TRIANGLES) r.fail(`its shapes have ${Math.round(total)} triangles between them, more than ${PART_TRIANGLES} can be cut: use fewer sides on circles, or split it into parts`);
+  const body = add.length > 1 ? unionMeshes(add, PART_TRIANGLES)?.triangles : Float64Array.from(add[0]);
+  const solid = body && cut.length ? subtractMeshes(body, cut, PART_TRIANGLES)?.triangles : body;
+  if (!solid || solid.length < 36) r.fail("nothing is left once the cuts are taken away");
+  // specks under a hundredth of a millimetre go: they print as nothing and read as faults
+  const tris = outward(cleanMesh(solid, 0.01), 1e-6);
+  const faces: V3[][] = [];
+  for (let i = 0; i + 8 < tris.length; i += 9) faces.push([[tris[i], tris[i + 1], tris[i + 2]], [tris[i + 3], tris[i + 4], tris[i + 5]], [tris[i + 6], tris[i + 7], tris[i + 8]]]);
+  out.add("Parts", name, color, meshOf(faces));
+}
+
 // ---- the build ---------------------------------------------------------------------------------
 
 const BUILDERS: Record<string, (r: Reader, out: Out) => void> = {
@@ -2420,6 +2539,7 @@ const BUILDERS: Record<string, (r: Reader, out: Out) => void> = {
   shrub: buildShrub,
   ...Object.fromEntries((Object.keys(SURFACES) as SurfaceKind[]).map((k) => [k, (r: Reader, out: Out) => buildSurface(r, out, k)])),
   ...Object.fromEntries((["box", "prism", "cylinder", "sphere", "cone"] as const).map((k) => [k, (r: Reader, out: Out) => buildSolid(r, out, k)])),
+  part: buildPart,
 };
 const ALIASES: Record<string, string> = { wall: "walls", bush: "shrub", stairs: "steps", stair: "steps" };
 

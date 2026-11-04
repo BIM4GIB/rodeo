@@ -161,19 +161,45 @@ export function docsFor(names: readonly string[]): string {
   return parts.join("\n\n");
 }
 
-/** Members and types whose name or doc mentions every word of `query`, as one line each. */
-export function searchDocs(query: string, limit = 40): string {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return "";
-  const hit = (s: string): boolean => words.every((w) => s.includes(w));
-  const lines: string[] = [];
+interface Entry {
+  readonly line: string;
+  /** what a search reads, lower case: its name, section and doc, or a type's whole source */
+  readonly text: string;
+}
+
+let entries: Entry[] | null = null;
+
+/** Every member and type as a search reads it, made once. */
+function searchEntries(): Entry[] {
+  if (entries) return entries;
+  entries = [];
   for (const iface of ["EditSession", "VwxDocument"] as const) {
     for (const m of MEMBERS[iface]) {
-      if (!hit(`${m.name} ${m.section} ${m.doc}`.toLowerCase())) continue;
       const first = m.doc.split(/(?<=\.)\s/)[0] ?? "";
-      lines.push(`${iface === "EditSession" ? "edit" : "doc"}.${m.name}${m.method ? "()" : ""}${first ? ` — ${first.slice(0, 160)}` : ""}`);
+      entries.push({ line: `${iface === "EditSession" ? "edit" : "doc"}.${m.name}${m.method ? "()" : ""}${first ? ` — ${first.slice(0, 160)}` : ""}`, text: `${m.name} ${m.section} ${m.doc}`.toLowerCase() });
     }
   }
-  for (const t of typeNames()) if (hit(t.toLowerCase())) lines.push(`type ${t}`);
-  return lines.length > limit ? `${lines.slice(0, limit).join("\n")}\n… ${lines.length - limit} more: narrow the search` : lines.join("\n");
+  // the two interfaces hold every member, so they would match every search
+  for (const t of typeNames()) if (t !== "EditSession" && t !== "VwxDocument") entries.push({ line: `type ${t}`, text: `${t} ${typeSource(t) ?? ""}`.toLowerCase() });
+  return entries;
+}
+
+/** A word without its ending, so "hide" finds "hidden" and "colours" "colour". */
+const stem = (w: string): string => (w.length > 3 ? w.replace(/(?:ing|ed|es|s|e)$/, "") : w);
+
+/**
+ * Members and types whose name or doc (a type's source) mentions every word of `query`, as one
+ * line each; when none mentions them all, those mentioning the most of them.
+ */
+export function searchDocs(query: string, limit = 40): string {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean).map(stem);
+  if (!words.length) return "";
+  const scored = searchEntries()
+    .map((e) => ({ e, n: words.filter((w) => e.text.includes(w)).length }))
+    .filter((x) => x.n > 0);
+  const all = scored.filter((x) => x.n === words.length).map((x) => x.e.line);
+  if (all.length) return all.length > limit ? `${all.slice(0, limit).join("\n")}\n… ${all.length - limit} more: narrow the search` : all.join("\n");
+  if (!scored.length) return "";
+  const some = scored.sort((p, q) => q.n - p.n).slice(0, Math.min(limit, 20));
+  return `Nothing mentions every word of "${query}"; these mention some:\n${some.map((x) => x.e.line).join("\n")}`;
 }

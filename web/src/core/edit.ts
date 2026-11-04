@@ -1542,9 +1542,10 @@ export class Session implements EditSession {
   }
 
   setLayerVisibility(layerId: string, v: Visibility): void {
+    visibilityCode(v);
     const l = this.layer(layerId);
     const p = this.plan();
-    setI16(p.mut(l.index), LAYER_VIS, VIS_CODE[v]);
+    setI16(p.mut(l.index), LAYER_VIS, visibilityCode(v));
     this.commit(p, "layers", [layerId]);
   }
 
@@ -1794,10 +1795,11 @@ export class Session implements EditSession {
   }
 
   setClassVisibility(index: number, v: Visibility): void {
+    visibilityCode(v);
     const rec = this.doc.classRecs.get(index);
     if (!rec) throw new Error(`no class #${index}`);
     const p = this.plan();
-    setI16(p.mut(rec.index), CLASS_VIS, VIS_CODE[v]);
+    setI16(p.mut(rec.index), CLASS_VIS, visibilityCode(v));
     this.commit(p, "classes", []);
   }
 
@@ -3978,8 +3980,13 @@ export class Session implements EditSession {
   addObjects(layerId: string, shapes: readonly NewShape[], classIndex?: number, attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[]): string[] {
     const layer = this.container(layerId);
     const cls = classIndex ?? this.noneClass();
-    if (!this.doc.classRecs.has(cls)) throw new Error(`no class #${cls}`);
+    if (!this.doc.classRecs.has(cls)) throw new Error(`no class #${cls}: classes are numbered as doc.classes() lists them ("None" is #${this.noneClass()})`);
     if (shapes.length === 0) return [];
+    for (const shape of shapes) {
+      if (!Object.hasOwn(TYPE_OF_KIND, shape?.kind)) {
+        throw new Error(`no shape kind "${String(shape?.kind)}": NewShape kinds are ${Object.keys(TYPE_OF_KIND).join(", ")} (a circle is an arc with sweepAngle 360, an ellipse one with radiusY too)`);
+      }
+    }
     const { owner, at } = this.slot(layer);
     const elevation = layerElevationOf(layer);
     const block: Uint8Array[] = [];
@@ -5694,7 +5701,7 @@ export class Session implements EditSession {
     entries.forEach(([name, v], i) => {
       const o = viewportEntryAt(list.at, i);
       setU16(d, o + VIEWPORT_ENTRY_NAME, name);
-      setI16(d, o + VIEWPORT_ENTRY_VISIBILITY, VIS_CODE[v]);
+      setI16(d, o + VIEWPORT_ENTRY_VISIBILITY, visibilityCode(v));
       setU16(d, o + VIEWPORT_ENTRY_FLAGS, 1);
     });
     setU64(d, 0, BigInt(d.length));
@@ -5758,13 +5765,13 @@ export class Session implements EditSession {
     for (let i = from; i < to; i++) {
       const o = viewportEntryAt(list.at, i);
       if (u16(r.data, o + VIEWPORT_ENTRY_NAME) !== name) continue;
-      setI16(p.mut(r.index), o + VIEWPORT_ENTRY_VISIBILITY, VIS_CODE[v]);
+      setI16(p.mut(r.index), o + VIEWPORT_ENTRY_VISIBILITY, visibilityCode(v));
       this.commit(p, "objects", [id]);
       return;
     }
     const entry = new Uint8Array(8);
     setU16(entry, VIEWPORT_ENTRY_NAME, name);
-    setI16(entry, VIEWPORT_ENTRY_VISIBILITY, VIS_CODE[v]);
+    setI16(entry, VIEWPORT_ENTRY_VISIBILITY, visibilityCode(v));
     setU16(entry, VIEWPORT_ENTRY_FLAGS, 1);
     const o = viewportEntryAt(list.at, to);
     const d = concat([r.data.subarray(0, o), entry, r.data.subarray(o)]);
@@ -9192,4 +9199,11 @@ function ownDirection(d: Uint8Array, dir: Vec3): Vec3 {
     inv[1] * dir[0] + inv[4] * dir[1] + inv[7] * dir[2],
     inv[2] * dir[0] + inv[5] * dir[1] + inv[8] * dir[2],
   ];
+}
+
+/** A visibility's code as stored, or an error naming the ones there are. */
+function visibilityCode(v: Visibility): number {
+  const code = (VIS_CODE as Record<string, number | undefined>)[v];
+  if (code === undefined) throw new Error(`no visibility "${String(v)}": it is "visible", "hidden" or "grayed"`);
+  return code;
 }

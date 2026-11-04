@@ -22,6 +22,18 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:00:00Z",
+    "agents-parts-streaming",
+    "Agents model products, and the chat streams smoothly",
+    `The Agents chat keeps up with the agent as it works, and agents model products and machine parts as closed solids.
+- The chat follows the newest message as it streams, an open Thinking block too; scroll up to read and the arrow at its foot brings you back
+- While the agent thinks, a line shows what it is on, and once it's done how long it thought
+- Agents build each part of a product (a housing, a bracket, a lid) as one closed solid with its holes, slots and pockets cut, ready to export as STL
+- Solids joined and cut in 3D come out closed with far fewer faces, and a solid made by adding parts shows its own colour
+- Agents colour objects and hide layers as Vectorworks does, and tell you what is wrong instead of retrying the same fix`,
+    "agent",
+  ),
+  release(
     "2026-11-03T13:21:00Z",
     "delete-dimension",
     "Delete Dimension on chains",

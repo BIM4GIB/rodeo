@@ -91,7 +91,7 @@
 import earcut from "earcut";
 import { CLASS_TEXTURE, readAttrs } from "./attrs.ts";
 import { f64, i32, setF64, setU16, u16, u32 } from "./bytes.ts";
-import { subtractMeshes } from "./csg.ts";
+import { subtractMeshes, unionMeshes } from "./csg.ts";
 import { simplifyMesh } from "./decimate.ts";
 import { BODY_IN_PARENT, LOCUS, bodySections, instanceScale, translateRecord } from "./encode.ts";
 import { LIGHT, LIGHT_AT, LIGHT_KIND, LIGHT_KINDS, LIGHT_ON, decodeShape, lightAim } from "./geometry.ts";
@@ -1133,6 +1133,17 @@ function joined(runs: { triangles: Float64Array }[]): Float64Array {
 }
 
 /**
+ * An operand of a subtraction as one closed mesh: an addition saved without its body is its
+ * operands overlapping, which the cut would read as faces inside the solid, so they are joined
+ * into the volume they make first (overlapping, when that is too detailed).
+ */
+function operandTriangles(doc: Model, op: Rec): Float64Array {
+  const runs = objectTriangles(doc, op);
+  if (runs.length < 2 || op.type !== SOLID_ADDITION || op.data[SOLID_KIND] === SOLID_SUBTRACT) return joined(runs);
+  return unionMeshes(runs.map((o) => o.triangles))?.triangles ?? joined(runs);
+}
+
+/**
  * A subtraction saved without its body: its first operand with the others taken away, in its
  * own frame, where its operands are. Null when the operands are too detailed to cut.
  */
@@ -1140,7 +1151,7 @@ function subtractionGeometry(doc: Model, r: Rec): BodyGeometry | null {
   const parts = heldData(r);
   const hit = subtractionCache.get(r.data);
   if (hit && hit.parts.length === parts.length && hit.parts.every((d, i) => d === parts[i])) return hit.g;
-  const [first, ...rest] = objectChildren(r).map((op) => joined(objectTriangles(doc, op)));
+  const [first, ...rest] = objectChildren(r).map((op) => operandTriangles(doc, op));
   const g = first ? subtractMeshes(first, rest) : null;
   subtractionCache.set(r.data, { parts, g });
   return g;
@@ -1394,6 +1405,11 @@ interface Ctx {
   tree?: TreeCtx;
   /** inside a symbol instance that is a top-level object or a part: its placement (Mesh3D.instance) */
   instance?: SymbolPlacement;
+  /**
+   * inside a solid saved without its body: the outermost such solid, whose class, attributes and texture
+   * its operands are drawn in, as its body would be
+   */
+  look?: Rec;
 }
 
 /** Where buildModelTree collects what the walk finds (see ModelTree). */
@@ -1540,8 +1556,9 @@ function emit(ctx: Ctx, given: BodyGeometry, m: Xf, owner: Rec, topId: string): 
     if (triangles.length) ctx.raw.push({ owner, triangles });
     return;
   }
-  const a = ctx.doc.attrsOf(owner);
-  const texture = textureOf(ctx.doc, owner, ctx.texture);
+  const look = ctx.look ?? owner;
+  const a = ctx.doc.attrsOf(look);
+  const texture = textureOf(ctx.doc, look, ctx.texture);
   // a texture cut out by a mask (a plant's leaves, an image prop) shows no outline
   const cutout = ctx.textures.get(texture)?.mask !== undefined;
   const triangles = new Float32Array(g.triangles.length);
@@ -1554,7 +1571,7 @@ function emit(ctx: Ctx, given: BodyGeometry, m: Xf, owner: Rec, topId: string): 
   ctx.out.push({
     objectId: topId,
     layerId: ctx.layerId,
-    classIndex: owner.classIndex,
+    classIndex: look.classIndex,
     triangles,
     edges,
     color: fillColour(ctx, a),
@@ -1569,12 +1586,13 @@ function emit(ctx: Ctx, given: BodyGeometry, m: Xf, owner: Rec, topId: string): 
 
 /** What emit gives buildModelTree: the faces placed by m at full precision, an open 3D polygon's points or a locus's place; null for edges alone. */
 function treePiece(ctx: Ctx, g: BodyGeometry, m: Xf, owner: Rec, mirrored: boolean): ModelTreePiece | null {
-  const a = ctx.doc.attrsOf(owner);
+  const look = ctx.look ?? owner;
+  const a = ctx.doc.attrsOf(look);
   const piece: ModelTreePiece = {
-    classIndex: owner.classIndex,
+    classIndex: look.classIndex,
     color: fillColour(ctx, a),
     opacity: a ? Math.max(0, Math.min(1, a.fillOpacity / 100)) : 1,
-    texture: textureOf(ctx.doc, owner, ctx.texture),
+    texture: textureOf(ctx.doc, look, ctx.texture),
     triangles: new Float64Array(g.triangles.length),
   };
   const placed = (src: ArrayLike<number>): number[] => {
@@ -1724,6 +1742,9 @@ function walkChildren(ctx: Ctx, parent: Rec, m: Xf, topId: string | null): void 
       const own = readXf(c.data, OWNER_MATRIX, OWNER_OFFSET);
       const mm = own ? compose(at, own) : at;
       const ops = objectChildren(c);
+      // its operands are drawn in its look, as its body would be (the outermost solid's)
+      const outer = ctx.look;
+      ctx.look ??= c;
       if (c.data[SOLID_KIND] !== SOLID_SUBTRACT) walk(ctx, c, mm, top);
       else {
         const g = subtractionGeometry(ctx.doc, c);
@@ -1731,6 +1752,7 @@ function walkChildren(ctx: Ctx, parent: Rec, m: Xf, topId: string | null): void 
         // too detailed to cut: the first operand uncut
         else if (ops.length) walkChildren(ctx, { type: -1, children: [ops[0]] } as unknown as Rec, mm, top);
       }
+      ctx.look = outer;
       continue;
     }
     if (c.type === EXTRUDE || c.type === MULTI_EXTRUDE) {

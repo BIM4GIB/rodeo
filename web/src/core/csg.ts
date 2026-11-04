@@ -15,6 +15,8 @@ interface Poly {
   ny: number;
   nz: number;
   w: number;
+  /** stitch put corners into its sides: it is fanned from its middle */
+  fan?: boolean;
 }
 
 const COPLANAR = 0;
@@ -237,45 +239,301 @@ function frameOf(meshes: ArrayLike<number>[]): { cx: number; cy: number; cz: num
   return { cx, cy, cz, eps: EPSILON * Math.max(...hi.map((v, k) => v - lo[k]), 1) };
 }
 
+/**
+ * Each polygon with the corners of others that lie along its sides put into those sides. The tree
+ * splits faces where planes cross them, so a face often ends part way along a neighbour's side (a
+ * T junction): drawn, that shows nothing, but the result isn't closed corner to corner, so it
+ * doesn't check closed, doesn't export watertight, and is read wrong when it is cut again (outward
+ * pairs triangles by the sides they share). Points within `tol` are one.
+ */
+function stitch(polys: Poly[], tol: number): Poly[] {
+  // each distinct corner once, in a grid of cells about a 64th of the result's size
+  let size = 0;
+  for (const q of polys) for (const v of q.p) size = Math.max(size, Math.abs(v));
+  const cellSize = Math.max((2 * size) / 64, tol * 4);
+  const cells = new Map<string, number[]>();
+  const pts: number[] = [];
+  const seen = new Map<string, number>();
+  const cellKey = (x: number, y: number, z: number): string => `${Math.floor(x / cellSize)},${Math.floor(y / cellSize)},${Math.floor(z / cellSize)}`;
+  for (const q of polys) {
+    for (let i = 0; i < q.p.length; i += 3) {
+      const [x, y, z] = [q.p[i], q.p[i + 1], q.p[i + 2]];
+      const k = `${Math.round(x / tol)},${Math.round(y / tol)},${Math.round(z / tol)}`;
+      if (seen.has(k)) continue;
+      const n = pts.length / 3;
+      seen.set(k, n);
+      pts.push(x, y, z);
+      const c = cellKey(x, y, z);
+      const list = cells.get(c);
+      if (list) list.push(n);
+      else cells.set(c, [n]);
+    }
+  }
+  /** the corners lying on the side from p to q, strictly between them, in order from p */
+  const between = (p: number[], q: number[]): number[] => {
+    const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+    const len = Math.hypot(d[0], d[1], d[2]);
+    if (!(len > 2 * tol)) return [];
+    // samples half a cell apart: every point of the side is within a quarter cell of one, so the
+    // cells a quarter cell (and tol) either way of each sample hold every corner near the side
+    const keys = new Set<string>();
+    const steps = Math.ceil(len / (cellSize / 2));
+    const o = cellSize / 4 + tol;
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const at = [p[0] + d[0] * t, p[1] + d[1] * t, p[2] + d[2] * t];
+      for (const dx of [-o, o]) for (const dy of [-o, o]) for (const dz of [-o, o]) keys.add(cellKey(at[0] + dx, at[1] + dy, at[2] + dz));
+    }
+    const found: { t: number; n: number }[] = [];
+    for (const k of keys) {
+      for (const n of cells.get(k) ?? []) {
+        const v = [pts[3 * n] - p[0], pts[3 * n + 1] - p[1], pts[3 * n + 2] - p[2]];
+        const t = (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / (len * len);
+        if (t * len <= tol || (1 - t) * len <= tol) continue;
+        if (Math.hypot(v[0] - d[0] * t, v[1] - d[1] * t, v[2] - d[2] * t) <= tol) found.push({ t, n });
+      }
+    }
+    found.sort((a, b) => a.t - b.t);
+    const out: number[] = [];
+    for (const { n } of found) out.push(pts[3 * n], pts[3 * n + 1], pts[3 * n + 2]);
+    return out;
+  };
+  return polys.map((q) => {
+    const n = q.p.length / 3;
+    // each side from its corner, with what lies along it
+    const sides: number[][] = [];
+    for (let i = 0; i < n; i++) {
+      const a = q.p.slice(3 * i, 3 * i + 3);
+      const b = q.p.slice(3 * ((i + 1) % n), 3 * ((i + 1) % n) + 3);
+      sides.push([...a, ...between(a, b)]);
+    }
+    if (sides.every((s) => s.length === 3)) return q;
+    // fanned from a corner neither of whose sides gained one, no triangle is flat; with none, from its middle
+    const start = sides.findIndex((s, i) => s.length === 3 && sides[(i + n - 1) % n].length === 3);
+    const from = Math.max(0, start);
+    const p: number[] = [];
+    for (let k = 0; k < n; k++) p.push(...sides[(from + k) % n]);
+    return { ...q, p, fan: start < 0 };
+  });
+}
+
 /** `result`'s faces as triangles back about the origin, with its crease edges. */
 function finish(result: Poly[], f: { cx: number; cy: number; cz: number; eps: number }): { triangles: Float64Array; edges: Float64Array } {
   const { cx, cy, cz } = f;
   const tris: number[] = [];
-  for (const q of result) {
+  for (const q of stitch(result, f.eps * 10)) {
+    const n = q.p.length / 3;
+    if (q.fan) {
+      // corners put into its sides lie in line with their neighbours: fanned from its middle, no
+      // triangle is flat and every corner is one
+      const m = [0, 1, 2].map((k) => {
+        let s = 0;
+        for (let i = 0; i < n; i++) s += q.p[3 * i + k];
+        return s / n;
+      });
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        tris.push(m[0] + cx, m[1] + cy, m[2] + cz, q.p[3 * i] + cx, q.p[3 * i + 1] + cy, q.p[3 * i + 2] + cz, q.p[3 * j] + cx, q.p[3 * j + 1] + cy, q.p[3 * j + 2] + cz);
+      }
+      continue;
+    }
     for (let i = 3; i + 5 < q.p.length; i += 3) {
       tris.push(q.p[0] + cx, q.p[1] + cy, q.p[2] + cz, q.p[i] + cx, q.p[i + 1] + cy, q.p[i + 2] + cz, q.p[i + 3] + cx, q.p[i + 4] + cy, q.p[i + 5] + cz);
     }
   }
-  return { triangles: Float64Array.from(tris), edges: Float64Array.from(creaseEdges(tris, f.eps * 10)) };
+  const { at, faces } = indexed(tris, f.eps * 10);
+  flipSlivers(at, faces, f.eps * 10);
+  const out = flat(at, faces);
+  return { triangles: Float64Array.from(out), edges: Float64Array.from(creaseEdges(out, f.eps * 10)) };
 }
 
-const tooMany = (meshes: ArrayLike<number>[]): boolean => meshes.reduce((n, m) => n + m.length, 0) / 9 > MAX_CSG_TRIANGLES;
+type Face = [number, number, number];
+
+/** Triangles as corners shared by index (welded at `weld`) and the faces round them. */
+function indexed(tris: ArrayLike<number>, weld: number): { at: number[]; faces: (Face | null)[] } {
+  const ids = new Map<string, number>();
+  const at: number[] = [];
+  const corner = (i: number): number => {
+    const k = `${Math.round(tris[i] / weld)},${Math.round(tris[i + 1] / weld)},${Math.round(tris[i + 2] / weld)}`;
+    let id = ids.get(k);
+    if (id === undefined) {
+      id = at.length / 3;
+      ids.set(k, id);
+      at.push(tris[i], tris[i + 1], tris[i + 2]);
+    }
+    return id;
+  };
+  const faces: (Face | null)[] = [];
+  for (let i = 0; i + 8 < tris.length; i += 9) faces.push([corner(i), corner(i + 3), corner(i + 6)]);
+  return { at, faces };
+}
+
+const flat = (at: readonly number[], faces: readonly (Face | null)[]): number[] => {
+  const out: number[] = [];
+  for (const f of faces) if (f) for (const v of f) out.push(at[3 * v], at[3 * v + 1], at[3 * v + 2]);
+  return out;
+};
+
+/**
+ * Triangles with a corner within `weld` of their long side (no area to speak of) taken out, and
+ * the triangle across that side split at the corner instead, so the mesh stays closed and every
+ * face has an area (an STL with flat triangles reads as broken).
+ */
+function flipSlivers(at: readonly number[], faces: (Face | null)[], weld: number): void {
+  const side = new Map<string, number>();
+  const link = (t: number): void => {
+    const f = faces[t];
+    if (f) for (let k = 0; k < 3; k++) side.set(`${f[k]}>${f[(k + 1) % 3]}`, t);
+  };
+  const unlink = (t: number): void => {
+    const f = faces[t];
+    if (f) for (let k = 0; k < 3; k++) if (side.get(`${f[k]}>${f[(k + 1) % 3]}`) === t) side.delete(`${f[k]}>${f[(k + 1) % 3]}`);
+  };
+  faces.forEach((_, t) => link(t));
+  const d2 = (a: number, b: number): number => (at[3 * a] - at[3 * b]) ** 2 + (at[3 * a + 1] - at[3 * b + 1]) ** 2 + (at[3 * a + 2] - at[3 * b + 2]) ** 2;
+  /** the face's index of the corner lying on its long side when it is flat, -1 when it isn't, -2 when two corners are one */
+  const flatAt = (f: Face): number => {
+    const [a, b, c] = f;
+    if (a === b || b === c || c === a) return -2;
+    const u = [at[3 * b] - at[3 * a], at[3 * b + 1] - at[3 * a + 1], at[3 * b + 2] - at[3 * a + 2]];
+    const v = [at[3 * c] - at[3 * a], at[3 * c + 1] - at[3 * a + 1], at[3 * c + 2] - at[3 * a + 2]];
+    const twice = Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]);
+    const sides = [d2(b, c), d2(c, a), d2(a, b)];
+    const k = sides.indexOf(Math.max(...sides));
+    return twice / Math.sqrt(sides[k]) < weld ? k : -1;
+  };
+  // a flip whose new triangles would be flat as well is left alone, so it never undoes itself;
+  // the passes after the first take the flats a flip next door has made flippable
+  for (let pass = 0; pass < 3; pass++) {
+    let flipped = 0;
+    for (let t = 0; t < faces.length; t++) {
+      const f = faces[t];
+      if (!f) continue;
+      const k = flatAt(f);
+      if (k === -1) continue;
+      if (k === -2) {
+        unlink(t);
+        faces[t] = null;
+        continue;
+      }
+      // b lies on the side from c to a; the face across it runs a to c
+      const b = f[k];
+      const c = f[(k + 1) % 3];
+      const a = f[(k + 2) % 3];
+      const n = side.get(`${a}>${c}`);
+      const g = n === undefined ? null : faces[n];
+      if (n === undefined || !g || n === t) continue;
+      const d = g[(g.indexOf(a) + 2) % 3];
+      const one: Face = [a, b, d];
+      const two: Face = [b, c, d];
+      if (d === b || flatAt(one) !== -1 || flatAt(two) !== -1) continue;
+      unlink(t);
+      unlink(n);
+      faces[t] = one;
+      faces[n] = two;
+      link(t);
+      link(n);
+      flipped++;
+    }
+    if (!flipped) break;
+  }
+}
+
+/**
+ * A closed triangle mesh with its sides shorter than `shortest` collapsed (the specks cutting
+ * leaves where cuts pass near corners) and its flat triangles split into their neighbours, still
+ * closed: for a solid that is to be printed or exported.
+ */
+export function cleanMesh(tris: ArrayLike<number>, shortest: number): number[] {
+  const { at, faces } = indexed(tris, shortest / 100);
+  const into = at.map((_, i) => i).slice(0, at.length / 3);
+  const root = (v: number): number => {
+    while (into[v] !== v) v = into[v] = into[into[v]];
+    return v;
+  };
+  const near = (a: number, b: number): boolean => Math.hypot(at[3 * a] - at[3 * b], at[3 * a + 1] - at[3 * b + 1], at[3 * a + 2] - at[3 * b + 2]) < shortest;
+  for (const f of faces) for (let k = 0; f && k < 3; k++) {
+    const [a, b] = [root(f[k]), root(f[(k + 1) % 3])];
+    if (a !== b && near(a, b)) into[Math.max(a, b)] = Math.min(a, b);
+  }
+  for (let t = 0; t < faces.length; t++) {
+    const f = faces[t];
+    if (!f) continue;
+    const g: Face = [root(f[0]), root(f[1]), root(f[2])];
+    faces[t] = g[0] === g[1] || g[1] === g[2] || g[2] === g[0] ? null : g;
+  }
+  flipSlivers(at, faces, shortest / 10);
+  return flat(at, faces);
+}
+
+type Box = [number, number, number, number, number, number];
+
+function boxOf(polys: readonly Poly[]): Box {
+  const b: Box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (const q of polys) {
+    for (let i = 0; i < q.p.length; i += 3) {
+      for (let k = 0; k < 3; k++) {
+        b[k] = Math.min(b[k], q.p[i + k]);
+        b[k + 3] = Math.max(b[k + 3], q.p[i + k]);
+      }
+    }
+  }
+  return b;
+}
+
+const apart = (a: Box, b: Box, eps: number): boolean => a[0] > b[3] + eps || a[1] > b[4] + eps || a[2] > b[5] + eps || b[0] > a[3] + eps || b[1] > a[4] + eps || b[2] > a[5] + eps;
+
+/** The parts of `polys` outside `tree`'s solid; those clear of `box` (the solid's) kept whole. */
+function clipNear(tree: Node, box: Box, polys: readonly Poly[], eps: number): Poly[] {
+  const near: Poly[] = [];
+  const out: Poly[] = [];
+  for (const q of polys) (apart(boxOf([q]), box, eps) ? out : near).push(q);
+  return out.concat(tree.clip(near));
+}
+
+// csg.js's subtraction and union, with each solid's faces split only by the other's planes and
+// only where they come near it: a tree's own faces come out of building it split by its own
+// planes, which, step after step, broke a plate with a row of holes into tens of thousands of slivers
+
+/** The closed solid `a` less the closed solid `b`, as faces. */
+function less(a: Poly[], b: Poly[], eps: number): Poly[] {
+  const outside = new Node(eps);
+  outside.build(a.map(flip));
+  const B = new Node(eps);
+  B.build(b);
+  const aBox = boxOf(a);
+  // a's faces where b isn't; b's inside a, facing into the hole
+  const kept = clipNear(B, boxOf(b), a.map(flip), eps);
+  const inA = outside.clip(b.filter((q) => !apart(boxOf([q]), aBox, eps)));
+  const walls = outside.clip(inA.map(flip)).map(flip);
+  return kept.concat(walls).map(flip);
+}
+
+/** The closed solids `a` and `b` together, as faces. */
+function more(a: Poly[], b: Poly[], eps: number): Poly[] {
+  const A = new Node(eps);
+  A.build(a);
+  const B = new Node(eps);
+  B.build(b);
+  const kept = clipNear(B, boxOf(b), a, eps);
+  const outA = clipNear(A, boxOf(a), b, eps);
+  const rest = clipNear(A, boxOf(a), outA.map(flip), eps).map(flip);
+  return kept.concat(rest);
+}
+
+const tooMany = (meshes: ArrayLike<number>[], max = MAX_CSG_TRIANGLES): boolean => meshes.reduce((n, m) => n + m.length, 0) / 9 > max;
 
 /**
  * `a` with each of `cuts` taken away, as triangles with its crease edges; null when the meshes
- * hold more than MAX_CSG_TRIANGLES triangles between them.
+ * hold more than `max` (MAX_CSG_TRIANGLES) triangles between them.
  */
-export function subtractMeshes(a: ArrayLike<number>, cuts: ArrayLike<number>[]): { triangles: Float64Array; edges: Float64Array } | null {
-  if (tooMany([a, ...cuts])) return null;
+export function subtractMeshes(a: ArrayLike<number>, cuts: ArrayLike<number>[], max = MAX_CSG_TRIANGLES): { triangles: Float64Array; edges: Float64Array } | null {
+  if (tooMany([a, ...cuts], max)) return null;
   const f = frameOf([a, ...cuts]);
   if (!f) return { triangles: new Float64Array(), edges: new Float64Array() };
   const { cx, cy, cz, eps } = f;
   let result = polysOf(outward(a, 10 * eps), cx, cy, cz);
-  for (const cut of cuts) {
-    const A = new Node(eps);
-    A.build(result);
-    const B = new Node(eps);
-    B.build(polysOf(outward(cut, 10 * eps), cx, cy, cz));
-    A.invert();
-    A.clipTo(B);
-    B.clipTo(A);
-    B.invert();
-    B.clipTo(A);
-    B.invert();
-    A.build(B.all());
-    A.invert();
-    result = A.all();
-  }
+  for (const cut of cuts) result = less(result, polysOf(outward(cut, 10 * eps), cx, cy, cz), eps);
   return finish(result, f);
 }
 
@@ -325,27 +583,15 @@ export function trimmedMesh(a: ArrayLike<number>, cutter: ArrayLike<number>, kee
 
 /**
  * The volume any of `meshes` enclose, as triangles with its crease edges; null when they hold more
- * than MAX_CSG_TRIANGLES triangles between them.
+ * than `max` (MAX_CSG_TRIANGLES) triangles between them.
  */
-export function unionMeshes(meshes: ArrayLike<number>[]): { triangles: Float64Array; edges: Float64Array } | null {
-  if (tooMany(meshes)) return null;
+export function unionMeshes(meshes: ArrayLike<number>[], max = MAX_CSG_TRIANGLES): { triangles: Float64Array; edges: Float64Array } | null {
+  if (tooMany(meshes, max)) return null;
   const f = frameOf(meshes);
   if (!f) return { triangles: new Float64Array(), edges: new Float64Array() };
   const { cx, cy, cz, eps } = f;
   let result = polysOf(outward(meshes[0], 10 * eps), cx, cy, cz);
-  for (const m of meshes.slice(1)) {
-    const A = new Node(eps);
-    A.build(result);
-    const B = new Node(eps);
-    B.build(polysOf(outward(m, 10 * eps), cx, cy, cz));
-    A.clipTo(B);
-    B.clipTo(A);
-    B.invert();
-    B.clipTo(A);
-    B.invert();
-    A.build(B.all());
-    result = A.all();
-  }
+  for (const m of meshes.slice(1)) result = more(result, polysOf(outward(m, 10 * eps), cx, cy, cz), eps);
   return finish(result, f);
 }
 

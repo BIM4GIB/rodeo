@@ -212,10 +212,15 @@ export interface Attributes {
   lineStyle: number;
   /** line weight, mils (1/1000 inch) */
   lineWeight: number;
-  /** fill pattern: 0 = none, 1 = solid (others are raw VW pattern indices) */
+  /**
+   * fill pattern: 0 = none, 1 = solid (others are raw VW pattern indices). A solid fill shows
+   * fillBack, in plan, in 3D and in renders, as Vectorworks draws it: to colour an object, set
+   * fillPattern 1 and fillBack and fillFore both to the colour (EditSession.addColors gives its index)
+   */
   fillPattern: number;
-  /** colour indices into the document palette (see VwxDocument.color()) */
+  /** colour indices into the document palette (see VwxDocument.color()): a pattern's lines */
   fillFore: number;
+  /** a solid fill's colour, and a pattern's background */
   fillBack: number;
   penFore: number;
   penBack: number;
@@ -542,6 +547,7 @@ export interface HelixOptions {
   reverse: boolean;
 }
 
+/** What addObjects draws: a line, rect, roundrect, polygon, polyline, arc (a circle or an ellipse too), text, locus, light or image. */
 export type NewShape =
   | { kind: "line"; a: Pt; b: Pt }
   | { kind: "rect"; x0: number; y0: number; x1: number; y1: number }
@@ -555,7 +561,10 @@ export type NewShape =
    * (as Vectorworks draws hatch strokes); fills still use those edges.
    */
   | { kind: "polyline"; points: Pt[]; closed: boolean; smooth?: boolean; vertices?: VertexKind[]; radii?: number[]; hidden?: number[] }
-  /** radiusY makes it elliptical (radius is then the x radius); angles are then parametric, as QuickDraw measures them */
+  /**
+   * a circle is an arc with sweepAngle 360 (startAngle 0); radiusY makes it elliptical (radius is
+   * then the x radius); angles are then parametric, as QuickDraw measures them
+   */
   | { kind: "arc"; center: Pt; radius: number; radiusY?: number; startAngle: number; sweepAngle: number }
   /** hAlign and vAlign (as TextStyle's) and angle (degrees) are set about `at`, which stays its origin */
   | { kind: "text"; at: Pt; text: string; height: number; hAlign?: number; vAlign?: number; angle?: number }
@@ -1439,6 +1448,7 @@ export interface EditSession {
   duplicateLayer(layerId: string, name: string): string;
   deleteLayer(layerId: string): void;
   renameLayer(layerId: string, name: string, title?: string): void;
+  /** shows, hides or greys a layer: "visible", "hidden" or "grayed" (hide things this way, never by moving them) */
   setLayerVisibility(layerId: string, v: Visibility): void;
   setLayerScale(layerId: string, scale: number): void;
   /** the view a design layer is saved in, which Vectorworks opens it in */
@@ -1516,6 +1526,7 @@ export interface EditSession {
   renameClass(index: number, name: string): void;
   /** objects in the class move to "None" */
   deleteClass(index: number, into?: number): void;
+  /** shows, hides or greys a class's objects everywhere: "visible", "hidden" or "grayed" */
   setClassVisibility(index: number, v: Visibility): void;
   /** Changes a class's attributes, which the objects taking them from the class (Class Style) draw with. */
   setClassAttributes(index: number, attrs: Partial<Attributes>): void;

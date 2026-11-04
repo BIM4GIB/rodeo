@@ -32,11 +32,49 @@ export interface Closure {
   readonly holes: readonly Hole[];
 }
 
-/** corners closer than this (mm) are one corner, and a corner this near an edge splits it */
+/** corners closer than this (mm) are one corner, and a corner this near an edge splits it, at most */
 const WELD = 0.5;
+/** a corner nearer an edge than this share of its length lies on it (more is a curve's chord cutting a corner off) */
+const ON_EDGE = 0.02;
 
-/** How closed the solid made of `tris` (9 numbers a triangle, world mm) is. */
-export function closureOf(tris: ArrayLike<number>, weld = WELD): Closure {
+/** The rounding of 32-bit coordinates (the 3D view's) at the size of `tris`, a few times over. */
+function noiseOf(tris: ArrayLike<number>): number {
+  let size = 0;
+  for (let i = 0; i < tris.length; i++) size = Math.max(size, Math.abs(tris[i]));
+  return Math.max(1e-4, size * 3e-7);
+}
+
+/**
+ * The loose weld: WELD, or a quarter of the solid's shortest side when that is less (a small
+ * part's round holes have sides far under a millimetre), for drawings whose corners miss a little.
+ */
+function looseWeld(tris: ArrayLike<number>, noise: number): number {
+  let shortest = Infinity;
+  for (let i = 0; i + 8 < tris.length; i += 9) {
+    for (const [p, q] of [[i, i + 3], [i + 3, i + 6], [i + 6, i]]) {
+      const d = Math.hypot(tris[p] - tris[q], tris[p + 1] - tris[q + 1], tris[p + 2] - tris[q + 2]);
+      if (d > 8 * noise && d < shortest) shortest = d;
+    }
+  }
+  return Math.min(WELD, Math.max(4 * noise, shortest / 4));
+}
+
+/**
+ * How closed the solid made of `tris` (9 numbers a triangle, world mm) is. Corners are first taken
+ * as one only where rounding parts them, as a solid Rodeo cut or extruded has them; one that isn't
+ * closed that way is checked again with corners a little apart taken as one (WELD at most), as
+ * drawn ones may be, and the better reading kept. A `weld` given is used alone.
+ */
+export function closureOf(tris: ArrayLike<number>, weld?: number): Closure {
+  if (weld !== undefined) return closureAt(tris, weld);
+  const noise = noiseOf(tris);
+  const tight = closureAt(tris, 4 * noise);
+  if (tight.open === 0) return tight;
+  const loose = closureAt(tris, looseWeld(tris, noise));
+  return loose.open < tight.open ? loose : tight;
+}
+
+function closureAt(tris: ArrayLike<number>, weld: number): Closure {
   // weld the corners: a grid of cells `weld` wide, searched with their neighbours
   const pts: number[] = [];
   const cells = new Map<string, number[]>();
@@ -96,6 +134,7 @@ export function closureOf(tris: ArrayLike<number>, weld = WELD): Closure {
       const P = [pts[p * 3], pts[p * 3 + 1], pts[p * 3 + 2]];
       const D = [pts[q * 3] - P[0], pts[q * 3 + 1] - P[1], pts[q * 3 + 2] - P[2]];
       const len2 = D[0] * D[0] + D[1] * D[1] + D[2] * D[2];
+      const near = Math.min(weld, ON_EDGE * Math.sqrt(len2));
       const lo = P.map((c, k) => Math.min(c, c + D[k]) - weld);
       const hi = P.map((c, k) => Math.max(c, c + D[k]) + weld);
       const axis = [0, 1, 2].reduce((m, k) => (Math.abs(D[k]) > Math.abs(D[m]) ? k : m), 0);
@@ -111,7 +150,7 @@ export function closureOf(tris: ArrayLike<number>, weld = WELD): Closure {
         const t = ((x - P[0]) * D[0] + (y - P[1]) * D[1] + (z - P[2]) * D[2]) / len2;
         if (t <= 0 || t >= 1) continue;
         const off = Math.hypot(P[0] + D[0] * t - x, P[1] + D[1] * t - y, P[2] + D[2] * t - z);
-        if (off <= weld) inside.push({ n, t });
+        if (off <= near) inside.push({ n, t });
       }
       inside.sort((u, v) => u.t - v.t);
       chain = [p, ...inside.map((s) => s.n), q];
@@ -171,13 +210,16 @@ export function closureOf(tris: ArrayLike<number>, weld = WELD): Closure {
   const holes = [...groups.values()]
     .map((h) => ({
       at: [0, 1, 2].map((k) => Math.round((h.min[k] + h.max[k]) / 2)) as V3,
-      across: Math.round(Math.max(h.max[0] - h.min[0], h.max[1] - h.min[1], h.max[2] - h.min[2])),
+      across: tenth(Math.max(h.max[0] - h.min[0], h.max[1] - h.min[1], h.max[2] - h.min[2])),
       edges: h.edges,
       rim: h.rim,
     }))
     .sort((p, q) => q.across - p.across);
   return { triangles, edges: runs.size, open, overlaps, holes };
 }
+
+/** whole millimetres from 10 up, tenths below: a screw hole's gap is under a millimetre */
+const tenth = (v: number): number => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10);
 
 export interface SolidCheck {
   /** the top-level object */

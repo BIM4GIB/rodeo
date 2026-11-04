@@ -63,11 +63,18 @@ interface Card {
   readonly args: Record<string, unknown>;
 }
 
+/** The last line of streamed thinking, for a closed Thinking block's summary. */
+function lastLine(src: string): string {
+  const lines = src.trimEnd().split("\n");
+  return (lines[lines.length - 1] ?? "").replace(/\*\*/g, "").trim().slice(-140);
+}
+
 /** Where one model's output goes: the reply's body, or a subagent's log. */
 interface Sink {
   readonly el: HTMLElement;
   text: { el: HTMLElement; src: string; timer: number } | null;
-  reasoning: { el: HTMLElement; body: HTMLElement; src: string } | null;
+  /** a Thinking block: its label, the line it shows while closed, and when it began */
+  reasoning: { el: HTMLElement; body: HTMLElement; label: HTMLElement; line: HTMLElement; src: string; started: number; timer: number } | null;
   waiting: HTMLElement | null;
   /** a tool call being written: its size so far and the line it is on */
   writing: { el: HTMLElement; label: HTMLElement; tail: HTMLElement; index: number; name: string; chars: number; lines: number; line: string } | null;
@@ -105,8 +112,12 @@ export function agentsPanel(): HTMLElement {
   const creditBtn = h("button", { cls: "ag-credit", attrs: { type: "button", title: "AI credit: top up and see what was used" }, hidden: true });
   const head = h("div", { cls: "ag-head" }, title, h("span", { cls: "ag-spacer" }), creditBtn, newBtn);
 
-  const log = h("div", { cls: "ag-log", attrs: { "aria-live": "polite" } });
-  const body = h("div", { cls: "ag-body" }, log);
+  // the conversation, in a scroller of its own so a change in its size (text streaming in, a
+  // picture loading, a card or Thinking opened) can keep the newest of it in view
+  const log = h("div", { cls: "ag-feed" });
+  const scroller = h("div", { cls: "ag-log", attrs: { "aria-live": "polite" } }, log);
+  const jumpBtn = h("button", { cls: "ag-jump", html: ICONS.chevron, attrs: { type: "button", title: "Jump to the latest", "aria-label": "Jump to the latest" }, hidden: true });
+  const body = h("div", { cls: "ag-body" }, scroller, jumpBtn);
 
   const chips = h("div", { cls: "ag-chips", hidden: true });
   const input = h("textarea", { cls: "ag-input", placeholder: "Ask the agent to do anything in this drawing…", attrs: { rows: "1", "aria-label": "Message the agent" } });
@@ -120,12 +131,66 @@ export function agentsPanel(): HTMLElement {
 
   // ---- the log ------------------------------------------------------------------------
 
-  const nearBottom = (): boolean => log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  // The log keeps to its newest line while `stick` holds. Only the reader lets go of it, by
+  // scrolling up (the wheel, a drag, a key); growth, pictures loading and blocks opening never do,
+  // and scrolling back down to the end takes hold again.
+  const nearBottom = (): boolean => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
   let stick = true;
-  log.addEventListener("scroll", () => (stick = nearBottom()));
-  const follow = (): void => {
-    if (stick) log.scrollTop = log.scrollHeight;
+  let lastTop = 0;
+  const showJump = (): void => {
+    jumpBtn.hidden = stick || nearBottom();
   };
+  scroller.addEventListener("scroll", () => {
+    const top = scroller.scrollTop;
+    if (nearBottom()) stick = true;
+    else if (top < lastTop - 1) stick = false;
+    lastTop = top;
+    showJump();
+  });
+  scroller.addEventListener("wheel", (e) => {
+    if (e.deltaY < 0 && scroller.scrollHeight > scroller.clientHeight) stick = false;
+  }, { passive: true });
+  const follow = (): void => {
+    if (stick) {
+      scroller.scrollTop = scroller.scrollHeight;
+      lastTop = scroller.scrollTop;
+    }
+    showJump();
+  };
+  new ResizeObserver(() => follow()).observe(log);
+  jumpBtn.addEventListener("click", () => {
+    stick = true;
+    follow();
+  });
+  // a Thinking block opened shows its latest lines, as it would while streaming
+  log.addEventListener(
+    "toggle",
+    (e) => {
+      const el = e.target as HTMLElement;
+      if (!el.classList?.contains("ag-reason") || !(el as HTMLDetailsElement).open) return;
+      const body = el.querySelector<HTMLElement>(".ag-reason-body");
+      if (body) drawReason(body);
+      pinInner(body, true);
+    },
+    true,
+  );
+
+  /** What each Thinking block's body says, drawn when it is open (closed, only its latest line shows). */
+  const reasons = new WeakMap<HTMLElement, string>();
+
+  /** A Thinking block's body drawn as Markdown, if it has changed since it was last drawn. */
+  function drawReason(body: HTMLElement): void {
+    const src = reasons.get(body) ?? "";
+    if (body.dataset.drawn === String(src.length)) return;
+    body.dataset.drawn = String(src.length);
+    body.replaceChildren(...Array.from(renderMarkdown(src).childNodes));
+  }
+
+  /** A box that scrolls on its own (a Thinking block) kept at its end while it grows, unless the reader scrolled it up. */
+  function pinInner(box: HTMLElement | null, force = false): void {
+    if (!box) return;
+    if (force || box.dataset.pinned !== "0") box.scrollTop = box.scrollHeight;
+  }
 
   /** What stands between the user and a first message, with what to do about it; null when nothing does. */
   function gate(): HTMLElement | null {
@@ -202,7 +267,7 @@ export function agentsPanel(): HTMLElement {
 
   function addText(s: Sink, delta: string): void {
     settle(s);
-    s.reasoning = null;
+    endReasoning(s);
     if (!s.text) {
       const el = h("div", { cls: "ag-md" });
       s.el.append(el);
@@ -213,17 +278,47 @@ export function agentsPanel(): HTMLElement {
     if (!s.text.timer) s.text.timer = window.setTimeout(() => flushText(s), TEXT_MS);
   }
 
-  function addReasoning(s: Sink, delta: string): void {
+  function addReasoning(s: Sink, delta: string, live = true): void {
     settle(s);
     if (!s.reasoning) {
       const body = h("div", { cls: "ag-reason-body" });
-      const el = h("details", { cls: "ag-reason" }, h("summary", { text: "Thinking" }), body);
+      body.addEventListener("scroll", () => (body.dataset.pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 24 ? "1" : "0"));
+      const label = h("span", { cls: "ag-reason-label", text: live ? "Thinking" : "Thought" });
+      const line = h("span", { cls: "ag-reason-line" });
+      const el = h("details", { cls: `ag-reason${live ? " live" : ""}` }, h("summary", {}, label, line), body);
       s.el.append(el);
-      s.reasoning = { el, body, src: "" };
+      s.reasoning = { el, body, label, line, src: "", started: Date.now(), timer: 0 };
     }
-    s.reasoning.src += delta;
-    s.reasoning.body.textContent = s.reasoning.src;
-    follow();
+    const r = s.reasoning;
+    r.src += delta;
+    reasons.set(r.body, r.src);
+    // closed, it shows the line it is on; open, its text, a few times a second
+    if (live) r.line.textContent = lastLine(r.src);
+    if ((r.el as HTMLDetailsElement).open && !r.timer) {
+      r.timer = window.setTimeout(() => {
+        r.timer = 0;
+        drawReason(r.body);
+        pinInner(r.body);
+        follow();
+      }, TEXT_MS);
+    }
+  }
+
+  /** The Thinking block done with: it says how long it took and stops showing a line. */
+  function endReasoning(s: Sink): void {
+    const r = s.reasoning;
+    s.reasoning = null;
+    if (!r) return;
+    window.clearTimeout(r.timer);
+    if ((r.el as HTMLDetailsElement).open) {
+      drawReason(r.body);
+      pinInner(r.body);
+    }
+    if (!r.el.classList.contains("live")) return;
+    r.el.classList.remove("live");
+    const secs = Math.round((Date.now() - r.started) / 1000);
+    r.label.textContent = secs >= 2 ? `Thought for ${secs} s` : "Thought";
+    r.line.textContent = "";
   }
 
   /**
@@ -236,7 +331,7 @@ export function agentsPanel(): HTMLElement {
     if (!w || w.index !== index) {
       if (s.text) flushText(s);
       s.text = null;
-      s.reasoning = null;
+      endReasoning(s);
       settle(s);
       const label = h("span", { cls: "ag-writing-label" });
       const tail = h("code", { cls: "ag-writing-tail" });
@@ -260,7 +355,7 @@ export function agentsPanel(): HTMLElement {
   function waiting(s: Sink): void {
     if (s.text) flushText(s);
     s.text = null;
-    s.reasoning = null;
+    endReasoning(s);
     s.writing?.el.remove();
     s.writing = null;
     if (s.waiting) return;
@@ -275,7 +370,7 @@ export function agentsPanel(): HTMLElement {
   function toolCard(s: Sink, id: string, label: string, args: Record<string, unknown>, nested: boolean): Card {
     if (s.text) flushText(s);
     s.text = null;
-    s.reasoning = null;
+    endReasoning(s);
     settle(s);
     const status = h("span", { cls: "ag-status" });
     const detail = h("div", { cls: "ag-detail", hidden: true });
@@ -444,6 +539,7 @@ export function agentsPanel(): HTMLElement {
           const sink = subs.get(e.sub);
           if (!sink) break;
           if (sink.text) flushText(sink);
+          endReasoning(sink);
           settle(sink);
           sink.card?.setAttribute("data-state", e.ok ? "done" : "error");
           if (sink.status) sink.status.innerHTML = e.ok ? ICONS.check : ICONS.cross;
@@ -469,8 +565,12 @@ export function agentsPanel(): HTMLElement {
       const end = await runAgent({ app, settings, history: thread.messages, attachments: files, signal: running.signal, onEvent });
       thread.messages.push(...end.added);
       if (main.text) flushText(main);
+      endReasoning(main);
       settle(main);
-      for (const sink of subs.values()) settle(sink);
+      for (const sink of subs.values()) {
+        endReasoning(sink);
+        settle(sink);
+      }
       if (end.error) turn.append(errorNote(end.error, end.errorCode));
       // refused for want of credit: the balance shown is out of date
       if (end.errorCode === "credit") void refreshUser();
@@ -547,7 +647,7 @@ export function agentsPanel(): HTMLElement {
         log.append(turn);
         sink = newSink(turn);
       } else if (m.role === "assistant" && sink) {
-        for (const r of m.reasoning_details ?? []) if (r.text) addReasoning(sink, r.text);
+        for (const r of m.reasoning_details ?? []) if (r.text) addReasoning(sink, r.text, false);
         sink.reasoning = null;
         if (m.content) {
           addText(sink, m.content);

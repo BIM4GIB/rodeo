@@ -104,6 +104,16 @@ Choosing a tool or command closes it, as do Escape and a click elsewhere. Arrow 
 
 Inside Object Info, Attributes and Visualization, a click on a section's heading folds the section to its heading (Option-click folds or opens every section of the palette). It stays folded as the selection changes, kept per browser.
 
+### The Agents panel
+
+**Window › Agents** opens the Agents tab beside Navigation. Ask in plain words for anything in the drawing: the agent reads, looks at and changes it while you watch, and hands parts of big jobs to helper agents. Sign in to use it; where the server sells AI credit, it needs some.
+
+The chat follows the newest message as it streams. Scroll up to read back and it stays where you put it; the round arrow at its foot brings you back to the latest. While the agent thinks, its Thinking line shows what it is on: click it to read the whole of it.
+
+Agents model buildings and gardens from parts, and products and machine parts (housings, brackets, lids) as one closed solid each, with their holes, slots and pockets cut, ready to export as STL.
+
+**Limits:** conversations are kept in this browser only.
+
 ## Navigating: zoom, pan and undo
 
 ### Zoom
