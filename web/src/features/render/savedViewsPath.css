@@ -1,0 +1,43 @@
+/* Create Walkthrough Path from Saved Views (movie.ts): the saved views, the path's, and the buttons between. */
+
+.menu-dialog.wv-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.wv-lists {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.wv-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wv-list {
+  width: 100%;
+  min-height: 180px;
+}
+
+.wv-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 20px;
+}
+
+@media (max-width: 560px) {
+  .wv-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .wv-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding-top: 0;
+  }
+}

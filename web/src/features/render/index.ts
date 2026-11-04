@@ -53,7 +53,7 @@ function batchRender(step: "create" | "start"): void {
     .catch(report);
 }
 
-function createAnimation(kind: "orbit" | "spin" | "walkthrough"): void {
+function createAnimation(kind: "orbit" | "spin" | "walkthrough" | "views"): void {
   import("./movie.ts")
     .then((m) => m.createAnimation(kind))
     .catch(report);
@@ -82,6 +82,7 @@ registerMenu("Model", () => [
     enabled: () => store.session !== null,
     items: [
       { label: "Create Walkthrough Path from Selection", enabled: () => store.selection.size === 1, run: () => createAnimation("walkthrough") },
+      { label: "Create Walkthrough Path from Saved Views…", enabled: () => store.session !== null, run: () => createAnimation("views") },
       { label: "Create Orbit Path…", enabled: () => store.session !== null, run: () => createAnimation("orbit") },
       { label: "Create Spin Path", enabled: () => store.selection.size > 0, run: () => createAnimation("spin") },
     ],

@@ -1,6 +1,6 @@
-// Model > Create Animation, as Vectorworks has it: Create Walkthrough Path from Selection, Create Orbit
-// Path… and Create Spin Path, each making an animation path object (animationPathObject.ts) on the
-// active design layer, its keyframes placed for it, to play in the 3D view, edit and make movies from;
+// Model > Create Animation, as Vectorworks has it: Create Walkthrough Path from Selection, Create
+// Walkthrough Path from Saved Views…, Create Orbit Path… and Create Spin Path, each making an animation
+// path object (animationPathObject.ts) on the active design layer, its keyframes placed for it, to play in the 3D view, edit and make movies from;
 // and Create Movie…, which records the movie of one, the 3D view drawing each frame from the camera's
 // place along the path (the progress window shows them as they go). The browser records it: an .mp4
 // where it can make one, else a .webm.
@@ -9,12 +9,17 @@
 // rotation angle (counter-clockwise seen from above), in perspective or orthogonal. Spin: once round
 // the selection, framed, from above it to below and back again so every side shows. Walkthrough:
 // along a selected line, arc, polyline or polygon the way it was drawn, which it replaces, the camera
-// its Camera Height above the active layer, looking ahead along the path.
+// its Camera Height above the active layer, looking ahead along the path. From saved views: straight
+// from each view's camera to the next's, in the order listed (views saved in the 3D view, in
+// perspective, as Rodeo's saved views keep a camera only then).
 
 import { attempt, setEditGroup } from "../../app/commands.ts";
 import { pathOf } from "../../app/cutting.ts";
+import { h } from "../../app/dom.ts";
 import { appContext } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
+import { showDialog } from "../../app/menubar.ts";
+import { savedViews, type ViewCamera } from "../../app/panels/views.ts";
 import { reportFailure } from "../../app/reports.ts";
 import { store } from "../../app/state.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
@@ -23,11 +28,12 @@ import type { CameraState, PaneLook, RenderMode, View3D } from "../../app/view3d
 import { RENDER_MODES } from "../../app/viewbar.ts";
 import { activePlane } from "../../app/workingPlanes.ts";
 import type { Pt, Vec3 } from "../../core/index.ts";
-import { MAX_ANGLE, MIN_ANGLE, orbitPath, spinPath, walkPath, type CameraPath, type V3 } from "./animationPath.ts";
+import { MAX_ANGLE, MIN_ANGLE, orbitPath, spinPath, viewsPath, walkPath, type CameraPath, type V3 } from "./animationPath.ts";
 import { addAnimationPath, keepMovieSettings, movieSource, type MovieSettings } from "./animationPathObject.ts";
 import { showProgress } from "./progress.ts";
+import "./savedViewsPath.css";
 
-export type AnimationKind = "orbit" | "spin" | "walkthrough";
+export type AnimationKind = "orbit" | "spin" | "walkthrough" | "views";
 
 /** the camera's eye, the point it looks at and (when it changes) its vertical field of view, for a moment along the path from 0 to 1 */
 type Path = (t: number) => { readonly eye: Vec3; readonly target: Vec3; readonly fov?: number };
@@ -70,6 +76,8 @@ const EYE_HEIGHT = 1600;
 const WALKING_PACE = 1400;
 /** an orbit's and a spin's first duration, seconds */
 const TURN_DURATION = 10;
+/** a walkthrough from saved views' first duration, seconds from one view to the next */
+const VIEW_LEG_DURATION = 4;
 /** the spin's frame: this much room round the selection */
 const SPIN_MARGIN = 1.15;
 /** degrees between points along an arc path */
@@ -93,7 +101,10 @@ const TITLES: Record<AnimationKind, string> = {
   orbit: "Create Orbit Path",
   spin: "Create Spin Path",
   walkthrough: "Create Walkthrough Path from Selection",
+  views: "Create Walkthrough Path from Saved Views",
 };
+
+type Made = { readonly path: CameraPath; readonly half: number; readonly duration: number };
 
 export async function createAnimation(kind: AnimationKind): Promise<void> {
   const s = store.session;
@@ -101,6 +112,13 @@ export async function createAnimation(kind: AnimationKind): Promise<void> {
   const layer = s.doc.layers().find((l) => l.id === store.activeLayerId);
   if (layer?.kind !== "design") {
     toast("Make a design layer active: the animation path goes on it.", "info");
+    return;
+  }
+  if (kind === "views") {
+    const cameras = await pickSavedViews();
+    if (!cameras) return;
+    const path = viewsPath(cameras.map((c) => ({ eye: v3(c.eye), target: v3(c.target), angle: c.angle })));
+    place(kind, layer.id, { path, half: 5000, duration: VIEW_LEG_DURATION * (cameras.length - 1) }, null);
     return;
   }
   // the walkthrough's path is read before the 3D view takes the window
@@ -131,7 +149,7 @@ export async function createAnimation(kind: AnimationKind): Promise<void> {
   const aspect = (el.clientWidth || 4) / (el.clientHeight || 3);
   // the 3D view's angle across, as the camera's View Angle
   const angle = Math.round(clamp(2 * deg(Math.atan(Math.tan(rad(start.fov / 2)) * aspect)), MIN_ANGLE, MAX_ANGLE) * 100) / 100;
-  let made: { readonly path: CameraPath; readonly half: number; readonly duration: number } | string;
+  let made: Made | string;
   if (kind === "orbit") {
     const v = await toolPrefs(
       "Orbit Options",
@@ -168,18 +186,79 @@ export async function createAnimation(kind: AnimationKind): Promise<void> {
     toast(made, "info");
     return;
   }
+  place(kind, layer.id, made, route?.id ?? null);
+}
+
+/** The animation path `made` on `layerId`, selected; the object `replaces` (a walkthrough's path) deleted. */
+function place(kind: AnimationKind, layerId: string, made: Made, replaces: string | null): void {
   const { path, half, duration } = made;
   const r = attempt(TITLES[kind], (s) =>
     s.batch(() => {
-      const id = addAnimationPath(s, layer.id, path, { duration, height: EYE_HEIGHT, half });
+      const id = addAnimationPath(s, layerId, path, { duration, height: EYE_HEIGHT, half });
       // the walkthrough's path becomes the animation path, as in Vectorworks
-      if (route) s.deleteObjects([route.id]);
+      if (replaces) s.deleteObjects([replaces]);
       return id;
     }),
   );
   if (!r) return;
   setEditGroup(null, [r.value]);
   toast("Animation path made: play it, edit its keyframes or make its movie in Object Info.", "info");
+}
+
+/** Create Walkthrough Path's dialog: the saved views to go through, in order; null when cancelled or there are too few. */
+async function pickSavedViews(): Promise<ViewCamera[] | null> {
+  const all = savedViews()?.cameras() ?? [];
+  if (all.length < 2) {
+    toast("Save two views or more in the 3D view, in perspective, first: Navigation › Views, or the View bar's Saved Views.", "info");
+    return null;
+  }
+  const option = (i: number): HTMLOptionElement => h("option", { text: all[i].name, attrs: { value: String(i) } });
+  const list = (label: string): HTMLSelectElement => h("select", { cls: "wv-list", attrs: { multiple: "", size: "10", "aria-label": label } });
+  const available = list("Saved Views Available");
+  available.append(...all.map((_, i) => option(i)));
+  const chosen = list("Walkthrough Path to Create");
+  const button = (label: string, run: () => void): HTMLButtonElement => {
+    const b = h("button", { cls: "btn small", text: label, attrs: { type: "button" } });
+    b.addEventListener("click", run);
+    return b;
+  };
+  const add = (from: readonly HTMLOptionElement[]): void => chosen.append(...from.map((o) => option(Number(o.value))));
+  // the order the camera goes in: the picked rows move one place up or down together
+  const shift = (up: boolean): void => {
+    const rows = [...chosen.options];
+    const order = up ? rows : rows.reverse();
+    for (const o of order) {
+      const by = up ? o.previousElementSibling : o.nextElementSibling;
+      if (o.selected && by instanceof HTMLOptionElement && !by.selected) {
+        if (up) by.before(o);
+        else by.after(o);
+      }
+    }
+  };
+  const buttons = h(
+    "div",
+    { cls: "wv-buttons" },
+    button("Add", () => add([...available.selectedOptions])),
+    button("Add All", () => add([...available.options])),
+    button("Remove", () => [...chosen.selectedOptions].forEach((o) => o.remove())),
+    button("Remove All", () => chosen.replaceChildren()),
+    button("Move Up", () => shift(true)),
+    button("Move Down", () => shift(false)),
+  );
+  available.addEventListener("dblclick", () => add([...available.selectedOptions]));
+  return showDialog<ViewCamera[]>({
+    title: "Create Walkthrough Path",
+    cls: "wv-dialog",
+    okLabel: "OK",
+    body: [
+      h("div", { cls: "wv-lists" }, h("label", { cls: "wv-col" }, "Saved Views Available", available), buttons, h("label", { cls: "wv-col" }, "Walkthrough Path to Create", chosen)),
+      h("p", { cls: "muted", text: "The camera goes from each view to the next in this order. Only views saved in the 3D view, in perspective, are listed." }),
+    ],
+    check: () => {
+      const picked = [...chosen.options].map((o) => all[Number(o.value)]);
+      return picked.length >= 2 ? { value: picked } : { error: "Add two saved views or more to the path.", focus: available };
+    },
+  });
 }
 
 export function isRealisticMode(mode: RenderMode): boolean {

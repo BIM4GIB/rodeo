@@ -119,6 +119,10 @@ Saved views save the zoom, active layer and class, layer/class options and visib
 
 **View › Save View…** names the current view and whether opening it restores layer and class visibility.
 
+A view saved while the 3D view shows keeps its camera, and opens in 3D looking through it. The lists mark it **3D**. A view saved in 2D opens in 2D.
+
+**Limits:** a 3D view doesn't keep its render mode or lighting.
+
 ## Class and Layer Mapping
 
 **Class and Layer Mapping** (Tools menu) gives each class and design layer the name it's to have:

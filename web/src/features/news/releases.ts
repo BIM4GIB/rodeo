@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:02:00Z",
+    "walkthrough-saved-views",
+    "Walkthroughs from saved views",
+    `Saved views made in the 3D view now keep the camera, and open in 3D through it.
+- Model › Create Animation › Create Walkthrough Path from Saved Views… takes the camera from one to the next.
+- Pick the views and their order in its two lists.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:01:00Z",
     "animation-paths",
     "Animation paths to play",

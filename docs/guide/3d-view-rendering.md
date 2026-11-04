@@ -285,6 +285,7 @@ It shows its progress, with **Finish now** and **Cancel**, then shows the pictur
 - **Create Orbit Path…** goes round a centre: the active layer plane, the working plane or the selection. Tick **Orthogonal Projection** for a view without perspective.
 - **Create Spin Path** goes round the selection, over it and under it, so every side shows.
 - **Create Walkthrough Path from Selection** follows the selected line, arc, polyline or polygon, which becomes the path. The camera stands at **Camera Height** above the layer and looks ahead.
+- **Create Walkthrough Path from Saved Views…** goes from one saved view to the next. Add the views to **Walkthrough Path to Create** and put them in order with **Move Up** and **Move Down**. Only views saved in the 3D view, in perspective, are listed.
 
 In plan the path shows a dot at each keyframe and the camera's wedge where **Time** puts it. In Object Info:
 
@@ -298,7 +299,7 @@ The Reshape tool moves the path's points.
 
 **Create Movie…**, in Object Info or on the path's right-click menu, records the movie. Set its duration, 24 to 60 fps, the render mode and quality, the whole of it or part, and a frame size up to 4K or your own. It's saved as an .mp4 (or a .webm where the browser can't make one).
 
-**Limits:** Vectorworks sees the path as a plug-in object it doesn't have. The camera rides flat at its height rather than following floors and stairs, and walkthroughs come from 2D paths only. There's no walkthrough from saved views, no 360° video, and no Realistic or Path Traced movies.
+**Limits:** Vectorworks sees the path as a plug-in object it doesn't have. The camera rides flat at its height rather than following floors and stairs, and walkthroughs come from 2D paths only. There's no 360° video, and no Realistic or Path Traced movies.
 
 ## Working planes
 

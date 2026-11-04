@@ -1,14 +1,16 @@
 // Navigation > Views: named snapshots of the drawing view (centre and scale),
 // the active layer and class, the layer and class options and, when the entry's
-// "Visibility" box is ticked, the visibility of every layer and class. Saved per
-// file name in localStorage.
+// "Visibility" box is ticked, the visibility of every layer and class. A view saved
+// while the 3D view shows keeps its camera too, and opens in 3D; one saved in 2D
+// opens in 2D. Saved per file name in localStorage.
 
-import type { ClassInfo, EditSession, LayerInfo, Visibility } from "../../core/index.ts";
+import type { ClassInfo, EditSession, LayerInfo, Vec3, Visibility } from "../../core/index.ts";
 import { paperScale, type PdfView } from "../../export/pdf.ts";
 import { attempt, setActiveClass, setActiveLayer } from "../commands.ts";
 import { editInline, h } from "../dom.ts";
+import { appContext } from "../ext.ts";
 import { glide } from "../glide.ts";
-import { graysOthers, store, type DisplayMode } from "../state.ts";
+import { graysOthers, setViz, store, type DisplayMode } from "../state.ts";
 import { toast } from "../toast.ts";
 import type { View } from "../view.ts";
 import { DISPLAY_MODES } from "../displayModes.ts";
@@ -32,6 +34,39 @@ interface SavedView {
   layers: Record<string, Visibility>;
   /** visibility of each class at save time, by class index */
   classes: Record<string, Visibility>;
+  /** the 3D view's camera, for a view saved while it showed */
+  camera?: SavedCamera;
+}
+
+interface SavedCamera {
+  readonly position: Vec3;
+  readonly target: Vec3;
+  /** the angle up the view, degrees */
+  readonly fov: number;
+  /** the orthogonal view's half height, mm */
+  readonly half: number;
+  readonly projection: "perspective" | "orthogonal";
+  /** the 3D view's width over its height */
+  readonly aspect: number;
+}
+
+/** A saved view's camera as a walkthrough takes it: eye, look-to point and angle across. */
+export interface ViewCamera {
+  readonly name: string;
+  readonly eye: Vec3;
+  readonly target: Vec3;
+  /** degrees */
+  readonly angle: number;
+}
+
+function parseCamera(raw: unknown): SavedCamera | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const vec = (v: unknown): v is Vec3 => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n));
+  const positive = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
+  if (!vec(r.position) || !vec(r.target) || !positive(r.fov) || !positive(r.half) || !positive(r.aspect)) return undefined;
+  if (r.projection !== "perspective" && r.projection !== "orthogonal") return undefined;
+  return { position: r.position, target: r.target, fov: r.fov, half: r.half, projection: r.projection, aspect: r.aspect };
 }
 
 function modeLabel(mode: DisplayMode): string {
@@ -39,7 +74,7 @@ function modeLabel(mode: DisplayMode): string {
 }
 
 function modesText(v: SavedView): string {
-  return `Layers: ${modeLabel(v.layerMode)} · Classes: ${modeLabel(v.classMode)}`;
+  return `${v.camera ? "3D · " : ""}Layers: ${modeLabel(v.layerMode)} · Classes: ${modeLabel(v.classMode)}`;
 }
 
 /**
@@ -110,6 +145,7 @@ function parseView(raw: unknown): SavedView | null {
     restoreVisibility: r.restoreVisibility === true,
     layers: visibilityMap(r.layers),
     classes: visibilityMap(r.classes),
+    camera: parseCamera(r.camera),
   };
 }
 
@@ -152,6 +188,8 @@ export interface SavedViews {
   rewrite(keep: readonly { readonly index: number; readonly name: string; readonly restoreVisibility: boolean }[]): void;
   /** each view as File > Publish draws it: what opening it would show on the canvas at its present size */
   pages(): { name: string; view: PdfView }[];
+  /** the views saved in the 3D view in perspective, with their cameras, in their order */
+  cameras(): ViewCamera[];
 }
 
 /** the Navigation palette's saved views, once it is mounted */
@@ -189,12 +227,22 @@ export function mountViews(root: HTMLElement, view: View): SavedViews {
     return `View ${n}`;
   };
 
-  /** Snapshot of the current view centre and scale, active layer and class, display options and visibility. */
+  /** The 3D view's camera, when it shows. */
+  const camera = (): SavedCamera | undefined => {
+    const v3 = store.view3d ? appContext()?.view3d() : null;
+    if (!v3) return undefined;
+    const c = v3.cameraState();
+    const el = v3.domElement;
+    return { position: c.position, target: c.target, fov: c.fov, half: c.half, projection: store.viz3d.projection, aspect: (el.clientWidth || 4) / (el.clientHeight || 3) };
+  };
+
+  /** Snapshot of the current view centre and scale, active layer and class, display options and visibility, and the 3D view's camera when it shows. */
   const capture = (name: string): SavedView => {
     const doc = store.session?.doc;
     const layers = doc?.layers() ?? [];
     const classes = doc?.classes() ?? [];
     return {
+      camera: camera(),
       name,
       cx: view.cx,
       cy: view.cy,
@@ -228,12 +276,21 @@ export function mountViews(root: HTMLElement, view: View): SavedViews {
     render();
   };
 
-  /** Opens a view: centre and scale, active layer and class, display options, then visibility when ticked. */
+  /** Opens a view: centre and scale, active layer and class, display options, then visibility when ticked; in 3D through its camera, when it has one. */
   const restore = (v: SavedView): void => {
     const doc = store.session?.doc;
     if (!doc) return;
     const layers = doc.layers();
     const classes = doc.classes();
+    const ctx = appContext();
+    const cam = v.camera;
+    if (cam) {
+      void ctx?.show3d().then((v3) => {
+        if (!v3) return;
+        if (store.viz3d.projection !== cam.projection) setViz({ projection: cam.projection });
+        v3.setCameraState({ position: cam.position, target: cam.target, zoom: 1, half: cam.half, fov: cam.fov });
+      });
+    } else if (store.view3d) ctx?.show2d();
     glide(view, () => view.setCenterAndScale(v.cx, v.cy, v.scale));
     store.layerMode = v.layerMode;
     store.classMode = v.classMode;
@@ -376,6 +433,13 @@ export function mountViews(root: HTMLElement, view: View): SavedViews {
       const doc = store.session?.doc;
       return doc ? views.map((v) => ({ name: v.name, view: pageOf(v, doc.layers(), doc.classes(), view) })) : [];
     },
+    cameras: () =>
+      views.flatMap((v) => {
+        const c = v.camera;
+        if (c?.projection !== "perspective") return [];
+        const across = (2 * Math.atan(Math.tan((c.fov * Math.PI) / 360) * c.aspect) * 180) / Math.PI;
+        return [{ name: v.name, eye: c.position, target: c.target, angle: across }];
+      }),
     rewrite: (keep) => {
       views = keep
         .filter((k) => k.index < 0 || views[k.index] !== undefined)
