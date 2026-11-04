@@ -368,6 +368,24 @@ export function showScriptPalette(name: string): void {
   requestAnimationFrame(() => body.querySelector<HTMLElement>(`[data-palette="${CSS.escape(name)}"]`)?.scrollIntoView({ block: "nearest" }));
 }
 
+/**
+ * Keeps a script written for the user (Custom Selection's or Custom Modification's) in a script palette:
+ * the one there is, one chosen, or a new one when there are none; asks for its name, then shows it.
+ * False when cancelled.
+ */
+export async function addScript(language: Language, code: string, suggested: string): Promise<boolean> {
+  const p = await paletteFor();
+  if (!p) return false;
+  const taken = p.scripts.map((s) => s.name);
+  const name = await askName("Name Script", freeName(suggested, taken), taken);
+  if (!name) return false;
+  p.scripts.push({ name, language, code });
+  save();
+  showScriptPalette(p.name);
+  toast(`${name} is in the script palette ${p.name}: double-click it to run it.`, "info");
+  return true;
+}
+
 /** Window > Script Palettes: each palette, then New Script Palette…. */
 export function scriptPaletteMenuRows(): Row[] {
   return [

@@ -41,6 +41,13 @@ The menu command adds the objects like the selected ones. The tool selects those
 
 **Custom Selection…** selects the objects on the active layer that meet every criterion set: type, class, symbol, fill colour, pen colour or line weight, each "is" or "is not" one of the values the layer has. It replaces, adds to or removes from the selection.
 
+**Execute** chooses when that happens:
+
+- **Execute Immediately** selects the objects now.
+- **Create VectorScript** or **Create Python Script** writes the search as a script instead, names it and keeps it in a script palette (one is made if you have none). Double-click it there to make the same selection again, or use **Export Script** to take it to Vectorworks.
+
+A script can search by type, class and symbol. Searches by colour or line weight, and searches inside a group being edited, are Execute Immediately only.
+
 ### Force Select
 
 **Force Select** is in the right-click menu over an object that a click can't select, because it is on another visible design layer or in a visible class that isn't active. It makes the object's layer and class active where it needs to and selects it.

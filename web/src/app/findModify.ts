@@ -2,10 +2,15 @@
 // uses and changes every one found at once, as the Vectorworks command does:
 // their class, fill or pen colour, line weight, opacity, the definition a symbol
 // shows, or the layer they are on. All the changes are one undo step.
+// Tools > Custom Modification… is the same dialog with Vectorworks' Execute
+// Immediately, Create VectorScript and Create Python Script: a script finds the
+// objects by search criteria and makes the class, colour, line weight and
+// opacity changes with vs calls (customScripts.ts).
 
 import type { VwxDocument } from "../core/index.ts";
 import { setSelection } from "./commands.ts";
-import { criteriaEditor, scopeObjects } from "./customSelection.ts";
+import { modificationScript, quoted, type ScriptChange, type ScriptMode } from "./customScripts.ts";
+import { criteriaEditor, scopeObjects, scriptModeSelect } from "./customSelection.ts";
 import { h } from "./dom.ts";
 import { showDialog } from "./menubar.ts";
 import { colorSwatch } from "./panels/colorPicker.ts";
@@ -131,8 +136,32 @@ function changeKinds(doc: VwxDocument): { readonly id: ChangeId; readonly label:
   return kinds;
 }
 
-/** Opens Find and Modify and applies it. */
-export async function findModifyDialog(): Promise<void> {
+/** `c` as a script makes it; null for a symbol or layer change, which the vs calls Rodeo has can't make. */
+function scriptChange(doc: VwxDocument, c: Change): ScriptChange | { readonly error: string } | null {
+  const rgb = (index: number): [number, number, number] => {
+    const css = doc.color(index);
+    return [1, 3, 5].map((i) => parseInt(css.slice(i, i + 2), 16) || 0) as [number, number, number];
+  };
+  switch (c.id) {
+    case "class": {
+      const name = doc.classes().find((k) => k.index === c.index)?.name ?? "None";
+      return quoted(name) ? { id: "class", name } : { error: `The class ${name} has a quote (') in its name, which a script can't name.` };
+    }
+    case "fill":
+      return { id: "fill", rgb: rgb(c.color) };
+    case "pen":
+      return { id: "pen", rgb: rgb(c.color) };
+    case "weight":
+      return { id: "weight", mils: c.mils };
+    case "opacity":
+      return { id: "opacity", percent: c.percent };
+    default:
+      return null;
+  }
+}
+
+/** Opens Find and Modify (or, with `scripts`, Custom Modification) and applies it, or writes it as a script. */
+export async function findModifyDialog(scripts = false): Promise<void> {
   const doc = store.session?.doc;
   if (!doc || !store.activeLayerId) return;
   const objects = scopeObjects(doc);
@@ -184,21 +213,41 @@ export async function findModifyDialog(): Promise<void> {
   add.addEventListener("click", addRow);
   const selectThem = h("input", { attrs: { type: "checkbox", "aria-label": "Select the changed objects" } });
   selectThem.checked = true;
+  const selectLabel = h("label", { cls: "menu-dialog-check" }, selectThem, h("span", { text: "Select the changed objects" }));
   const where = store.editGroupId ? "the group being edited" : "the active layer";
+  const mode = scriptModeSelect();
+  // a script leaves what it found selected
+  mode.addEventListener("change", () => (selectLabel.hidden = mode.value !== "now"));
 
-  const done = await showDialog<{ ids: string[]; layerMoved: boolean }>({
-    title: "Find and Modify",
-    okLabel: "Modify",
+  const done = await showDialog<{ ids: string[]; layerMoved: boolean } | { script: string; language: "python" | "vectorscript" }>({
+    title: scripts ? "Custom Modification" : "Find and Modify",
+    okLabel: scripts ? "OK" : "Modify",
     cls: "cs-dialog fm-dialog",
     body: [
+      ...(scripts ? [h("label", { cls: "menu-dialog-field" }, h("span", { cls: "menu-dialog-label", text: "Execute" }), mode)] : []),
       h("p", { cls: "muted", text: `Find objects in ${where} that meet every criterion:` }),
       ...criteria.body,
       h("p", { cls: "muted fm-then", text: "and change them:" }),
       list,
       h("div", { cls: "cs-add" }, add),
-      h("label", { cls: "menu-dialog-check" }, selectThem, h("span", { text: "Select the changed objects" })),
+      selectLabel,
     ],
     check: () => {
+      const m: ScriptMode = scripts ? (mode.value as ScriptMode) : "now";
+      if (m !== "now") {
+        const s = criteria.script();
+        if ("error" in s) return { error: s.error, focus: s.focus ?? mode };
+        const made: ScriptChange[] = [];
+        for (const r of rows) {
+          const c = r.read();
+          if ("error" in c) return c;
+          const sc = scriptChange(doc, c);
+          if (!sc) return { error: "A script can change the class, colours, line weight and opacity; change symbols and layers with Execute Immediately.", focus: mode };
+          if ("error" in sc) return { error: sc.error, focus: mode };
+          made.push(sc);
+        }
+        return { value: { script: modificationScript(m, s.criteria, made), language: m } };
+      }
       const found = criteria.matches();
       if ("error" in found) return found;
       if (found.ids.length === 0) return { error: "No objects meet those criteria." };
@@ -217,6 +266,11 @@ export async function findModifyDialog(): Promise<void> {
     },
   });
   if (!done) return;
+  if ("script" in done) {
+    const { addScript } = await import("../features/python/scriptPalettes.ts");
+    await addScript(done.language, done.script, "Custom Modification");
+    return;
+  }
   const n = done.ids.length;
   if (selectThem.checked && !done.layerMoved) setSelection(done.ids);
   toast(`Changed ${n} ${n === 1 ? "object" : "objects"}.`, "info");

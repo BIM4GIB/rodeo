@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:12:00Z",
+    "custom-modification-scripts",
+    "Custom Modification and selection scripts",
+    `Custom Selection can now write its search as a VectorScript or Python script, as Vectorworks does.
+- The script is kept in a script palette: double-click it to make the same selection again.
+- Tools > Custom Modification finds objects and changes their class, colours, line weight or opacity, now or as a script.
+- Scripts run in Rodeo and export to Vectorworks.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:11:00Z",
     "generate-paperwork",
     "Generate Paperwork",

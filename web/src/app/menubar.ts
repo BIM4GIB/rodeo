@@ -1061,6 +1061,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Organization…", keys: "⇧⌘O", enabled: hasDoc, run: () => void organizationDialog() },
         { label: "Custom Selection…", enabled: hasLayer, run: () => void customSelectionDialog() },
         { label: "Find and Modify…", enabled: hasLayer, run: () => void findModifyDialog() },
+        { label: "Custom Modification…", enabled: hasLayer, run: () => void findModifyDialog(true) },
         { label: "Class and Layer Mapping…", enabled: hasDoc, run: () => void import("./classLayerMapping.ts").then((m) => m.classLayerMappingDialog()) },
         "-",
         {

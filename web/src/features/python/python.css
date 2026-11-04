@@ -234,6 +234,8 @@
 
 .sp-script {
   padding-left: 24px;
+  /* a double-click runs it, not selects its name */
+  user-select: none;
 }
 
 .sp-script .name {

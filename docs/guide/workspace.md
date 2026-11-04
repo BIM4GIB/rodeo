@@ -425,6 +425,15 @@ Fillet's key is <kbd>⇧F</kbd> and Connect/Combine's <kbd>⇧J</kbd>, leaving <
 - the symbol shown
 - or the layer
 
+### Custom Modification
+
+**Tools › Custom Modification…** is Find and Modify with Vectorworks' **Execute** choice:
+
+- **Execute Immediately** changes the objects found now, as Find and Modify does.
+- **Create VectorScript** or **Create Python Script** writes a script that finds the objects and makes the changes. It's named and kept in a script palette, so a double-click there does it again on whatever meets the criteria then.
+
+A script can change the class, fill and pen colour, line weight and opacity. Changing the symbol shown or the layer is Execute Immediately only.
+
 ### Check File Health
 
 **Tools › Check File Health…** runs the tests of Vectorworks' File Health Check that Rodeo can, each at a limit kept in this browser, and lists what fails:

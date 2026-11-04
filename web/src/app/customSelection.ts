@@ -4,10 +4,14 @@
 // offered are the ones the drawing has, with how many objects have each. It
 // searches the active layer's top-level objects (the children of the group being
 // edited, when one is), and replaces, adds to or removes from the selection.
-// Find and Modify (findModify.ts) finds its objects with the same criteria.
+// As in Vectorworks, it can instead write that as a VectorScript or Python script
+// for a script palette (customScripts.ts): the type, class and symbol criteria as
+// search criteria on the active layer. Find and Modify and Custom Modification
+// (findModify.ts) find their objects with the same criteria.
 
 import type { ObjectInfo, VwxDocument } from "../core/index.ts";
 import { setSelection } from "./commands.ts";
+import { allOf, criterionText, quoted, SCRIPT_MODES, selectionScript, typeCriterion, type ScriptMode, type SelectAction } from "./customScripts.ts";
 import { h } from "./dom.ts";
 import { showDialog } from "./menubar.ts";
 import { typeLabel } from "./reportRows.ts";
@@ -29,9 +33,11 @@ interface Field {
   readonly label: string;
   /** the object's value, or null when it has none (a symbol on a line, a fill on a group) */
   value(o: ObjectInfo): Value | null;
+  /** the criterion that `o`'s value is, or is not, as search criteria; null when its name holds a quote; absent when criteria can't say it */
+  criterion?(o: ObjectInfo, is: boolean): string | null;
 }
 
-type Action = "replace" | "add" | "remove";
+type Action = SelectAction;
 
 const ACTIONS: readonly { readonly id: Action; readonly label: string }[] = [
   { id: "replace", label: "Replace the selection" },
@@ -50,8 +56,16 @@ function fieldsOf(doc: VwxDocument): readonly Field[] {
   };
   const none: Value = { key: "none", label: "None" };
   return [
-    { id: "type", label: "Type", value: (o) => ({ key: o.typeName, label: typeLabel(o.typeName) }) },
-    { id: "class", label: "Class", value: (o) => ({ key: String(o.classIndex), label: o.className || "None" }) },
+    { id: "type", label: "Type", value: (o) => ({ key: o.typeName, label: typeLabel(o.typeName) }), criterion: (o, is) => typeCriterion(o.type, o.typeName, is) },
+    {
+      id: "class",
+      label: "Class",
+      value: (o) => ({ key: String(o.classIndex), label: o.className || "None" }),
+      criterion: (o, is) => {
+        const q = quoted(o.className || "None");
+        return q && criterionText("C", q, is);
+      },
+    },
     {
       id: "symbol",
       label: "Symbol",
@@ -59,6 +73,10 @@ function fieldsOf(doc: VwxDocument): readonly Field[] {
         o.kind === "symbol" && o.symbol !== undefined
           ? { key: String(o.symbol), label: symbols.get(o.symbol) ?? `Symbol ${o.symbol}` }
           : null,
+      criterion: (o, is) => {
+        const q = o.symbol === undefined ? null : quoted(symbols.get(o.symbol) ?? "");
+        return q && criterionText("S", q, is);
+      },
     },
     { id: "fill", label: "Fill colour", value: (o) => (!o.attrs ? null : o.attrs.fillPattern === 0 ? none : colour(o.attrs.fillFore)) },
     { id: "pen", label: "Pen colour", value: (o) => (!o.attrs ? null : o.attrs.lineStyle === 0 ? none : colour(o.attrs.penFore)) },
@@ -138,6 +156,8 @@ export interface CriteriaEditor {
   readonly body: readonly HTMLElement[];
   /** the ids of `objects` that meet every criterion, or what is wrong with one */
   matches(): { readonly ids: string[] } | { readonly error: string; readonly focus: HTMLElement };
+  /** every criterion, and the active layer, as search criteria for a script; or why they can't be */
+  script(): { readonly criteria: string } | { readonly error: string; readonly focus?: HTMLElement };
 }
 
 /** Criterion rows over `objects`, with values read from `doc`; one row to start with. */
@@ -175,10 +195,35 @@ export function criteriaEditor(doc: VwxDocument, objects: readonly ObjectInfo[])
       }
       return { ids: objects.filter((o) => criteria.every((c) => (c.field.value(o)?.key === c.key) === c.is)).map((o) => o.id) };
     },
+    script: () => {
+      if (store.editGroupId) return { error: "A script searches a layer, not the group being edited: use Execute Immediately, or leave the group first." };
+      const layer = doc.layers().find((l) => l.id === store.activeLayerId)?.name ?? "";
+      const parts: string[] = [];
+      for (const r of rows) {
+        const c = r.read();
+        if ("error" in c) return c;
+        if (!c.field.criterion) return { error: `${c.field.label} can't be written as search criteria: use Execute Immediately.` };
+        const sample = objects.find((o) => c.field.value(o)?.key === c.key);
+        const part = sample ? c.field.criterion(sample, c.is) : null;
+        if (!part) return { error: `${c.field.label}: a name with a quote (') in it can't be written as search criteria.` };
+        parts.push(part);
+      }
+      const criteria = allOf(layer, parts);
+      return criteria ? { criteria } : { error: "The active layer's name has a quote (') in it, which search criteria can't hold." };
+    },
   };
 }
 
-/** Opens Custom Selection and applies it. */
+/** Execute Immediately, Create VectorScript or Create Python Script, as Custom Selection and Custom Modification offer them. */
+export function scriptModeSelect(): HTMLSelectElement {
+  return h(
+    "select",
+    { cls: "menu-dialog-input menu-dialog-select cs-action", attrs: { "aria-label": "Execute" } },
+    ...SCRIPT_MODES.map((m) => h("option", { value: m.id, text: m.label })),
+  );
+}
+
+/** Opens Custom Selection and applies it, or writes it as a script. */
 export async function customSelectionDialog(): Promise<void> {
   const doc = store.session?.doc;
   if (!doc || !store.activeLayerId) return;
@@ -193,23 +238,35 @@ export async function customSelectionDialog(): Promise<void> {
     { cls: "menu-dialog-input menu-dialog-select cs-action", attrs: { "aria-label": "Selection" } },
     ...ACTIONS.map((a) => h("option", { value: a.id, text: a.label })),
   );
+  const mode = scriptModeSelect();
   const where = store.editGroupId ? "the group being edited" : "the active layer";
 
-  const result = await showDialog<{ ids: string[]; action: Action }>({
+  const result = await showDialog<{ ids: string[]; action: Action } | { script: string; language: "python" | "vectorscript" }>({
     title: "Custom Selection",
-    okLabel: "Select",
+    okLabel: "OK",
     cls: "cs-dialog",
     body: [
+      h("label", { cls: "menu-dialog-field" }, h("span", { cls: "menu-dialog-label", text: "Execute" }), mode),
       h("p", { cls: "muted", text: `Objects in ${where} that meet every criterion:` }),
       ...criteria.body,
       h("label", { cls: "menu-dialog-field" }, h("span", { cls: "menu-dialog-label", text: "Selection" }), action),
     ],
     check: () => {
+      const m = mode.value as ScriptMode;
+      if (m !== "now") {
+        const s = criteria.script();
+        return "error" in s ? { error: s.error, focus: s.focus ?? mode } : { value: { script: selectionScript(m, s.criteria, action.value as Action), language: m } };
+      }
       const found = criteria.matches();
       return "error" in found ? found : { value: { ids: found.ids, action: action.value as Action } };
     },
   });
   if (!result) return;
+  if ("script" in result) {
+    const { addScript } = await import("../features/python/scriptPalettes.ts");
+    await addScript(result.language, result.script, "Custom Selection");
+    return;
+  }
 
   const next = new Set(result.action === "replace" ? [] : store.selection);
   for (const id of result.ids) {
