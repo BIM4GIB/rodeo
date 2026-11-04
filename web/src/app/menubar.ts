@@ -720,6 +720,22 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           enabled: canCreateViewport,
           run: () => void import("./multipleViewports.ts").then((m) => m.createMultipleViewportsDialog()),
         },
+        {
+          label: "Update Selected Viewports",
+          enabled: () => {
+            const doc = store.session?.doc;
+            return !!doc && [...store.selection].some((id) => doc.viewport(id) !== null);
+          },
+          run: () => void import("./viewportUpdate.ts").then((m) => m.updateViewports(true)),
+        },
+        {
+          label: "Update All Viewports",
+          enabled: () => {
+            const doc = store.session?.doc;
+            return !!doc && doc.layers().some((l) => l.kind === "sheet" && doc.viewportIds(l.id).length > 0);
+          },
+          run: () => void import("./viewportUpdate.ts").then((m) => m.updateViewports(false)),
+        },
         { label: "Set Sun Position…", enabled: hasDoc, run: () => void setSunPosition() },
         { label: "Set Lighting Options…", enabled: hasDoc, run: () => void import("./lightingOptions.ts").then((m) => m.lightingOptionsDialog()) },
         "-",
@@ -1816,7 +1832,12 @@ function drawingRows(
     run: () => locateResource(r, () => showPalette("resources")),
   }));
   const own: Row[] = [
-    ...(annotatableViewport(under) ? [{ label: "Edit Annotations", run: () => editAnnotations(under) }] : []),
+    ...(annotatableViewport(under)
+      ? [
+          { label: "Edit Annotations", run: () => editAnnotations(under) },
+          { label: "Update", run: () => void import("./viewportUpdate.ts").then((m) => m.updateViewports(false, under)) },
+        ]
+      : []),
     ...(canAddDimensions(under) ? [{ label: "Add Dimension(s)", run: () => startAddDimensions(under) }] : []),
     ...chain,
     ...(canConvertArc(under) ? [{ label: "Convert Arc to Radius Polyline", run: () => convertArcToRadiusPolyline(under) }] : []),

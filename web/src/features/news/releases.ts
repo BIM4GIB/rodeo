@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:18:00Z",
+    "update-viewports",
+    "Update section and elevation viewports",
+    `View › Update Selected Viewports and Update All Viewports redraw section, elevation and multiple-view viewports from the model as it is now.
+- Right-click a viewport and choose Update to redraw just that one.
+- Notes and dimensions you added in the viewport's annotations stay put.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:17:00Z",
     "duplicate-on-layers",
     "Duplicate title block borders on layers",

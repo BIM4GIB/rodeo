@@ -140,7 +140,7 @@ export async function createInteriorElevationDialog(): Promise<void> {
       { kind: "check", key: "beyond", label: "Display extents beyond cut plane", value: true },
       { kind: "check", key: "label", label: "Use drawing label", value: true },
     ],
-    `Each look runs across the room from wall to wall and floor to ceiling: the nearest faces straight out from the ${room.isShape ? "shape's middle, the shape's sides bounding it across" : "marker's middle"}, ${EYE_MM / 1000} m above its layer, else the model's extents. Each is drawn into its viewport's annotations as the model is now; they aren't kept up to date.`,
+    `Each look runs across the room from wall to wall and floor to ceiling: the nearest faces straight out from the ${room.isShape ? "shape's middle, the shape's sides bounding it across" : "marker's middle"}, ${EYE_MM / 1000} m above its layer, else the model's extents. Each is drawn into its viewport's annotations as the model is now; View › Update Selected Viewports draws them again.`,
   );
   if (!v || store.session !== session) return;
   const chosen = v.choice("sheet");

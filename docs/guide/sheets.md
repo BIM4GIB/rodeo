@@ -18,7 +18,7 @@ This page covers viewports on sheets and their data visualisations, worksheets a
 
 Look sets which side of the line, as drawn, the view faces; a section line's arrows set it for you. Display extents beyond cut plane draws what lies beyond, as far as the limit (0 for no limit); untick it to draw the cut alone. The viewport is named by its drawing and sheet numbers, with a drawing label under it.
 
-**Limits:** the drawing is made once, as the model is then, and isn't kept up to date. A line with corners is cut straight from its first point to its last. Only what lies across the line's length is drawn. The section line's bubbles aren't renumbered, and there are no render modes or section styles.
+**Limits:** the drawing is made as the model is then, and stays so till you update it (see Update Selected Viewports). A line with corners is cut straight from its first point to its last. Only what lies across the line's length is drawn. The section line's bubbles aren't renumbered, and there are no render modes or section styles.
 
 ### Create Interior Elevation Viewport…
 
@@ -26,13 +26,13 @@ Look sets which side of the line, as drawn, the view faces; a section line's arr
 
 Each elevation runs from the wall behind the look to the wall in front, across from wall to wall and up from floor to ceiling, drawn as a section viewport is. A shape gets an Interior Elevation Marker at its middle with the numbers.
 
-**Limits:** the walls are found straight out from the marker's middle, 1 m above its layer, so something in the way (a column, a tall cupboard) stops a look short; draw a shape round the room to set the walls yourself. The viewports are drawn once and aren't linked to the marker.
+**Limits:** the walls are found straight out from the marker's middle, 1 m above its layer, so something in the way (a column, a tall cupboard) stops a look short; draw a shape round the room to set the walls yourself. The viewports are drawn as the model is then, till updated, and aren't linked to the marker.
 
 ### Create Horizontal Section Viewport…
 
 **View › Create Horizontal Section Viewport…** cuts the 3D model level at a height above the active design layer and draws the plan it makes on a sheet: walls and other objects the cut passes through filled, and what lies below drawn in thin lines where nothing nearer hides it. Set the Cut Plane height in the dialog (1200 mm at first), and how far below to look.
 
-**Limits:** the cut is drawn once and isn't kept up to date. Nothing above the cut plane is drawn, the height is measured from the active layer only, and 2D objects aren't cut.
+**Limits:** the cut is drawn as the model is then, till updated. Nothing above the cut plane is drawn, the height is measured from the active layer only, and 2D objects aren't cut.
 
 ### Create Multiple Viewports…
 
@@ -43,7 +43,19 @@ Each elevation runs from the wall behind the look to the wall in front, across f
 
 The views line up with Front and are centred on the active sheet layer, or on a new sheet layer when a design layer is active. The isometric is Right Isometric in third angle and Left Isometric in first.
 
-**Limits:** the views are drawn once, hidden-line, and aren't kept up to date. There are no viewport styles.
+**Limits:** the views are drawn hidden-line, as the model is then, till updated. There are no viewport styles.
+
+### Update Selected Viewports and Update All Viewports
+
+Section, interior elevation, horizontal section and multiple-view viewports are drawn as the model is when you make them. After the model changes, draw them again:
+
+- **View › Update Selected Viewports** redraws the selected viewports.
+- **View › Update All Viewports** redraws every one on every sheet layer.
+- Right-click a viewport and choose **Update** to redraw just that one.
+
+Each is cut again through the same plane, of the same design layers, leaving out the classes hidden in it. The new drawing takes the old one's place, the viewport's box grows or shrinks to fit, and anything you added to its annotations stays. One undo puts everything back.
+
+**Limits:** plan viewports already draw live, and viewports from Vectorworks files show the drawing saved in the file, so neither changes. Out-of-date viewports aren't marked, and nothing updates on its own before printing or exporting.
 
 ### How viewports draw
 

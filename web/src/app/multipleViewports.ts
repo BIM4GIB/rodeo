@@ -3,7 +3,7 @@
 // projection (orthoViews.ts) and centred on a sheet layer: the active one when it's a sheet, else a
 // new one. As Vectorworks does with no viewport style, the views are hidden-line, of the layers and
 // classes visible now; Rodeo draws them into each viewport's annotations as the model stands when
-// they're made (sectionCut.ts, as the section viewports are), not kept up to date. Vectorworks also
+// they're made (sectionCut.ts, as the section viewports are), till updated (viewportUpdate.ts). Vectorworks also
 // takes a viewport style, which Rodeo doesn't have.
 
 import { attempt, setActiveLayer, setSelection, zoomToSelection } from "./commands.ts";
@@ -57,7 +57,7 @@ export async function createMultipleViewportsDialog(): Promise<void> {
       { kind: "heading", key: "views", label: "Views" },
       ...ORTHO_VIEWS.map((view) => ({ kind: "check" as const, key: view, label: view === "iso" ? "Isometric" : viewName(view, "first"), value: on(view) })),
     ],
-    `The visible design layers' 3D objects, their classes shown, as hidden-line views, laid out round Front and centred on ${active?.kind === "sheet" ? `the sheet layer ${active.name}` : "a new sheet layer"}. The isometric is Right Isometric in third angle projection and Left Isometric in first. They're drawn into the viewports' annotations as the model is now; they aren't kept up to date.`,
+    `The visible design layers' 3D objects, their classes shown, as hidden-line views, laid out round Front and centred on ${active?.kind === "sheet" ? `the sheet layer ${active.name}` : "a new sheet layer"}. The isometric is Right Isometric in third angle projection and Left Isometric in first. They're drawn into the viewports' annotations as the model is now; View › Update Selected Viewports draws them again.`,
   );
   if (!v || store.session !== session) return;
   const views = ORTHO_VIEWS.filter((view) => v.flag(view));
@@ -104,7 +104,7 @@ export async function createMultipleViewportsDialog(): Promise<void> {
         taken.add(name);
         const box = drawing.box;
         const at = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
-        return addSectionViewport(s, sheetId, { drawing, scale, mid: spots.get(view) ?? { x: 0, y: 0 }, at, name, label: null });
+        return addSectionViewport(s, sheetId, { drawing, scale, mid: spots.get(view) ?? { x: 0, y: 0 }, at, name, label: null, outside: true });
       });
       return { sheetId, ids };
     }),

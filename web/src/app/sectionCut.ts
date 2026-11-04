@@ -50,6 +50,8 @@ export interface SectionPiece {
 export interface SectionDrawing {
   readonly pieces: SectionPiece[];
   readonly box: BBox | null;
+  /** the frame it was drawn through (none for a line of no length) */
+  readonly frame?: SectionFrame;
 }
 
 /** faces meeting at more than 25° make a crease that's drawn: the cosine */
@@ -209,21 +211,27 @@ function chain(segs: readonly (readonly [string, string])[], at: ReadonlyMap<str
 
 /** The section the plane makes of the meshes. */
 export function sectionDrawing(meshes: readonly CutMesh[], plane: SectionPlane): SectionDrawing {
+  const frame = lineFrame(plane);
+  return frame ? sectionView(meshes, frame) : { pieces: [], box: null };
+}
+
+/** The frame a section along a line looks through: across it from the line's start, up from 0; null for a line of no length. */
+export function lineFrame(plane: SectionPlane): SectionFrame | null {
   const ux = plane.b.x - plane.a.x;
   const uy = plane.b.y - plane.a.y;
   const length = Math.hypot(ux, uy);
-  if (!(length > 0)) return { pieces: [], box: null };
+  if (!(length > 0)) return null;
   // looking to the line's left it runs left to right across the view; to its right, right to left
   const nx = plane.look === "left" ? -uy / length : uy / length;
   const ny = plane.look === "left" ? ux / length : -ux / length;
-  return sectionView(meshes, {
+  return {
     origin: [plane.a.x, plane.a.y, 0],
     right: [ny, -nx, 0],
     up: [0, 0, 1],
     toward: [nx, ny, 0],
     depth: plane.depth,
     across: { x0: plane.look === "left" ? 0 : -length, x1: plane.look === "left" ? length : 0, y0: plane.bottom ?? -Infinity, y1: plane.top ?? Infinity },
-  });
+  };
 }
 
 /** A cut plane in any direction and the view square to it: what Create Horizontal Section Viewport looks down with. */
@@ -684,7 +692,7 @@ export function sectionView(meshes: readonly CutMesh[], frame: SectionFrame): Se
     for (const l of [...piece.cutLines, ...lines]) grow(l);
     pieces.push(piece);
   }
-  return { pieces, box: pieces.length ? { x0: bx0, y0: by0, x1: bx1, y1: by1 } : null };
+  return { pieces, box: pieces.length ? { x0: bx0, y0: by0, x1: bx1, y1: by1 } : null, frame };
 }
 
 /** How far from `from` along `dir` (a unit vector) the nearest of the meshes' faces lies, or null when it meets none. */
