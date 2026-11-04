@@ -13,6 +13,19 @@ import { deflater, inflater } from "./inflate.ts";
 /** files this big open with their big unread parts left in them */
 export const HOLD_FROM = 256 << 20;
 
+/** Only mark a completed snapshot saved if no change (including undo/redo or remote edits) happened while writing it. */
+export async function saveSnapshot<T>(session: EditSession, write: () => Promise<T>, saved: () => void): Promise<T> {
+  let changed = false;
+  const off = session.onChange(() => (changed = true));
+  try {
+    const result = await write();
+    if (!changed) saved();
+    return result;
+  } finally {
+    off();
+  }
+}
+
 /** How to open `data` (StreamOptions): a large file's big unread parts are left in it, and read from it again should it change on disk. */
 export function holdOptions(data: Uint8Array | Blob, handle: FileSystemFileHandle | null): Pick<StreamOptions, "hold" | "refresh"> {
   if (data instanceof Uint8Array || data.size < HOLD_FROM) return {};
