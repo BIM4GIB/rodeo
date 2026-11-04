@@ -22,6 +22,18 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:22:00Z",
+    "save-recovery-correctness",
+    "Safer saves and recovery",
+    `Recovery copies stay with each drawing, including drawings in background tabs.
+- Saving one drawing leaves the others' recovery copies intact, and recovered drawings open with unsaved changes.
+- Edits made during a download stay unsaved; cloud uploads cannot overwrite live edits that arrived during the upload.
+- Large collaborative edits apply reliably, and damaged file bounds are rejected when opening.
+- Running renders no longer reserve AI credit twice. Windows servers use the intended cache policy for editor updates.
+- The Python reader recognises shifted layer names and sheet titles.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:19:00Z",
     "script-symbol-calls",
     "Script calls for symbols",

@@ -25,7 +25,7 @@ const r = new Replica(s, 0, { send() { sent++; }, undone() {}, queued() {} });
 s.addObjects(s.doc.layers()[0].id, [{ kind: "line", a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }]);
 const before = s.doc.toBytes();
 // Header application fails after records were spliced: the model must roll back both.
-assert.throws(() => r.remote(1, { start: 0, del: 0, add: [], kind: "all", ids: [], header: { at: -1, bytes: new Uint8Array(1) } }), /header patch/);
+assert.throws(() => r.remote(1, { start: 0, del: 1, add: [], kind: "all", ids: [], header: { at: -1, bytes: new Uint8Array(1) } }), /header patch/);
 assert.deepEqual(s.doc.toBytes(), before);
 assert.equal(r.applied, 0);
 assert.equal(r.idle(), false);

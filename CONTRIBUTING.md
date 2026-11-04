@@ -94,6 +94,12 @@ each one says at its top how to run it.
   with its own data folder.
 - Python: `python3 -m unittest discover -s tests` from the repository root.
 
+Recovery storage also has a browser check: start Vite and use a fresh, isolated browser
+profile on that local origin, then run
+`await (await import('/src/app/recovery.check.ts')).checkRecovery()` in its console.
+It exercises real IndexedDB and Web Locks and refuses to run when backups already exist.
+Do not run it on an origin holding work you want to keep.
+
 Run the checks for the code you change, and add one when you fix a bug or
 learn something new about a format.
 

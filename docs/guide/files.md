@@ -10,6 +10,14 @@ Open a `.vwx` file with **Open** or by dropping it on the window. **Open** also 
 
 **File › Open Recent** lists the drawings opened or saved that way (the browser keeps their file handles, not the drawings). **File › Revert** reopens the saved file.
 
+Edits made while a save or download is being prepared remain unsaved; save again to include them. A file whose settings extend beyond its available bytes is refused when opening.
+
+### Saving shared drawings
+
+A cloud upload that started outside the live session is refused if live edits arrive while it is uploading. Reopen the cloud drawing to see those edits before saving again.
+
+If a shared edit cannot be applied, collaboration stops and asks you to keep a copy of your work and reopen the cloud drawing.
+
 ### Save a Copy As… and Save All
 
 **File › Save a Copy As…** writes the drawing as it stands to a new file, while the window goes on working on its own.
@@ -18,9 +26,11 @@ Open a `.vwx` file with **Open** or by dropping it on the window. **Open** also 
 
 ### Autosave
 
-While a drawing has unsaved changes, a copy is kept in the browser every 5 minutes, and offered back when Rodeo starts after a crash or a closed tab. **Edit › Preferences…** sets how often, or turns it off.
+While a drawing has unsaved changes, its own copy is kept in the browser every 5 minutes, including when another drawing tab is in front. Saving or explicitly discarding one drawing removes only its copy. **Edit › Preferences…** sets how often, or turns it off.
 
-**Limits:** drawings over 150 MB are not copied, since writing one out takes as much memory again.
+After a crash or a closed browser tab, Rodeo offers each kept drawing separately. **Open Copy** opens it in a drawing tab with unsaved changes; save it to keep those changes. Copies belonging to another open browser window are left alone. Older backups from before separate copies were supported can still be recovered.
+
+**Limits:** drawings over 150 MB, and drawings with parts still held in another file, are not copied. Writing a copy takes as much memory again. If browser storage is full or blocked, the copy is tried again at the next interval. Some browsers may offer a copy that is still open elsewhere; in that case, its original backup is kept.
 
 ## Tabs
 

@@ -538,6 +538,12 @@ Renaming changes the record length; only the record's own size field needs
 updating. Besides the record itself, only a story's levels (§5.1) store a
 design layer's name; openvwx renames them with the layer.
 
+The Python layer reader and rename writer also discover the kind/name/title
+shift per record, with bounds checks on both UTF-16 strings. Generated tests
+cover shifts of 0, 16 and 18 bytes, Unicode names and sheet titles, and preserving
+unrelated bytes when renaming. This is a reader/writer regression check, not
+additional evidence of compatibility with native Vectorworks.
+
 ### 5.1 Stories (type 76 `YRTS`)
 
 Confirmed in the four demo files that have stories (2023 to 2026, five each;
