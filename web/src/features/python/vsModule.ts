@@ -99,6 +99,10 @@ class _State(object):
         self.active_class = snap["activeClass"]
         self.palette = snap["palette"]
         self.symbols = dict((s["index"], s["name"]) for s in snap["symbols"])
+        self.symbol_boxes = dict((s["index"], s.get("bbox")) for s in snap["symbols"])
+        # the Symbol tool's symbol as the script leaves it (SetActSymbol, Symbol), by name index
+        self.active_symbol = snap.get("activeSymbol")
+        self.symbol_changed = False
         self.formats = dict((f["name"], f["format"]) for f in snap["formats"])
         self.new_attrs = dict(snap["newAttrs"])
         # what a new object takes from the drawing where the Attributes palette sets nothing
@@ -175,6 +179,7 @@ def _result():
         "tool": s.tool,
         "classMode": s.class_mode,
         "layerMode": s.layer_mode,
+        "activeSymbol": s.active_symbol if s.symbol_changed else None,
     })
 
 
@@ -326,6 +331,9 @@ def _transform_copy(o, m):
             g["ry"] *= sy
         if g.get("at"):
             g["at"] = _apply(m, g["at"])
+    if o.get("ins") is not None:
+        o["ins"] = _apply(m, o["ins"])
+        o["turned"] = (float(o.get("turned") or 0) + _math.degrees(_math.atan2(m[1], m[0]))) % 360
     b = o.get("bbox")
     if b:
         corners = [_apply(m, p) for p in ([b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]])]
@@ -3907,5 +3915,76 @@ def Volume2Str(value):
 
 def Str2Volume(str_):
     return _unit_value(str_, _volume_mark(), _VOLUME_MM3)
+
+
+
+# ---- symbols (Vectorworks' Objects - Symbols calls) ----
+
+def _symbol_index(name):
+    name = str(name)
+    for i, n in _S.symbols.items():
+        if n == name:
+            return i
+    raise ValueError("the drawing has no symbol named %r" % name)
+
+
+def Symbol(symbolName, *args):
+    x, y, angle = _nums(args, 3, "Symbol")
+    s = _S
+    index = _symbol_index(symbolName)
+    at = [_mm(x), _mm(y)]
+    s.seq += 1
+    tmp = "new:%d" % s.seq
+    s.ops.append(["symbol", tmp, s.active_layer, index, at, s.active_class])
+    b = s.symbol_boxes.get(index)
+    o = {"id": tmp, "type": 15, "layer": s.active_layer, "parent": s.pio, "cls": s.active_class, "name": "", "sel": False,
+         "attrs": None, "shape": None, "records": {}, "sym": index, "ins": list(at), "turned": 0.0,
+         "bbox": [b[0] + at[0], b[1] + at[1], b[2] + at[0], b[3] + at[1]] if b else None}
+    s.objs[tmp] = o
+    if s.groups:
+        s.groups[-1].append(tmp)
+    s.kids.setdefault(s.pio or s.active_layer, []).append(tmp)
+    s.last_new = tmp
+    if angle:
+        _xform([tmp], _rotation(at[0], at[1], angle))
+    # Vectorworks makes the symbol it placed the active one
+    s.active_symbol = index
+    s.symbol_changed = True
+
+
+def _placed(h, what):
+    o = _obj(h, "a symbol or plug-in object")
+    if o.get("ins") is None:
+        raise TypeError("vs.%s takes a symbol or plug-in object" % what)
+    return o
+
+
+def GetSymLoc(symHd):
+    return _pt_out(_placed(symHd, "GetSymLoc")["ins"])
+
+
+def GetSymRot(symHd):
+    return round(float(_placed(symHd, "GetSymRot").get("turned") or 0), 9)
+
+
+def SymDefNum():
+    return len(_S.symbols)
+
+
+def SetActSymbol(name):
+    _S.active_symbol = _symbol_index(name)
+    _S.symbol_changed = True
+
+
+def SymbolToGroup(h, convertAction=0):
+    o = _obj(h, "a symbol")
+    if o["type"] != 15:
+        raise TypeError("vs.SymbolToGroup takes a symbol")
+    _S.ops.append(["togroup", o["id"]])
+    o["type"] = 11
+    o["sym"] = None
+    o["ins"] = None
+    # as in Vectorworks, LNewObj doesn't give the group
+    _S.last_new = None
 
 `;

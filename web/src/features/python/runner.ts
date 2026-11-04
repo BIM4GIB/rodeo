@@ -251,6 +251,8 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
         bbox: box ? [box.x0, box.y0, box.x1, box.y1] : null,
         attrs: o.attrs,
         byClass: o.byClass ?? [],
+        ins: o.insertion ? [o.insertion.x, o.insertion.y] : null,
+        turned: o.turned ?? 0,
         sym: o.symbol ?? null,
         records,
         shape: g
@@ -320,7 +322,8 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
     activeLayer,
     activeClass: className.get(store.activeClassIndex) ?? "None",
     palette: doc.colors().map((c) => [c.index, ...rgb(c.css)]),
-    symbols: doc.symbolDefs().map((x) => ({ index: x.index, name: x.name })),
+    symbols: doc.symbolDefs().map((x) => ({ index: x.index, name: x.name, bbox: x.bbox ? [x.bbox.x0, x.bbox.y0, x.bbox.x1, x.bbox.y1] : null })),
+    activeSymbol: store.activeSymbol,
     formats: [...formats].map(([name, format]) => ({ name, format })),
     objects,
     selection: [...store.selection],
@@ -362,6 +365,8 @@ interface Result {
   readonly text?: { readonly pts?: number; readonly h?: number; readonly v?: number } | null;
   /** the tool it chose with SetTool, by Vectorworks' number */
   readonly tool?: number | null;
+  /** the Symbol tool's symbol as it leaves it (SetActSymbol, Symbol): a definition's name index */
+  readonly activeSymbol?: number | null;
   /** Layer Options and Class Options as it leaves them (SetLayerOptions, SetClassOptions) */
   readonly layerMode?: DisplayMode | null;
   readonly classMode?: DisplayMode | null;
@@ -510,6 +515,17 @@ function applySteps(s: EditSession, steps: readonly unknown[][], around: Around 
             const now = origin(id);
             if (want && now && (want.x !== now.x || want.y !== now.y)) s.moveObjects([id], want.x - now.x, want.y - now.y);
           });
+          break;
+        }
+        case "symbol": {
+          const at = a[3] as number[];
+          made.set(str(a[0]), s.insertSymbol(real(a[1]), Number(a[2]), { x: Number(at[0]), y: Number(at[1]) }, a[4] == null ? undefined : classIndex(str(a[4]))));
+          break;
+        }
+        case "togroup": {
+          // the group takes the symbol's place: later steps naming the symbol name it
+          const [group] = s.convertToGroups([real(a[0])]);
+          if (group) made.set(str(a[0]), group);
           break;
         }
         case "geom":
@@ -862,6 +878,11 @@ function applyDefaults(result: Result): void {
     }
   }
   if (display) store.emit("display");
+  const symbol = result.activeSymbol;
+  if (symbol != null && symbol !== store.activeSymbol && store.session?.doc.symbolDefs().some((d) => d.index === symbol)) {
+    store.activeSymbol = symbol;
+    store.emit("symbol");
+  }
   if (result.tool != null) {
     const id = toolOfSelector(result.tool);
     if (id) appContext()?.setTool(id as ToolId);

@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:19:00Z",
+    "script-symbol-calls",
+    "Script calls for symbols",
+    `Python scripts and Vectorscripts can place symbols and read where they stand.
+- Symbol places a symbol by name at a point, turned, on the active layer.
+- GetSymLoc and GetSymRot read a symbol's or plug-in object's insertion point and rotation.
+- SetActSymbol picks the Symbol tool's symbol, and SymbolToGroup turns an instance into a group.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:18:00Z",
     "script-criteria-functions",
     "Script criteria functions",
