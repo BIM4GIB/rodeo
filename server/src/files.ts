@@ -407,6 +407,7 @@ export function registerFiles(app: Hono): void {
     const seqHeader = c.req.header("x-collab-seq");
     const seq = seqHeader === undefined ? null : parseSeq(seqHeader);
     if (seq === null && !hub.canSavePlain(fileId)) fail(409, "A live session is editing this drawing", "conflict");
+    const plainSeq = seq === null ? hub.currentSeq(fileId) : null;
     const base = c.req.header("x-base-version") || undefined;
     assertBase(fileId, base);
     const label = labelOf(c.req.header("x-version-label"));
@@ -421,6 +422,9 @@ export function registerFiles(app: Hono): void {
     try {
       saved = tx(() => {
         assertBase(fileId, base);
+        if (seq === null && (!hub.canSavePlain(fileId) || hub.currentSeq(fileId) !== plainSeq)) {
+          fail(409, "The live session changed while this drawing was uploading. Reload it before saving.", "conflict");
+        }
         assertSeq(fileId, seq, hub.currentSeq(fileId));
         return addVersionTx({
           fileId,
@@ -429,7 +433,7 @@ export function registerFiles(app: Hono): void {
           size: received.size,
           sha256: received.sha256,
           label,
-          collabSeq: seq ?? hub.currentSeq(fileId),
+          collabSeq: seq ?? plainSeq!,
           autosave,
         });
       });
