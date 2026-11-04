@@ -1437,6 +1437,8 @@ export interface EditSession {
   joinSince(depth: number): void;
   onChange(listener: (e: ChangeEvent) => void): () => void;
   markSaved(): void;
+  /** A recovered copy has no saved state until explicitly saved. */
+  markUnsaved(): void;
   /** Called with each change to the record list once it is made (edits, undo, redo); not for applyRemote. */
   onStep(listener: (op: SpliceOp) => void): () => void;
   /** The record list as it stands, for collaboration to read what a change replaces. Never change it or its records. */

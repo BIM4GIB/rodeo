@@ -810,7 +810,7 @@ export class Session implements EditSession {
   readonly doc: Model;
   private undoStack: Step[] = [];
   private redoStack: Step[] = [];
-  private savedTop: Step | null = null;
+  private savedTop: Step | null | undefined = null;
   private listeners = new Set<(e: ChangeEvent) => void>();
   private templates = new Map<number, Template>();
   /** an aux record's header per type, as the file has one (null: it has none) */
@@ -1023,6 +1023,11 @@ export class Session implements EditSession {
 
   markSaved(): void {
     this.savedTop = this.undoStack.at(-1) ?? null;
+    this.emit("all", []);
+  }
+
+  markUnsaved(): void {
+    this.savedTop = undefined;
     this.emit("all", []);
   }
 
