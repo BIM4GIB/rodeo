@@ -10,7 +10,7 @@
 // came with it; an object plug-in's script draws into its object (one in the drawing, or one placed
 // as the run is applied), replacing what it held, in the same undo step.
 
-import { fieldKind, type Attributes, type Affine, type Arrange, type ByClassGroup, type EditSession, type FieldKind, type NewShape, type PluginFieldSpec, type Pt, type RecordValue, type Visibility } from "../../core/index.ts";
+import { fieldKind, type Attributes, type Affine, type Arrange, type ByClassGroup, type EditSession, type FieldKind, type NewShape, type PluginFieldSpec, type Pt, type RecordValue, type TextStyle, type Visibility } from "../../core/index.ts";
 import { setActiveClass, setActiveLayer, setSelection } from "../../app/commands.ts";
 import { h } from "../../app/dom.ts";
 import { appContext, registerOverlay } from "../../app/ext.ts";
@@ -222,6 +222,7 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
   const units = scriptUnits(doc.info.units);
   const classes = doc.classes();
   const className = new Map(classes.map((c) => [c.index, c.name]));
+  const fonts = doc.fonts();
   const formats = new Map<string, number>(doc.recordFormats().map((f) => [f.name, f.format]));
   const objects: unknown[] = [];
   // what the plug-in object being drawn holds now: Vectorworks clears it before the script runs
@@ -265,6 +266,19 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
               sweep: g.sweepAngle,
               text: g.text,
               at: g.anchor ? [g.anchor.x, g.anchor.y] : undefined,
+              ...(g.kind === "text"
+                ? {
+                    size: g.textSize,
+                    angle: g.textAngle,
+                    h: g.hAlign,
+                    v: g.vAlign,
+                    font: g.fontIndex === undefined ? undefined : fonts[g.fontIndex],
+                    tstyle: g.textStyle,
+                    bold: g.bold,
+                    italic: g.italic,
+                    underline: g.underline,
+                  }
+                : {}),
             }
           : null,
       });
@@ -311,6 +325,7 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
     selection: [...store.selection],
     newAttrs: store.drawAttrs,
     templateAttrs: s.templateAttributes("rect"),
+    fonts,
     classMode: store.classMode,
     layerMode: store.layerMode,
     textPaperMm: TEXT_PAPER_MM,
@@ -480,6 +495,22 @@ function applySteps(s: EditSession, steps: readonly unknown[][], around: Around 
           if (!BY_CLASS.has(str(a[1]))) throw new Error(`unknown attribute group ${str(a[1])}`);
           s.setAttributesByClass(ids(a[0]).map(real), str(a[1]) as ByClassGroup, a[2] !== false);
           break;
+        case "textstyle": {
+          // Rodeo keeps a restyled text where it stands; Vectorworks keeps its origin (the text shifts), or
+          // puts the origin at a point (SetTextOrientation), unless the script asked otherwise (SetTextJustN)
+          const list = ids(a[0]).map(real);
+          const origin = (id: string): Pt | undefined => s.doc.object(id)?.shape?.anchor;
+          const before = list.map(origin);
+          s.setTextStyle(list, a[1] as TextStyle);
+          const to = a[2];
+          if (!to) break;
+          list.forEach((id, i) => {
+            const want = Array.isArray(to) ? { x: Number(to[0]), y: Number(to[1]) } : before[i];
+            const now = origin(id);
+            if (want && now && (want.x !== now.x || want.y !== now.y)) s.moveObjects([id], want.x - now.x, want.y - now.y);
+          });
+          break;
+        }
         case "name":
           s.setObjectName(real(a[0]), str(a[1]));
           break;
@@ -547,8 +578,10 @@ export interface RunEvents {
 let worker: Worker | null = null;
 let ready: Promise<boolean> | null = null;
 let running: ((r: Result) => void) | null = null;
+/** where the running script's print output goes: the run's own, not the first run's that started the worker */
+let printTo: RunEvents | null = null;
 
-function startWorker(events: RunEvents): Promise<boolean> {
+function startWorker(): Promise<boolean> {
   if (worker && ready) return ready;
   const url = URL.createObjectURL(new Blob([workerSource()], { type: "text/javascript" }));
   const w = new Worker(url);
@@ -570,7 +603,7 @@ function startWorker(events: RunEvents): Promise<boolean> {
           return;
         case "print":
         case "warn":
-          events.print(m.type, m.text ?? "");
+          printTo?.print(m.type, m.text ?? "");
           return;
         case "ask":
           void answer(w, m.id ?? 0, m.kind ?? "", m.args ?? "[]");
@@ -838,9 +871,10 @@ export async function runScript(code: string, file: string, events: RunEvents, p
   const s = store.session;
   if (!s) return { error: { name: "Error", message: "Open a drawing first.", line: null }, steps: 0 };
   if (!worker) events.print("system", "Starting Python (the first run fetches it, about 11 MB)…");
+  printTo = events;
   let jspi: boolean;
   try {
-    jspi = await startWorker(events);
+    jspi = await startWorker();
   } catch (err) {
     return { error: { name: "Error", message: err instanceof Error ? err.message : String(err), line: null }, steps: 0 };
   }

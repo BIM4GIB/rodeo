@@ -12,7 +12,7 @@ Python written for Vectorworks runs on the open drawing from **Plug-ins › Run 
 - opens and saves `.py` files
 - shows what it prints, with a failing line linked.
 
-The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs` module of more than 370 of Vectorworks' calls:
+The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs` module of more than 400 of Vectorworks' calls:
 
 - drawing: Rect, Oval, Arc, Poly, BeginPoly with ArcTo, CurveTo and CurveThrough, Poly3D, BeginPoly3D with Add3DPt, Locus, CreateText, BeginGroup…
 - walking the drawing by handle: FSActLayer, NextObj, ForEachObject and Count with search criteria, ForEachObjectInLayer
@@ -20,6 +20,7 @@ The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time
 - moving, turning, scaling, mirroring and duplicating
 - layers and classes: a class's fill, pen, line weight and opacity (SetClFPat, SetClLW, GetClFillFore…), RenameClass, DelClass, Class and Layer Options, CreateLayer, a layer's scale, elevation and visibility
 - the attributes new objects take: FFillPat, FPenSize, FFillFore…
+- text: SetTextSize, SetTextFont with GetFontID, SetTextStyle, SetTextJust, SetTextOrientation, TextFont and TextFace for new texts… A text is styled as a whole, so a call's run of characters styles all of it.
 - math, strings, vectors and 2D geometry: Sqrt, Num2StrF, SubString, Ang2Vec, Vec2Ang, CrossProduct, LineLineIntersection, CircleCircleInters, PtInPoly, Centroid…
 - the dialogs: StrDialog and the others wait for the answer where the browser can pause WebAssembly, as Chrome can.
 

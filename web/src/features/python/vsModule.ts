@@ -121,6 +121,11 @@ class _State(object):
         self.text_pts = None
         self.text_h = 1
         self.text_v = 1
+        # the font (a name), face (Bold 1, Italic 2, Underline 4) and angle CreateText gives new texts
+        self.text_font = None
+        self.text_face = None
+        self.text_angle = None
+        self.fonts = list(snap.get("fonts") or [])
         # the document's attributes, text settings and tool as the script leaves them, for after the run:
         # whether FillPat and the rest were called, the text settings set (pts, h, v), the SetTool tool
         self.attrs_set = False
@@ -637,10 +642,21 @@ def CreateText(text):
     scale = _S.layer_by_id[_S.active_layer]["scale"] or 1
     paper = _S.text_pts * 25.4 / 72 if _S.text_pts is not None else _S.text_paper_mm
     at = _S.pen
-    _add(
+    copy = {"kind": "text", "at": list(at), "text": str(text), "size": paper * scale, "h": _S.text_h, "v": _S.text_v}
+    tmp = _add(
         {"kind": "text", "at": _pt(at), "text": str(text), "height": paper * scale, "hAlign": _S.text_h, "vAlign": _S.text_v},
-        {"kind": "text", "at": list(at), "text": str(text)},
+        copy,
     )
+    style = {}
+    if _S.text_font is not None:
+        style["font"] = copy["font"] = _S.text_font
+    if _S.text_face is not None:
+        style.update(_face(_S.text_face))
+        copy.update(_face(_S.text_face))
+    if _S.text_angle:
+        style["angle"] = copy["angle"] = _S.text_angle
+    if style:
+        _S.ops.append(["textstyle", [tmp], style, "origin"])
 
 
 def BeginGroup():
@@ -3311,4 +3327,187 @@ def FFPatByClass():
 
 
 FFillColorByClass = FLSByClass = FLWByClass = FPenColorByClass = FMarkerByClass = FFPatByClass
+
+
+
+# ---- text objects (Vectorworks' Objects - Text calls) ----
+# Rodeo styles a text as a whole: a call that takes a position or a run of characters reads or sets all of it.
+# A restyled text keeps its origin, where its justification puts it, and the text shifts round it, except
+# with SetTextJustN and SetTextVertAlignN, which keep the text where it is
+
+_MM_PER_PT = 25.4 / 72
+
+
+def _text_of(h):
+    o = _obj(h, "a text object")
+    g = o.get("shape") or {}
+    if g.get("kind") != "text":
+        raise TypeError("expected a text object, got %r" % h)
+    return o, g
+
+
+def _pt_mm(o):
+    """A text's points in mm of the drawing: its point size times the layer scale."""
+    return _MM_PER_PT * (_S.layer_by_id.get(o["layer"], {}).get("scale") or 1)
+
+
+def _text_style(h, style, origin="origin"):
+    o, g = _text_of(h)
+    _S.ops.append(["textstyle", [o["id"]], style, origin])
+    return o, g
+
+
+def _face(bits):
+    b = int(bits)
+    return {"bold": bool(b & 1), "italic": bool(b & 2), "underline": bool(b & 4)}
+
+
+def GetTextSize(TextHd, Position=0):
+    o, g = _text_of(TextHd)
+    return round(float(g.get("size") or 0) / _pt_mm(o), 3)
+
+
+def SetTextSize(objectHd, Start, Count, Size):
+    o, g = _text_of(objectHd)
+    if float(Size) <= 0:
+        raise ValueError("a text size is more than 0, not %r" % Size)
+    g["size"] = float(Size) * _pt_mm(o)
+    _text_style(objectHd, {"size": g["size"]})
+
+
+def GetTextJust(TextHd):
+    return _text_of(TextHd)[1].get("h") or 1
+
+
+def SetTextJust(TextHd, JustFlag):
+    j = int(JustFlag)
+    if j not in (1, 2, 3):
+        raise ValueError("Rodeo's texts justify 1 (left), 2 (centre) or 3 (right), not %r" % JustFlag)
+    _text_style(TextHd, {"hAlign": j})[1]["h"] = j
+
+
+def SetTextJustN(TextHd, JustFlag):
+    j = int(JustFlag)
+    if j not in (1, 2, 3):
+        raise ValueError("Rodeo's texts justify 1 (left), 2 (centre) or 3 (right), not %r" % JustFlag)
+    _text_style(TextHd, {"hAlign": j}, None)[1]["h"] = j
+
+
+def GetTextVerticalAlign(TextHd):
+    return _text_of(TextHd)[1].get("v") or 1
+
+
+def SetTextVerticalAlign(TextHd, verticalAlignment):
+    v = int(verticalAlignment)
+    if not 1 <= v <= 5:
+        raise ValueError("a vertical alignment goes from 1 (top) to 5 (bottom), not %r" % verticalAlignment)
+    _text_style(TextHd, {"vAlign": v})[1]["v"] = v
+
+
+def SetTextVertAlignN(TextHd, verticalAlignment):
+    v = int(verticalAlignment)
+    if not 1 <= v <= 5:
+        raise ValueError("a vertical alignment goes from 1 (top) to 5 (bottom), not %r" % verticalAlignment)
+    _text_style(TextHd, {"vAlign": v}, None)[1]["v"] = v
+
+
+def GetFontID(fontName):
+    name = str(fontName)
+    for i, f in enumerate(_S.fonts):
+        if f.lower() == name.lower():
+            return i
+    _S.fonts.append(name)
+    return len(_S.fonts) - 1
+
+
+def GetFontName(fontID):
+    i = int(fontID)
+    return _S.fonts[i] if 0 <= i < len(_S.fonts) else ""
+
+
+def GetFontListSize():
+    return len(_S.fonts)
+
+
+def GetTextFont(objectHd, Position=0):
+    name = _text_of(objectHd)[1].get("font")
+    return GetFontID(name) if name else -1
+
+
+def SetTextFont(objectHd, Start, Count, FontNum):
+    name = GetFontName(FontNum)
+    if not name:
+        raise ValueError("no font has the number %r: GetFontID gives a font's" % FontNum)
+    _text_style(objectHd, {"font": name})[1]["font"] = name
+
+
+def GetTextStyle(TextHd, Position=0):
+    g = _text_of(TextHd)[1]
+    return (1 if g.get("bold") else 0) | (2 if g.get("italic") else 0) | (4 if g.get("underline") else 0)
+
+
+def SetTextStyle(objectHd, Start, Count, Style):
+    face = _face(Style)
+    _text_style(objectHd, face)[1].update(face)
+
+
+def GetTextOrientation(theText):
+    g = _text_of(theText)[1]
+    at = g.get("at") or [0, 0]
+    return ((_un(at[0]), _un(at[1])), round(float(g.get("angle") or 0), 9), False)
+
+
+def SetTextOrientation(theText, *args):
+    v = _flat(args)
+    if len(v) != 4:
+        raise TypeError("vs.SetTextOrientation takes the text, its origin, its angle and whether it's mirrored")
+    x, y, angle, mirrored = float(v[0]), float(v[1]), float(v[2]), v[3]
+    if mirrored:
+        raise ValueError("Rodeo doesn't mirror texts")
+    at = [_mm(x), _mm(y)]
+    g = _text_style(theText, {"angle": angle}, at)[1]
+    g["angle"] = angle
+    g["at"] = at
+
+
+def GetTextStyleRef(objectId):
+    return _text_of(objectId)[1].get("tstyle") or 0
+
+
+def GetTextStyleRefN(objectId, position=0):
+    return GetTextStyleRef(objectId)
+
+
+def SetTextStyleRef(objectId, textStyleRef):
+    _text_style(objectId, {"textStyle": int(textStyleRef)})[1]["tstyle"] = int(textStyleRef)
+
+
+def SetTextStyleRefN(objectId, start, count, textStyleRef):
+    SetTextStyleRef(objectId, textStyleRef)
+    return True
+
+
+# a text that follows its class's text style
+def IsTextStyleByClassN(objectId, position=0):
+    return GetTextStyleRef(objectId) == -2
+
+
+def SetTextStyleByClassN(objectId, start=0, count=0):
+    SetTextStyleRef(objectId, -2)
+    return True
+
+
+def TextFont(fontID):
+    name = GetFontName(fontID)
+    if not name:
+        raise ValueError("no font has the number %r: GetFontID gives a font's" % fontID)
+    _S.text_font = name
+
+
+def TextFace(s):
+    _S.text_face = int(s)
+
+
+def TextRotate(Rotation):
+    _S.text_angle = float(Rotation)
 `;

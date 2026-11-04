@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:16:00Z",
+    "script-text-calls",
+    "Script calls for text",
+    `Python scripts and Vectorscripts can read and style text objects.
+- Size, font, bold, italic and underline, justification, angle and text style: SetTextSize, SetTextFont, SetTextStyle, SetTextJust, SetTextOrientation and more.
+- TextFont, TextFace and TextRotate style the texts CreateText makes.
+- Fixed: what a script prints now shows where you ran it, not where the first script ran.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:15:00Z",
     "script-classes-layers",
     "Script calls for classes and layers",

@@ -269,7 +269,7 @@ _VS_OUT = {
     "getpenback": 1, "getpenfore": 1, "getpolypt": 2, "getpolylinevertex": 2, "getsegpt1": 1, "getsegpt2": 1,
     "getclfillfore": 1, "getclfillback": 1, "getclpenfore": 1, "getclpenback": 1, "getclopacityn": 1, "getopacitybyclassn": 1,
     "ffillfore": 0, "ffillback": 0, "fpenfore": 0, "fpenback": 0, "getdefaultopacity": 0, "getdefaultopacityn": 0,
-    "getzvals": 0, "getlayerelevation": 1,
+    "getzvals": 0, "getlayerelevation": 1, "gettextorientation": 1,
     "getunits": 0, "hcenter": 1, "rgbtocolorindex": 3, "vsogeteventinfo": 0,
     "getpt": 0, "getline": 0, "getrect": 0,
     "getitemtext": 2, "getbooleanitem": 2, "getthreestatecheckboxstate": 2, "getchoicecount": 2, "getcolorchoice": 2,
@@ -281,6 +281,8 @@ _VS_FN_OUT = {"getcustomobjectinfo": 0, "getplugininfo": 0, "geteditreal": 3, "g
 # hand values back through their last arguments: how many those are
 _VS_OUT_LAST = {"linelineintersection": 3, "comp": 2, "unionrect": 2}
 _VS_FN_OUT_LAST = {"circlecircleinters": 2, "linecircleintersect": 2}
+# the text faces of Vectorscript's TEXTSTYLE sets
+_FACES = {"bold": 1, "italic": 2, "underline": 4, "outline": 8, "shadow": 16}
 _PARAM_TYPES = {"bool": ("bool",), "int": ("int",), "real": ("real",), "str": ("str",)}
 # vs calls whose argument is search criteria written as they are, not as a string
 _CRITERIA = {"count": 0, "foreachobject": 1, "selectobj": 0, "dselectobj": 0}
@@ -1255,6 +1257,16 @@ class _Translator(object):
             code, typ = self.expr()
             self.want_sym(")")
             return "(%s)" % code, typ
+        if self.atsym("["):
+            # a set: Vectorscript's text faces, [Bold, Italic], as their bits
+            self.take()
+            items = []
+            while not self.atsym("]"):
+                items.append(self.expr()[0])
+                if self.atsym(","):
+                    self.take()
+            self.take()
+            return "(%s)" % " | ".join(["0"] + items), _INT
         if self.atkw("not"):
             self.take()
             code, typ = self.factor()
@@ -1286,6 +1298,8 @@ class _Translator(object):
                 return "None", _HANDLE
             if lname == "pi":
                 return "_m.pi", _REAL
+            if lname in _FACES:
+                return str(_FACES[lname]), _INT
             # a parameter of the plug-in running: P and its name
             ptype = vs._param_type(lname[1:]) if lname[:1] == "p" else None
             if ptype:
@@ -1294,7 +1308,7 @@ class _Translator(object):
             return self.fn_out_call(t, lname), _BOOL
         if lname in _VS_OUT or lname in _VS_OUT_LAST or lname in _BUILTIN_VAR:
             self.err("%s hands values back through its arguments: call it as a statement" % t[1], t)
-        typ = _STR if lname in ("concat", "copy", "chr", "num2str", "getname", "getclass", "getlname", "gettext", "strdialog") else None
+        typ = _STR if lname in ("concat", "copy", "chr", "num2str", "getname", "getclass", "getlname", "gettext", "strdialog", "getfontname") else None
         return self.ext_call(t, lname), typ
 
 
