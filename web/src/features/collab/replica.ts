@@ -74,6 +74,7 @@ export class Replica {
   private pending: Local | null = null;
   private queue: Local[] = [];
   private nextId = 1;
+  private failed = false;
   private readonly unStep: () => void;
 
   constructor(
@@ -90,7 +91,7 @@ export class Replica {
 
   /** Whether every change of ours is confirmed (the copy is exactly the server's at `applied`). */
   idle(): boolean {
-    return !this.pending && !this.queue.length;
+    return !this.failed && !this.pending && !this.queue.length;
   }
 
   stop(): void {
@@ -115,7 +116,7 @@ export class Replica {
 
   /** Sends the next change if none is in flight; `connected` false keeps them queued. */
   flush(connected: boolean): void {
-    if (this.pending || !this.queue.length || !connected) return;
+    if (this.failed || this.pending || !this.queue.length || !connected) return;
     const next = this.queue.shift()!;
     this.pending = next;
     const { op } = next;
@@ -130,6 +131,7 @@ export class Replica {
 
   /** The server accepted our change in flight as `seq`; false when the copies have come apart (reload). */
   ack(id: number, seq: number): boolean {
+    if (this.failed) return false;
     if (this.pending?.id !== id) return true;
     const doomed = this.pending.doomed;
     this.applied = seq;
@@ -139,6 +141,7 @@ export class Replica {
 
   /** The server refused our change in flight. */
   refused(id: number): void {
+    if (this.failed) return;
     const p = this.pending;
     if (p?.id !== id) return;
     this.pending = null;
@@ -151,6 +154,7 @@ export class Replica {
 
   /** After reconnecting: a change in flight may or may not have reached the server, so it and those after it go back. */
   dropInFlight(): void {
+    if (this.failed) return;
     if (!this.pending) return;
     if (!this.pending.doomed) {
       this.revert([this.pending, ...this.queue]);
@@ -162,7 +166,16 @@ export class Replica {
 
   /** Someone else's change, ordered by the server before every unconfirmed change of ours. */
   remote(seq: number, op: Incoming): void {
-    this.take(seq, op);
+    if (this.failed) throw new Error("This collaboration copy needs to be reopened");
+    const before = this.applied;
+    try {
+      this.take(seq, op);
+    } catch (err) {
+      this.applied = before;
+      this.failed = true;
+      this.unStep();
+      throw err;
+    }
   }
 
   /** remote's work: the runs theirs applied as here, or null when this copy held it already. */
@@ -202,10 +215,10 @@ export class Replica {
       if (kept > 0) this.hooks.queued();
       return theirs;
     }
-    locals.forEach((l, i) => (l.runs = rebased[i]));
-    this.applied = seq;
     const runs = op.runs.map((x, i) => ({ start: r[i].start, del: x.del, add: x.add }));
     this.session.applyRemote(spliceOp(runs, op.kind, op.ids, op.header));
+    locals.forEach((l, i) => (l.runs = rebased[i]));
+    this.applied = seq;
     return r;
   }
 

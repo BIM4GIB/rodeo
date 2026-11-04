@@ -324,6 +324,7 @@ class Live implements CollabSession {
     let welcomed = false;
     ws.onopen = () => ws.send(JSON.stringify({ t: "hello", versionId: this.versionId, proto: COLLAB_PROTOCOL }));
     ws.onmessage = (e) => {
+      if (this.closed || this.ws !== ws) return;
       let msg: ServerMessage;
       try {
         msg = JSON.parse(String(e.data)) as ServerMessage;
@@ -331,7 +332,15 @@ class Live implements CollabSession {
         return;
       }
       if (msg.t === "welcome") welcomed = true;
-      this.receive(msg);
+      try {
+        this.receive(msg);
+      } catch (err) {
+        this.leave();
+        const error = new Error("A shared edit could not be applied. Keep a copy of your work and reopen the cloud drawing.");
+        this.rejected(error.message);
+        failed?.(error);
+        console.warn("openvwx: collaboration stopped after an application failure", err);
+      }
     };
     ws.onclose = (e) => {
       if (this.ws !== ws) return;

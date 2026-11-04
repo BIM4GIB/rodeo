@@ -969,10 +969,19 @@ export class Session implements EditSession {
 
   applyRemote(op: SpliceOp): void {
     const runs: SpliceRun[] = op.more ? [op, ...op.more] : [op];
-    this.doc.datas = applyRuns(this.doc.datas, runs);
-    if (op.header) this.doc.patchHeader(op.header.at, op.header.bytes);
     const held = this.remoteHeld;
-    if (!held) this.doc.rebuild();
+    const before = this.doc.datas;
+    const header = this.doc.header;
+    try {
+      this.doc.datas = applyRuns(before, runs);
+      if (op.header) this.doc.patchHeader(op.header.at, op.header.bytes);
+      if (!held) this.doc.rebuild();
+    } catch (err) {
+      this.doc.datas = before;
+      this.doc.patchHeader(0, header);
+      this.doc.rebuild();
+      throw err;
+    }
     // undo still turns back this session's own steps, rebased past the change; a step it touched,
     // and every step before that, can no longer be undone
     let r: Splice[] = runs.map((x) => ({ start: x.start, del: x.del, add: x.add.length }));
