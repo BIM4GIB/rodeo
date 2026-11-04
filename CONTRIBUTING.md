@@ -1,8 +1,60 @@
 # Contributing to Rodeo
 
-Thanks for helping. Bug reports, format findings, sample-free test cases and
-pull requests are all welcome. For anything large, open an issue first so we
-can agree on the approach before you spend time on it.
+Thanks for helping. Rodeo is a free CAD editor built in the open, and
+contributions of any size are welcome: a bug report, a clearer paragraph in
+the guide, a fix, a new import format. You don't need to ask before starting
+on something small.
+
+## The short version
+
+1. **Pick something.** A bug you've hit, an issue labelled
+   [good first issue](https://github.com/rodeobuild/rodeo/labels/good%20first%20issue)
+   or [help wanted](https://github.com/rodeobuild/rodeo/labels/help%20wanted),
+   or a feature still open in [PARITY.md](PARITY.md). For anything large,
+   open an issue first so we can agree on the approach before you spend time
+   on it.
+2. **Fork and branch.** Fork the repository, make a branch, and run the
+   editor locally ([Getting started](#getting-started) below).
+3. **Make one change.** One fix or feature per pull request, small enough to
+   read in one sitting.
+4. **Check it.** `cd web && npm run build` passes, and so do the checks for
+   the code you touched ([Checks](#checks)).
+5. **Open a pull request.** Say what it changes and how you tested it. The
+   template asks for both.
+
+Be kind and assume good faith, in issues, reviews and pull requests alike.
+
+## How pull requests are reviewed
+
+Every pull request gets a review from Claude, an AI model, soon after it's
+opened. It reads the whole change and looks for:
+
+- bugs, and things that worked before and now don't
+- changes the description doesn't mention
+- a build that fails, or code with no check where one is needed
+- drawings or text from drawings you don't own
+  ([see below](#drawings-you-dont-own)), secrets, or tracking
+- new dependencies without a reason, or with a licence the AGPL can't take
+- code that doesn't read like the code around it
+
+Fix what it finds and push again, or reply to the comment if you think it's
+wrong. It can be. A maintainer then reads the pull request and merges it,
+asks for changes, or closes it with a reason. The AI review never merges
+anything on its own.
+
+You're welcome to use AI tools to write your change. You're responsible for
+it all the same: read it, run it, and be ready to explain any line of it.
+
+## Good first contributions
+
+- **Bug reports.** A file that opens wrong, a tool that misbehaves. Say what
+  you did, what you expected and what happened instead.
+- **The user guide.** Pages in [docs/guide/](docs/guide/README.md) that are
+  unclear, missing a command, or out of date.
+- **Missing features.** [PARITY.md](PARITY.md) lists every Vectorworks
+  feature and whether Rodeo has it yet.
+- **Format findings.** Something you've learned about the `.vwx` format goes
+  in [FORMAT.md](FORMAT.md), with how sure you are.
 
 ## Getting started
 
@@ -74,7 +126,6 @@ the problem, describe the bytes in the issue, or build a small file yourself
 - Match the code around you: its naming, its comment density, its idioms.
   TypeScript is strict, and the editor's format code (`web/src/core/`) runs
   under Node as well as in the browser, so keep the DOM out of it.
-- Keep changes focused: one fix or feature per pull request.
 - New runtime dependencies need a reason, and a licence compatible with the
   AGPL (MIT, BSD, ISC, Apache-2.0, MPL-2.0 and the like). Ship any licence
   text the dependency asks for in `web/public/licences/`.
