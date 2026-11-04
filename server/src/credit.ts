@@ -96,7 +96,8 @@ const held = new Map<string, number>();
 export function holdCredit(user: UserRow, c: AiCredit): () => void {
   const need = Math.round(c.hold * MICRO);
   const balance = balanceOf(user.id);
-  const busy = (held.get(user.id) ?? 0) + renderHeld(user.id);
+  const requests = held.get(user.id) ?? 0;
+  const busy = requests + renderHeld(user.id);
   if (balance - busy < need) {
     fail(
       402,
@@ -104,7 +105,7 @@ export function holdCredit(user: UserRow, c: AiCredit): () => void {
       "credit",
     );
   }
-  held.set(user.id, busy + need);
+  held.set(user.id, requests + need);
   let done = false;
   return () => {
     if (done) return;
