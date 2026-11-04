@@ -11,7 +11,7 @@ The Stage menu holds lighting design and theatre set design, from venue to paper
 - **Scenes** (a palette of scenes to go to and scrub through with collision warnings, **Shift Plot…**, **Spike Sheet…**)
 - **Scene Shop** (**New Flat…**, **New Platform…**, **Cut List…**, **Model Box Cut Sheet…**)
 - **Lighting** (**Show Beam Pools**, **Light Coverage Map…**, **Wash Planner…**, **Looks**, **Show Beams in 3D**, **Gel and Paint Matrix…**, **DMX Patch…**)
-- **Lighting Paperwork** (**Paperwork…**, **Patch…**, **USITT ASCII and MVR**, **Focus Cards…**, **Magic Sheet…**, and **Inventory and Equipment List…**, which sets the equipment in the drawing against vendors' and venues' inventories)
+- **Lighting Paperwork** (**Paperwork…**, **Generate Paperwork…**, **Patch…**, **USITT ASCII and MVR**, **Focus Cards…**, **Magic Sheet…**, and **Inventory and Equipment List…**, which sets the equipment in the drawing against vendors' and venues' inventories)
 - **Loads and Power** (**Load Check…**, **Power Balance…**)
 - **Visualization**:
   - **Manage Scenes…** saves and recalls every lighting device's color, position and focus with the channel levels.
@@ -211,6 +211,26 @@ In **Stage › Lighting**, **Label Legend Manager** and **Assign Legend to Light
 The active one goes on new devices, and Use Legend in Object Info changes one device's. **Create Label Legend from Lighting Device** makes a new legend from one device's labels.
 
 ## Lighting paperwork and data
+
+### Generate Paperwork
+
+**Stage › Lighting Paperwork › Generate Paperwork…** writes the electrician's paperwork into the drawing as worksheets, which you'll find in the Resource Manager and can place on a sheet:
+
+- **Schedules:** the **Instrument Schedule** (by position and unit), **Channel Hookup** (by channel) and **Dimmer Hookup** (by dimmer), one row per lighting device.
+- **Reports:** the **Shop Order** (each type's count, wattage and weight) and the **Gobo Pull**.
+- **Color Cut List:** each gel and frame size with its cuts and the gel sheets they take, for each position if you tick **Break Down by Position**.
+- **Magic Sheets:** a magic sheet on a new design layer, **Magic Sheet-Color** or **Magic Sheet-Area** (Setup… chooses which).
+
+**Setup…** beside the schedules opens **Schedule Formatting**:
+
+1. Pick a schedule.
+2. Give it a **Printed Name**.
+3. Move fields between **Available Fields** and **Schedule Columns** with **Move >** and **Move <**, and order them with **Move Up** and **Move Down**.
+4. Make each column **Wide**, **Medium** or **Narrow**.
+
+**Header Configuration** puts the **Designer**, **Event Name** or **Date** at the left, centre and right of each page's header line. The columns share the **Page Width**, and each **Page Height** of rows starts again with the header, title and column heads.
+
+Generating again replaces the worksheets made before. One undo takes the whole lot away. The worksheets don't follow later changes to the lighting devices, so generate again after editing.
 
 ### Spotlight Numbering
 

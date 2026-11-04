@@ -4271,13 +4271,16 @@ export class Session implements EditSession {
   // ---- resources ----------------------------------------------------------------------
 
   /** How many records other than the name table hold `name` as text, as plug-ins, worksheets and data visualisations name resources. */
-  private namedIn(name: string): number {
+  private namedIn(name: string, own?: Rec): number {
     const text = encodeUtf16(name);
-    return this.doc.recs.filter((r) => r.type !== 55 && holdsText(r.data, text)).length;
+    // the records of `own`'s subtree go with it, so what they say doesn't count
+    const [from, to] = own ? [own.index, subtreeEnd(own)] : [-1, -2];
+    return this.doc.recs.filter((r) => r.type !== 55 && !(r.index >= from && r.index <= to) && holdsText(r.data, text)).length;
   }
 
-  private refuseNamed(name: string, doing: string): void {
-    const n = this.namedIn(name);
+  /** Throws when a record other than the name table (and `own`'s subtree, deleted with it) holds `name` as text. */
+  private refuseNamed(name: string, doing: string, own?: Rec): void {
+    const n = this.namedIn(name, own);
     if (n === 0) return;
     const what = n === 1 ? "another record names" : `${n} other records name`;
     throw new Error(`${what} "${name}" as text (as plug-in parameters, worksheet formulas and data visualizations name resources), and ${doing} it here wouldn't update ${n === 1 ? "it" : "them"}`);
@@ -5188,7 +5191,8 @@ export class Session implements EditSession {
     if (!rec) throw new Error(`no worksheet #${index}`);
     const placed = this.doc.recs.filter((r) => r.type === WORKSHEET_IMAGE && readWorksheetImage(r.data)?.worksheet === index).length;
     if (placed) throw new Error(`"${name}" is on ${placed === 1 ? "a sheet" : `sheets ${placed} times`}; delete it there first`);
-    this.refuseNamed(name, "deleting");
+    // its own cells may hold its name, as a title
+    this.refuseNamed(name, "deleting", rec);
     const p = this.plan();
     this.removeResource(p, rec, index);
     this.commit(p, "all", []);

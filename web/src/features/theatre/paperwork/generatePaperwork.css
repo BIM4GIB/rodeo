@@ -1,0 +1,71 @@
+/* Stage > Lighting Paperwork > Generate Paperwork (generatePaperwork.ts): the ticks beside their Setup buttons, and Schedule Formatting's two lists. */
+
+.menu-dialog.gp-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+/* text, and the choices, read from the left and take the room their words need */
+.gp-dialog .menu-dialog-field input[type="text"]:not([inputmode]),
+.gp-dialog .menu-dialog-field select {
+  width: min(260px, 100%);
+  text-align: left;
+}
+
+.gp-list,
+.gp-list option {
+  text-align: left;
+}
+
+.gp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gp-row > .menu-dialog-field {
+  flex: 1;
+}
+
+.gp-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  flex: 1;
+}
+
+.gp-by {
+  font-size: 11px;
+  margin-right: auto;
+}
+
+.gp-columns {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.gp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gp-list {
+  width: 100%;
+  min-height: 170px;
+}
+
+.gp-moves {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 520px) {
+  .gp-columns {
+    grid-template-columns: 1fr auto;
+  }
+}

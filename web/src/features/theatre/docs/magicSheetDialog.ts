@@ -10,10 +10,11 @@ import { markerParts } from "../../../app/tools/markers.ts";
 import type { Part } from "../../../app/tools/detailing.ts";
 import { toast } from "../../../app/toast.ts";
 import { toolPrefs } from "../../../app/toolPrefs.ts";
-import type { NewShape } from "../../../core/index.ts";
+import type { EditSession, NewShape } from "../../../core/index.ts";
+import type { Fixture } from "../fixture.ts";
 import { fixtures } from "../instrument.ts";
 import { stageFrame } from "../stageTool.ts";
-import { magicLayout, type Grouping } from "./magicSheet.ts";
+import { magicLayout, type Grouping, type MagicOptions, type MagicSheet } from "./magicSheet.ts";
 
 const GROUPS: readonly { readonly value: Grouping; readonly label: string }[] = [
   { value: "purposeColour", label: "Purpose and Colour" },
@@ -40,6 +41,28 @@ function sheetName(): string {
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+/** The magic sheet of `list` and the parts that draw it, in paper mm. */
+export function magicSheetParts(list: readonly Fixture[], opts: MagicOptions): { readonly sheet: MagicSheet; readonly parts: readonly Part[] } {
+  const sheet = magicLayout(list, stageFrame(), opts);
+  const match = colorMatcher();
+  const solid = (c: number) => ({ fillPattern: 1, fillFore: c, fillBack: c, fillOpacity: 100 });
+  const parts: Part[] = [
+    ...markerParts(sheet.drawing),
+    ...sheet.chips.map((c): Part => ({ shape: { kind: "polygon", points: [...c.poly], closed: true }, attrs: solid(match(c.colour)) })),
+  ];
+  return { sheet, parts };
+}
+
+/** Draws `parts` on layer `layerId` as one group named `name`, in the active class; returns the group. */
+export function addMagicSheet(s: EditSession, layerId: string, parts: readonly Part[], name: string): string {
+  const ids = parts.map((part) =>
+    "shape" in part ? s.addObject(layerId, part.shape, store.activeClassIndex, part.attrs) : s.addObject(layerId, part as NewShape, store.activeClassIndex),
+  );
+  const group = s.groupObjects(ids);
+  s.setObjectName(group, name);
+  return group;
+}
+
 export async function openMagicSheet(): Promise<void> {
   if (!store.session) return;
   if (fixtures().length === 0) {
@@ -62,27 +85,16 @@ export async function openMagicSheet(): Promise<void> {
     bubble: v.num("bubble"),
     group: GROUPS.some((g) => g.value === asked) ? (asked as Grouping) : "purposeColour",
   };
-  const sheet = magicLayout(fixtures(), stageFrame(), { pageMm: prefs.page, bubbleMm: prefs.bubble, group: prefs.group });
+  const { sheet, parts } = magicSheetParts(fixtures(), { pageMm: prefs.page, bubbleMm: prefs.bubble, group: prefs.group });
   if (sheet.channels === 0) {
     toast("None of the lighting instruments has a channel yet, so there is nothing to put on the sheet.", "info");
     return;
   }
-  const match = colorMatcher();
-  const solid = (c: number) => ({ fillPattern: 1, fillFore: c, fillBack: c, fillOpacity: 100 });
-  const parts: Part[] = [
-    ...markerParts(sheet.drawing),
-    ...sheet.chips.map((c): Part => ({ shape: { kind: "polygon", points: [...c.poly], closed: true }, attrs: solid(match(c.colour)) })),
-  ];
   const name = sheetName();
   const made = attempt("Magic Sheet", (s) =>
     s.batch(() => {
       const layerId = s.createLayer(name, "sheet", 1);
-      const ids = parts.map((part) =>
-        "shape" in part ? s.addObject(layerId, part.shape, store.activeClassIndex, part.attrs) : s.addObject(layerId, part as NewShape, store.activeClassIndex),
-      );
-      const group = s.groupObjects(ids);
-      s.setObjectName(group, `${name} Drawing`);
-      return { layerId, group };
+      return { layerId, group: addMagicSheet(s, layerId, parts, `${name} Drawing`) };
     }),
   );
   if (!made) return;

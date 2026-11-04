@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:11:00Z",
+    "generate-paperwork",
+    "Generate Paperwork",
+    `Stage > Lighting Paperwork > Generate Paperwork writes your lighting paperwork into the drawing as worksheets.
+- Instrument Schedule, Channel Hookup and Dimmer Hookup, with the columns, order and widths you choose.
+- Shop Order, Gobo Pull and a Color Cut List, by position if you like.
+- Designer, event name and date in each page's header, and a magic sheet on its own layer.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:10:00Z",
     "import-image-files",
     "Import Image File(s)",
