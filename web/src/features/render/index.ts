@@ -2,8 +2,8 @@
 // sun, light objects, camera, fog, materials, effects and quality), File > Export > Render
 // Image…, which renders the view or the drawing's cameras up to 8K, here or on the server's cloud GPU,
 // View > Rendering's batch render jobs (batch.ts), Export HDRI… (the picture linear, as a Radiance .hdr)
-// (File › Export › Cloud Renders… lists those), Export Panorama… (panorama.ts) and Model › Create Animation's movies
-// (movie.ts). Registered with app/ext.ts when imported;
+// (File › Export › Cloud Renders… lists those), Export Panorama… (panorama.ts) and Model › Create Animation's animation
+// paths and their movies (movie.ts, animationPathObject.ts). Registered with app/ext.ts when imported;
 // three-gpu-pathtracer and the engines load with the first realistic frame or render.
 
 import { appContext, on3d, registerMenu, registerPalette } from "../../app/ext.ts";
@@ -13,6 +13,8 @@ import { errorMessage, toast } from "../../app/toast.ts";
 import type { RenderHook } from "../../app/view3d.ts";
 import { config } from "../account/config.ts";
 import { renderPalette } from "./palette.ts";
+// its Object Info and right-click menu, for animation paths a drawing holds
+import "./animationPathObject.ts";
 
 const PALETTE_ID = "render";
 
@@ -75,13 +77,13 @@ registerMenu("View › Rendering", () => [
 
 registerMenu("Model", () => [
   {
-    // movies of the 3D view along a path, as Vectorworks' animation paths make them
+    // animation paths to play in the 3D view and make movies of, as Vectorworks makes them
     label: "Create Animation",
     enabled: () => store.session !== null,
     items: [
-      { label: "Create Walkthrough Path from Selection…", enabled: () => store.selection.size === 1, run: () => createAnimation("walkthrough") },
+      { label: "Create Walkthrough Path from Selection", enabled: () => store.selection.size === 1, run: () => createAnimation("walkthrough") },
       { label: "Create Orbit Path…", enabled: () => store.session !== null, run: () => createAnimation("orbit") },
-      { label: "Create Spin Path…", enabled: () => store.selection.size > 0, run: () => createAnimation("spin") },
+      { label: "Create Spin Path", enabled: () => store.selection.size > 0, run: () => createAnimation("spin") },
     ],
   },
 ]);

@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:01:00Z",
+    "animation-paths",
+    "Animation paths to play",
+    `Model › Create Animation now makes an animation path that stays in the drawing.
+- Play it in the 3D view, move along it with Time, or look through its camera.
+- Add and delete keyframes, and set each one's speed and view angle.
+- Create Movie… records it, now with a time range and your own frame size.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:00:00Z",
     "agents-parts-streaming",
     "Agents model products, and the chat streams smoothly",

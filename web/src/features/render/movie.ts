@@ -1,16 +1,17 @@
-// Model > Create Animation, as Vectorworks has it: Create Orbit Path…, Create Spin Path… and Create
-// Walkthrough Path from Selection…, each going on to Create Movie. Vectorworks makes an animation path
-// object to edit, play and make movies from; how a drawing saves one isn't known, so Rodeo keeps none:
-// each command asks for its path's settings and the movie's together, then records the movie at once,
-// the 3D view drawing each frame from the camera's place along the path (the progress window shows
-// them as they go). The browser records it: an .mp4 where it can make one, else a .webm.
+// Model > Create Animation, as Vectorworks has it: Create Walkthrough Path from Selection, Create Orbit
+// Path… and Create Spin Path, each making an animation path object (animationPathObject.ts) on the
+// active design layer, its keyframes placed for it, to play in the 3D view, edit and make movies from;
+// and Create Movie…, which records the movie of one, the 3D view drawing each frame from the camera's
+// place along the path (the progress window shows them as they go). The browser records it: an .mp4
+// where it can make one, else a .webm.
 //
 // Orbit: round a centre at the 3D view's eye height and distance from it, looking at it, by the
 // rotation angle (counter-clockwise seen from above), in perspective or orthogonal. Spin: once round
 // the selection, framed, from above it to below and back again so every side shows. Walkthrough:
-// along a selected line, arc, polyline or polygon the way it was drawn, the camera its height above
-// the active layer, looking ahead along the path.
+// along a selected line, arc, polyline or polygon the way it was drawn, which it replaces, the camera
+// its Camera Height above the active layer, looking ahead along the path.
 
+import { attempt, setEditGroup } from "../../app/commands.ts";
 import { pathOf } from "../../app/cutting.ts";
 import { appContext } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
@@ -22,12 +23,14 @@ import type { CameraState, PaneLook, RenderMode, View3D } from "../../app/view3d
 import { RENDER_MODES } from "../../app/viewbar.ts";
 import { activePlane } from "../../app/workingPlanes.ts";
 import type { Pt, Vec3 } from "../../core/index.ts";
+import { MAX_ANGLE, MIN_ANGLE, orbitPath, spinPath, walkPath, type CameraPath, type V3 } from "./animationPath.ts";
+import { addAnimationPath, keepMovieSettings, movieSource, type MovieSettings } from "./animationPathObject.ts";
 import { showProgress } from "./progress.ts";
 
 export type AnimationKind = "orbit" | "spin" | "walkthrough";
 
-/** the camera's eye and the point it looks at, for a moment along the path from 0 to 1 */
-type Path = (t: number) => { readonly eye: Vec3; readonly target: Vec3 };
+/** the camera's eye, the point it looks at and (when it changes) its vertical field of view, for a moment along the path from 0 to 1 */
+type Path = (t: number) => { readonly eye: Vec3; readonly target: Vec3; readonly fov?: number };
 
 /** A movie to record: its path and how it is drawn. */
 export interface Movie {
@@ -63,22 +66,43 @@ const MAX_BITRATE = 80e6;
 const MOVIE_TYPES = ["video/mp4;codecs=avc1.640028", "video/mp4", "video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
 /** the walkthrough camera's height above the active layer, mm, as Set 3D View stands it */
 const EYE_HEIGHT = 1600;
-/** how far ahead along the path a walkthrough looks, mm (at most a third of the path) */
-const LOOK_AHEAD = 2000;
 /** a walkthrough's pace for its first duration, mm a second */
 const WALKING_PACE = 1400;
+/** an orbit's and a spin's first duration, seconds */
+const TURN_DURATION = 10;
 /** the spin's frame: this much room round the selection */
 const SPIN_MARGIN = 1.15;
 /** degrees between points along an arc path */
 const ARC_STEP = 5;
+/** a walkthrough's path turning more than this at a vertex has a keyframe there, degrees */
+const CORNER_DEG = 15;
+/** Create Movie's Custom frame size, pixels each way, as Vectorworks limits it */
+const MIN_FRAME = 240;
+const MAX_FRAME = 4096;
 /** the progress window's picture every this many frames */
 const THUMB_EVERY = 10;
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const rad = (deg: number): number => (deg * Math.PI) / 180;
+const deg = (r: number): number => (r * 180) / Math.PI;
+const v3 = (p: Vec3): V3 => ({ x: p[0], y: p[1], z: p[2] });
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+const even = (n: number): number => Math.max(2, 2 * Math.floor(n / 2));
+
+const TITLES: Record<AnimationKind, string> = {
+  orbit: "Create Orbit Path",
+  spin: "Create Spin Path",
+  walkthrough: "Create Walkthrough Path from Selection",
+};
 
 export async function createAnimation(kind: AnimationKind): Promise<void> {
-  if (!store.session) return;
+  const s = store.session;
+  if (!s) return;
+  const layer = s.doc.layers().find((l) => l.id === store.activeLayerId);
+  if (layer?.kind !== "design") {
+    toast("Make a design layer active: the animation path goes on it.", "info");
+    return;
+  }
   // the walkthrough's path is read before the 3D view takes the window
   const route = kind === "walkthrough" ? selectedRoute() : null;
   if (kind === "walkthrough" && !route) {
@@ -86,76 +110,77 @@ export async function createAnimation(kind: AnimationKind): Promise<void> {
     return;
   }
   const ctx = appContext();
+  // the 3D view's camera is where the path starts from; the 2D view comes back after, if it showed
+  const was3d = store.view3d;
   const view = ctx ? await ctx.show3d() : null;
   if (!view) {
-    toast("The 3D view is not available here, so there is no movie to make.");
+    toast("The 3D view is not available here, so there is no camera to start from.");
     return;
   }
+  const back = (): void => {
+    if (!was3d) ctx?.show2d();
+  };
   const selected = selectionBounds(view);
   if (kind === "spin" && !selected) {
+    back();
     toast("Select the objects to spin: Create Spin Path turns the camera round what's selected.", "info");
     return;
   }
-  const fields: PrefField[] = [];
+  const start = view.cameraState();
+  const el = view.domElement;
+  const aspect = (el.clientWidth || 4) / (el.clientHeight || 3);
+  // the 3D view's angle across, as the camera's View Angle
+  const angle = Math.round(clamp(2 * deg(Math.atan(Math.tan(rad(start.fov / 2)) * aspect)), MIN_ANGLE, MAX_ANGLE) * 100) / 100;
+  let made: { readonly path: CameraPath; readonly half: number; readonly duration: number } | string;
   if (kind === "orbit") {
-    fields.push(
-      { kind: "check", key: "ortho", label: "Orthogonal Projection", value: false },
-      { kind: "number", key: "angle", label: "Rotation angle", value: 360, min: -3600, max: 3600, unit: "°" },
-      {
-        kind: "choice",
-        key: "about",
-        label: "Rotate about center of",
-        value: selected ? "selection" : "layer",
-        options: [
-          { value: "layer", label: "Active Layer Plane" },
-          { value: "plane", label: "Working Plane" },
-          { value: "selection", label: "Selection" },
-        ],
-      },
+    const v = await toolPrefs(
+      "Orbit Options",
+      [
+        { kind: "check", key: "ortho", label: "Orthogonal Projection", value: false },
+        { kind: "number", key: "angle", label: "Rotation angle", value: 360, min: -3600, max: 3600, unit: "°" },
+        {
+          kind: "choice",
+          key: "about",
+          label: "Rotate about center of",
+          value: selected ? "selection" : "layer",
+          options: [
+            { value: "layer", label: "Active Layer Plane" },
+            { value: "plane", label: "Working Plane" },
+            { value: "selection", label: "Selection" },
+          ],
+        },
+      ],
+      "The camera goes round the centre at the 3D view's eye height and distance from it, looking at it, counter-clockwise from above.",
     );
+    if (!v || v.num("angle") === 0) {
+      back();
+      if (v) toast("Enter a rotation angle other than 0.", "info");
+      return;
+    }
+    made = orbitOf(view, v, selected, angle, aspect);
+  } else if (kind === "spin" && selected) made = spinOf(view, selected, angle, aspect);
+  else if (route) {
+    const points = route.pts.map((p): V3 => ({ x: p.x, y: p.y, z: 0 }));
+    made = { path: walkPath(points, route.corners, "walk", angle), half: start.half, duration: Math.min(600, Math.max(5, Math.round(route.length / WALKING_PACE))) };
+  } else return;
+  back();
+  if (typeof made === "string") {
+    toast(made, "info");
+    return;
   }
-  if (kind === "walkthrough") fields.push({ kind: "length", key: "height", label: "Camera Height", value: EYE_HEIGHT, zero: true });
-  const firstDuration = route ? Math.min(600, Math.max(5, Math.round(route.length / WALKING_PACE))) : 10;
-  const now = ctx?.renderMode();
-  fields.push(
-    { kind: "number", key: "duration", label: "Duration (in seconds)", value: firstDuration, min: 1, max: 600 },
-    { kind: "choice", key: "fps", label: "Frames per second", value: "30", options: FPS.map((n) => ({ value: String(n), label: String(n) })) },
-    {
-      kind: "choice",
-      key: "mode",
-      label: "Rendering",
-      value: now && !isRealisticMode(now) ? now : "shaded",
-      options: RENDER_MODES.filter(([m]) => !isRealisticMode(m)).map(([value, label]) => ({ value, label })),
-    },
-    { kind: "choice", key: "quality", label: "Quality", value: "high", options: QUALITIES.map(({ value, label }) => ({ value, label })) },
-    { kind: "choice", key: "size", label: "Frame Size", value: "1280x720", options: SIZES.map(({ value, label }) => ({ value, label })) },
+  const { path, half, duration } = made;
+  const r = attempt(TITLES[kind], (s) =>
+    s.batch(() => {
+      const id = addAnimationPath(s, layer.id, path, { duration, height: EYE_HEIGHT, half });
+      // the walkthrough's path becomes the animation path, as in Vectorworks
+      if (route) s.deleteObjects([route.id]);
+      return id;
+    }),
   );
-  const v = await toolPrefs("Create Movie", fields, NOTES[kind]);
-  if (!v) return;
-  if (kind === "orbit" && v.num("angle") === 0) {
-    toast("Enter a rotation angle other than 0.", "info");
-    return;
-  }
-  const size = frameSize(v.choice("size"), view);
-  const movie =
-    kind === "orbit" ? orbitMovie(view, v, selected, size) : kind === "spin" && selected ? spinMovie(view, selected, size) : route ? walkMovie(view, route, v.num("height")) : null;
-  if (typeof movie === "string" || !movie) {
-    toast(movie ?? "There is no path to make a movie along.", "info");
-    return;
-  }
-  const mode = (RENDER_MODES.find(([m]) => m === v.choice("mode"))?.[0] ?? "shaded") as RenderMode;
-  const fps = FPS.find((n) => String(n) === v.choice("fps")) ?? 30;
-  const quality = QUALITIES.find((q) => q.value === v.choice("quality")) ?? QUALITIES[2];
-  await record(view, movie, { duration: v.num("duration"), fps, mode, bits: quality.bits, size, name: kind });
+  if (!r) return;
+  setEditGroup(null, [r.value]);
+  toast("Animation path made: play it, edit its keyframes or make its movie in Object Info.", "info");
 }
-
-const NOTES: Record<AnimationKind, string> = {
-  orbit:
-    "The camera goes round the centre at the 3D view's eye height and distance from it, looking at it, by the rotation angle (counter-clockwise from above). The movie is made now; no animation path is kept in the drawing.",
-  spin: "The camera goes once round the selection, framing it, from above to below and back so every side shows. The movie is made now; no animation path is kept in the drawing.",
-  walkthrough:
-    "The camera follows the selected path the way it was drawn, its height above the active layer, looking ahead along it. The path stays as it is, and no animation path is kept in the drawing.",
-};
 
 export function isRealisticMode(mode: RenderMode): boolean {
   return mode === "realistic" || mode === "pathtraced";
@@ -180,11 +205,12 @@ function selectionBounds(view: View3D): { readonly min: Vec3; readonly max: Vec3
   return view.boundsOf(ids);
 }
 
-/** A walkthrough's route: points along the selected path, the way it was drawn, and its length. */
+/** A walkthrough's route: points along the selected path, the way it was drawn, its length, and the vertices that get keyframes. */
 interface Route {
+  readonly id: string;
   readonly pts: readonly Pt[];
-  readonly closed: boolean;
   readonly length: number;
+  readonly corners: readonly number[];
 }
 
 function selectedRoute(): Route | null {
@@ -195,37 +221,30 @@ function selectedRoute(): Route | null {
   const path = o?.shape ? pathOf(o.shape) : null;
   if (!path) return null;
   let pts: Pt[];
+  let corners: number[];
   if (path.kind === "chain") {
     // a closed chain runs on from its last point back to its first
     pts = path.closed ? [...path.pts, path.pts[0]] : [...path.pts];
+    // keyframes where it turns: its corners, not the many small turns of a curve drawn in pieces
+    corners = pts.flatMap((p, i) => {
+      if (i === 0 || i === pts.length - 1) return [];
+      const a = Math.atan2(p.y - pts[i - 1].y, p.x - pts[i - 1].x);
+      const b = Math.atan2(pts[i + 1].y - p.y, pts[i + 1].x - p.x);
+      const turn = Math.abs(deg(Math.atan2(Math.sin(b - a), Math.cos(b - a))));
+      return turn > CORNER_DEG ? [i] : [];
+    });
   } else if (path.kind === "arc") {
-    const steps = Math.max(2, Math.ceil(Math.abs(path.sweep) / ARC_STEP));
+    const steps = 2 * Math.max(1, Math.ceil(Math.abs(path.sweep) / ARC_STEP / 2));
     pts = Array.from({ length: steps + 1 }, (_, i) => {
       const a = rad(path.start + (path.sweep * i) / steps);
       return { x: path.centre.x + path.radius * Math.cos(a), y: path.centre.y + path.radius * Math.sin(a) };
     });
+    // and its apex
+    corners = [steps / 2];
   } else return null;
-  const closed = path.closed;
   let length = 0;
   for (let i = 1; i < pts.length; i++) length += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  return length > 0 ? { pts, closed, length } : null;
-}
-
-/** The point `d` along the route (wrapping round a closed one; past an open one's end, on along its last piece). */
-function along(route: Route, d: number): Pt {
-  const { pts, length } = route;
-  let left = route.closed ? ((d % length) + length) % length : d;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1];
-    const b = pts[i];
-    const piece = Math.hypot(b.x - a.x, b.y - a.y);
-    if (left <= piece || i === pts.length - 1) {
-      const f = piece > 0 ? left / piece : 0;
-      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-    }
-    left -= piece;
-  }
-  return pts[pts.length - 1];
+  return length > 0 ? { id, pts, length, corners } : null;
 }
 
 export function frameSize(choice: string, view: View3D): { width: number; height: number } {
@@ -233,11 +252,10 @@ export function frameSize(choice: string, view: View3D): { width: number; height
   if (m) return { width: Number(m[1]), height: Number(m[2]) };
   // the screen's, kept even for the video codecs
   const el = view.domElement;
-  const even = (n: number): number => Math.max(2, 2 * Math.floor(n / 2));
   return { width: even(el.clientWidth || 1280), height: even(el.clientHeight || 720) };
 }
 
-function orbitMovie(view: View3D, v: PrefValues, selected: { min: Vec3; max: Vec3 } | null, size: { width: number; height: number }): Movie | string {
+function orbitOf(view: View3D, v: PrefValues, selected: { min: Vec3; max: Vec3 } | null, angle: number, aspect: number): { path: CameraPath; half: number; duration: number } | string {
   const about = v.choice("about");
   let centre: Vec3;
   const layerZ = activeLayerElevation();
@@ -246,91 +264,128 @@ function orbitMovie(view: View3D, v: PrefValues, selected: { min: Vec3; max: Vec
     centre = selected.min.map((lo, i) => (lo + selected.max[i]) / 2) as unknown as Vec3;
   } else if (about === "plane") centre = activePlane()?.origin ?? [0, 0, layerZ];
   else centre = [0, 0, layerZ];
+  const el = view.domElement;
+  const [w, h] = [el.clientWidth || 1280, el.clientHeight || 720];
   const start = view.cameraState();
   let eye = start.position;
   // looking straight down on the centre there is no way round: start from the isometric view instead
-  if (Math.hypot(eye[0] - centre[0], eye[1] - centre[1]) < 1) eye = view.presetState("iso", size.width, size.height).position;
+  if (Math.hypot(eye[0] - centre[0], eye[1] - centre[1]) < 1) eye = view.presetState("iso", w, h).position;
   const r = Math.hypot(eye[0] - centre[0], eye[1] - centre[1]);
   if (r < 1) return "The camera stands over the centre, so there is no way round it: turn the 3D view first.";
-  const a0 = Math.atan2(eye[1] - centre[1], eye[0] - centre[0]);
-  const sweep = rad(v.num("angle"));
-  const z = eye[2];
   const ortho = v.flag("ortho");
   // an orthogonal orbit keeps one scale: the largest that frames the model from any side
   let half = start.half;
   if (ortho) {
-    const rise = z - centre[2];
+    const rise = eye[2] - centre[2];
     half = 0;
     for (let k = 0; k < 8; k++) {
       const a = (k * Math.PI) / 4;
-      half = Math.max(half, view.framedState([r * Math.cos(a), r * Math.sin(a), rise], size.width, size.height).half);
+      half = Math.max(half, view.framedState([r * Math.cos(a), r * Math.sin(a), rise], Math.round(h * aspect), h).half);
     }
   }
-  return {
-    path: (t) => {
-      const a = a0 + sweep * t;
-      return { eye: [centre[0] + r * Math.cos(a), centre[1] + r * Math.sin(a), z], target: centre };
-    },
-    loops: Math.abs(v.num("angle")) % 360 === 0,
-    projection: ortho ? "orthogonal" : "perspective",
-    half,
-    fov: start.fov,
-  };
+  return { path: orbitPath(v3(centre), v3(eye), v.num("angle"), angle, ortho ? "orbit" : "fly"), half, duration: TURN_DURATION };
 }
 
-function spinMovie(view: View3D, box: { min: Vec3; max: Vec3 }, size: { width: number; height: number }): Movie {
+function spinOf(view: View3D, box: { min: Vec3; max: Vec3 }, angle: number, aspect: number): { path: CameraPath; half: number; duration: number } {
   const centre = box.min.map((lo, i) => (lo + box.max[i]) / 2) as unknown as Vec3;
   const radius = Math.max(Math.hypot(...sub(box.max, box.min)) / 2, 1);
   const start = view.cameraState();
   // far enough off that the selection's sphere fits the narrower way across the picture
   const halfV = rad(start.fov / 2);
-  const halfH = Math.atan(Math.tan(halfV) * (size.width / size.height));
+  const halfH = Math.atan(Math.tan(halfV) * aspect);
   const distance = (radius / Math.sin(Math.min(halfV, halfH))) * SPIN_MARGIN;
   const off = sub(start.position, centre);
   const flat = Math.hypot(off[0], off[1]);
-  const a0 = flat > 1e-6 ? Math.atan2(off[1], off[0]) : -Math.PI / 2;
+  const from = flat > 1e-6 ? Math.atan2(off[1], off[0]) : -Math.PI / 2;
   // from the view's height above it (between 15° and 60°), down to as far below and back
-  const e0 = Math.min(rad(60), Math.max(rad(15), Math.atan2(off[2], flat)));
-  return {
-    path: (t) => {
-      const a = a0 + 2 * Math.PI * t;
-      const e = e0 * Math.cos(2 * Math.PI * t);
-      const eye: Vec3 = [
-        centre[0] + distance * Math.cos(e) * Math.cos(a),
-        centre[1] + distance * Math.cos(e) * Math.sin(a),
-        centre[2] + distance * Math.sin(e),
-      ];
-      return { eye, target: centre };
-    },
-    loops: true,
-    projection: "perspective",
-    half: start.half,
-    fov: start.fov,
-  };
-}
-
-function walkMovie(view: View3D, route: Route, height: number): Movie {
-  const z = activeLayerElevation() + height;
-  const ahead = Math.min(LOOK_AHEAD, route.length / 3);
-  const start = view.cameraState();
-  return {
-    path: (t) => {
-      const d = route.length * t;
-      const at = along(route, d);
-      const to = along(route, d + ahead);
-      return { eye: [at.x, at.y, z], target: [to.x, to.y, z] };
-    },
-    loops: route.closed,
-    projection: "perspective",
-    half: start.half,
-    fov: start.fov,
-  };
+  const rise = Math.min(rad(60), Math.max(rad(15), Math.atan2(off[2], flat)));
+  return { path: spinPath(v3(centre), distance, deg(from), deg(rise), angle), half: start.half, duration: TURN_DURATION };
 }
 
 function activeLayerElevation(): number {
   const s = store.session;
   const layer = s?.doc.layers().find((l) => l.id === store.activeLayerId);
   return layer?.elevation ?? 0;
+}
+
+/** Create Movie: animation path `id`'s movie, with Vectorworks' settings, kept with the path for next time. */
+export async function createMovie(id: string): Promise<void> {
+  const first = movieSource(id);
+  if (!first) return;
+  const ctx = appContext();
+  const view = ctx ? await ctx.show3d() : null;
+  if (!view) {
+    toast("The 3D view is not available here, so there is no movie to make.");
+    return;
+  }
+  const k = first.settings;
+  const modes = RENDER_MODES.filter(([m]) => !isRealisticMode(m));
+  const fields: PrefField[] = [
+    { kind: "heading", key: "settings", label: "Settings" },
+    { kind: "number", key: "duration", label: "Duration (in seconds)", value: first.duration, min: 1, max: 3600 },
+    { kind: "choice", key: "fps", label: "Frames per second", value: String(k.fps), options: FPS.map((n) => ({ value: String(n), label: String(n) })) },
+    { kind: "choice", key: "mode", label: "Rendering", value: modes.some(([m]) => m === k.mode) ? k.mode : "shaded", options: modes.map(([value, label]) => ({ value, label })) },
+    { kind: "choice", key: "quality", label: "Quality", value: k.quality, options: QUALITIES.map(({ value, label }) => ({ value, label })) },
+    { kind: "heading", key: "range-heading", label: "Time Range" },
+    {
+      kind: "choice",
+      key: "range",
+      label: "Time Range",
+      value: k.range,
+      options: [
+        { value: "full", label: "Full Duration" },
+        { value: "limited", label: "Limited Duration" },
+      ],
+    },
+    { kind: "number", key: "start", label: "Start Time (seconds)", value: k.start, min: 0, max: 3600 },
+    { kind: "number", key: "end", label: "End Time (seconds)", value: k.end > 0 ? k.end : first.duration, min: 0, max: 3600 },
+    { kind: "heading", key: "size-heading", label: "Frame Size" },
+    { kind: "choice", key: "size", label: "Frame Size", value: k.size, options: [...SIZES.map(({ value, label }) => ({ value, label })), { value: "custom", label: "Custom" }] },
+    { kind: "number", key: "width", label: "Custom Width (pixels)", value: k.width, min: MIN_FRAME, max: MAX_FRAME, integer: true },
+    { kind: "number", key: "height", label: "Custom Height (pixels)", value: k.height, min: MIN_FRAME, max: MAX_FRAME, integer: true },
+  ];
+  const v = await toolPrefs("Create Movie", fields, "Set the class and layer visibilities the movie should show before making it.");
+  if (!v) return;
+  const duration = v.num("duration");
+  const limited = v.choice("range") === "limited";
+  const [from, to] = limited ? [v.num("start"), v.num("end")] : [0, duration];
+  if (limited && !(from >= 0 && to > from && to <= duration)) {
+    toast(`Enter a Start Time before the End Time, both between 0 and the Duration (${duration} s).`, "info");
+    return;
+  }
+  const fps = FPS.find((n) => String(n) === v.choice("fps")) ?? 30;
+  const quality = QUALITIES.find((q) => q.value === v.choice("quality")) ?? QUALITIES[2];
+  const mode = (modes.find(([m]) => m === v.choice("mode"))?.[0] ?? "shaded") as RenderMode;
+  const sizeChoice = v.choice("size");
+  const settings: MovieSettings = {
+    fps,
+    mode,
+    quality: quality.value,
+    size: sizeChoice,
+    width: v.num("width"),
+    height: v.num("height"),
+    range: limited ? "limited" : "full",
+    start: from,
+    end: to,
+  };
+  keepMovieSettings(id, duration, settings);
+  const src = movieSource(id);
+  if (!src) return;
+  const size = sizeChoice === "custom" ? { width: even(settings.width), height: even(settings.height) } : frameSize(sizeChoice, view);
+  const across = size.width / size.height;
+  const [a, b] = [from / duration, to / duration];
+  const movie: Movie = {
+    path: (t) => {
+      const c = src.camera(a + (b - a) * t);
+      // the camera's View Angle is across the picture; the 3D view takes the angle up it
+      return { eye: [c.eye.x, c.eye.y, c.eye.z], target: [c.target.x, c.target.y, c.target.z], fov: 2 * deg(Math.atan(Math.tan(rad(c.angle / 2)) / across)) };
+    },
+    loops: !limited && src.loops,
+    projection: src.orthographic ? "orthogonal" : "perspective",
+    half: src.half,
+    fov: view.cameraState().fov,
+  };
+  await record(view, movie, { duration: to - from, fps, mode, bits: quality.bits, size, name: src.name });
 }
 
 export interface Recording {
@@ -392,10 +447,10 @@ export async function record(view: View3D, movie: Movie, r: Recording): Promise<
     recorder.pause();
     for (let i = 0; i < frames; i++) {
       if (cancelled) break;
-      const { eye, target } = movie.path(i / last);
+      const { eye, target, fov } = movie.path(i / last);
       await movie.frame?.(i, frames);
       if (cancelled) break;
-      const state: CameraState = { position: eye, target, zoom: 1, half: movie.half, fov: movie.fov };
+      const state: CameraState = { position: eye, target, zoom: 1, half: movie.half, fov: fov ?? movie.fov };
       view.picture(state, canvas, look, r.size);
       recorder.resume();
       const shown = performance.now();

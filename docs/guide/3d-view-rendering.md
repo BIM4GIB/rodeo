@@ -280,15 +280,25 @@ It shows its progress, with **Finish now** and **Cancel**, then shows the pictur
 
 ### Create Animation
 
-**Model › Create Animation** records a movie of the 3D view:
+**Model › Create Animation** makes an animation path: a camera's route through the model, to play in the 3D view and make a movie of.
 
-- orbiting a centre (the layer plane, the working plane or the selection, in perspective or orthogonal)
-- spinning round the selection
-- walking along a selected line, arc, polyline or polygon
+- **Create Orbit Path…** goes round a centre: the active layer plane, the working plane or the selection. Tick **Orthogonal Projection** for a view without perspective.
+- **Create Spin Path** goes round the selection, over it and under it, so every side shows.
+- **Create Walkthrough Path from Selection** follows the selected line, arc, polyline or polygon, which becomes the path. The camera stands at **Camera Height** above the layer and looks ahead.
 
-It records at 24 to 60 fps up to 4K, saved as an .mp4 (or a .webm where the browser can't make one).
+In plan the path shows a dot at each keyframe and the camera's wedge where **Time** puts it. In Object Info:
 
-**Limits:** no animation path is kept in the drawing.
+- **Play** and **Pause** run the camera along the path in the 3D view. **Time** moves it by hand, and **Skip Backward** and **Skip Forward** go to the ends.
+- **Activate Camera View** looks through the camera. Moving the 3D view yourself stops it.
+- **Previous Keyframe** and **Next Keyframe** pick a keyframe. Its **Speed** makes the camera faster or slower near it, and its **View Angle** widens or narrows the view.
+- **Add Keyframe** adds one where the camera is, and **Delete Keyframe** removes the one picked.
+- **Display Frames** marks each frame of the movie along the path.
+
+The Reshape tool moves the path's points.
+
+**Create Movie…**, in Object Info or on the path's right-click menu, records the movie. Set its duration, 24 to 60 fps, the render mode and quality, the whole of it or part, and a frame size up to 4K or your own. It's saved as an .mp4 (or a .webm where the browser can't make one).
+
+**Limits:** Vectorworks sees the path as a plug-in object it doesn't have. The camera rides flat at its height rather than following floors and stairs, and walkthroughs come from 2D paths only. There's no walkthrough from saved views, no 360° video, and no Realistic or Path Traced movies.
 
 ## Working planes
 
