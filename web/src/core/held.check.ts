@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { blankDrawing } from "./blank.ts";
+import { setU64 } from "./bytes.ts";
 import { type ByteSource, bytesSource, inflateChunks, readContainer, readContainerStream, RecordCarver, type VwxSink } from "./container.ts";
 import { expandRecords, FileStream, heldPart, Holder, withHeldImages } from "./held.ts";
 import { imageBytes } from "./geometry.ts";
@@ -229,8 +230,11 @@ if (!paths.length) {
 
   {
     // records cut from pieces of 1 to 13 bytes while holding parts: split at every point of a held part
-    const bytes = files[files.length - 1].bytes;
-    const raw = readContainer(bytes).raw;
+    // A generated image record always has a holdable payload, even without a sample file.
+    const raw = new Uint8Array(0x190 + 1024);
+    setU64(raw, 0, BigInt(raw.length));
+    raw[0x19] = 14;
+    for (let i = 0x190; i < raw.length; i++) raw[i] = i & 255;
     const records = splitRecords(raw).map((r) => r.data);
     const holder = new Holder({ read: async (a, b) => raw.slice(a, b) }, 64);
     const carver = new RecordCarver(holder);
