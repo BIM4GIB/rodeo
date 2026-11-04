@@ -3739,4 +3739,173 @@ def CreateDuplicateObject(objectToDuplicate, containerHandle=None):
         raise ValueError("vs.CreateDuplicateObject: Rodeo duplicates into the object's own layer or group")
     return Handle(_duplicate([o["id"]], 0, 0)[0])
 
+
+
+# ---- what objects matching search criteria measure (Vectorworks' Criteria calls) ----
+# a sum, an average, or the extreme or last one, each as the function reference gives it; 0 when nothing matches
+
+def _matches(c):
+    test = _criteria(c)
+    return [o for o in _all_objects() if test(o)]
+
+
+def _sum_of(c, fn):
+    return sum(fn(Handle(o["id"])) for o in _matches(c))
+
+
+def _boxes(c):
+    return [b for b in (_box(o) for o in _matches(c)) if b]
+
+
+def Area(c):
+    return _sum_of(c, HArea)
+
+
+def Perim(c):
+    return _sum_of(c, HPerim)
+
+
+def Length(c):
+    return _sum_of(c, HLength)
+
+
+AreaN, PerimN, LengthN = Area, Perim, Length
+
+
+def Width(c):
+    return _sum_of(c, HWidth)
+
+
+def Height(c):
+    return _sum_of(c, HHeight)
+
+
+def XCenter(c):
+    return sum(_un((b[0] + b[2]) / 2) for b in _boxes(c))
+
+
+def YCenter(c):
+    return sum(_un((b[1] + b[3]) / 2) for b in _boxes(c))
+
+
+def XCenterN(c):
+    b = _boxes(c)
+    return XCenter(c) / len(b) if b else 0.0
+
+
+def YCenterN(c):
+    b = _boxes(c)
+    return YCenter(c) / len(b) if b else 0.0
+
+
+def LeftBound(c):
+    b = _boxes(c)
+    return _un(b[-1][0]) if b else 0.0
+
+
+def BotBound(c):
+    b = _boxes(c)
+    return _un(b[-1][1]) if b else 0.0
+
+
+def RightBound(c):
+    return sum(_un(b[2]) for b in _boxes(c))
+
+
+def TopBound(c):
+    return sum(_un(b[3]) for b in _boxes(c))
+
+
+def LeftBoundN(c):
+    b = _boxes(c)
+    return _un(min(x[0] for x in b)) if b else 0.0
+
+
+def BotBoundN(c):
+    b = _boxes(c)
+    return _un(min(x[1] for x in b)) if b else 0.0
+
+
+def RightBoundN(c):
+    b = _boxes(c)
+    return _un(max(x[2] for x in b)) if b else 0.0
+
+
+def TopBoundN(c):
+    b = _boxes(c)
+    return _un(max(x[3] for x in b)) if b else 0.0
+
+
+def Angle(c):
+    total = 0.0
+    for o in _matches(c):
+        g = o.get("shape") or {}
+        if g.get("kind") == "line":
+            total += HAngle(Handle(o["id"]))
+        elif g.get("kind") == "arc":
+            total += float(g.get("sweep") or 0)
+    return total
+
+
+def ObjectType(c):
+    m = _matches(c)
+    return m[-1]["type"] if m else 0
+
+
+HAreaN = ObjArea = ObjAreaN = HArea
+HPerimN = HPerim
+
+
+def GetObjectUuid(h):
+    """The object's id in the file, which Rodeo keeps as Vectorworks keeps its UUID; "" for one the script made."""
+    i = _obj(h)["id"]
+    return "" if ":" in i else i
+
+
+def GetObjectByUuid(UUID):
+    u = str(UUID)
+    return Handle(u) if u in _S.objs else None
+
+
+# areas and volumes as text: the drawing's area unit (Rodeo's square feet, or square metres), 2 places
+_AREA_MM2 = {"sq ft": 92903.04, "ft²": 92903.04, "sq in": 645.16, "in²": 645.16, "sq m": 1e6, "m²": 1e6, "m2": 1e6,
+             "cm²": 100.0, "sq cm": 100.0, "mm²": 1.0, "sq mm": 1.0, "sq km": 1e12, "km²": 1e12}
+_VOLUME_MM3 = {"cu ft": 28316846.592, "ft³": 28316846.592, "cu in": 16387.064, "in³": 16387.064, "cu m": 1e9, "m³": 1e9,
+               "m3": 1e9, "l": 1e6, "cm³": 1000.0, "mm³": 1.0, "cu yd": 764554857.984, "yd³": 764554857.984}
+
+
+def _volume_mark():
+    return "cu ft" if _S.area_mark == "sq ft" else "m³"
+
+
+def _unit_text(v, mark, table):
+    return ("%.2f" % (float(v) / table[mark])) + " " + mark
+
+
+def _unit_value(text, mark, table):
+    import re
+    s = str(text).strip()
+    m = re.match(r"^\s*(-?\d+(?:[.,]\d+)?)\s*(.*?)\s*$", s)
+    if not m:
+        return 0.0
+    n = float(m.group(1).replace(",", "."))
+    unit = m.group(2).lower()
+    return n * table.get(unit, table[mark])
+
+
+def Area2Str(value):
+    return _unit_text(value, _S.area_mark, _AREA_MM2)
+
+
+def Str2Area(str_):
+    return _unit_value(str_, _S.area_mark, _AREA_MM2)
+
+
+def Volume2Str(value):
+    return _unit_text(value, _volume_mark(), _VOLUME_MM3)
+
+
+def Str2Volume(str_):
+    return _unit_value(str_, _volume_mark(), _VOLUME_MM3)
+
 `;

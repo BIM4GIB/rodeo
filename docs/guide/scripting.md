@@ -12,10 +12,11 @@ Python written for Vectorworks runs on the open drawing from **Plug-ins › Run 
 - opens and saves `.py` files
 - shows what it prints, with a failing line linked.
 
-The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs` module of more than 420 of Vectorworks' calls:
+The script runs in Pyodide in a Web Worker (fetched from jsDelivr the first time, about 11 MB) with a `vs` module of more than 450 of Vectorworks' calls:
 
 - drawing: Rect, Oval, Arc, Poly, BeginPoly with ArcTo, CurveTo and CurveThrough, Poly3D, BeginPoly3D with Add3DPt, Locus, CreateText, BeginGroup…
 - walking the drawing by handle: FSActLayer, NextObj, ForEachObject and Count with search criteria, ForEachObjectInLayer
+- measuring what matches search criteria: Area, Perim, Length, Width, Height, XCenterN, LeftBoundN, ObjectType…
 - reading and setting geometry, class, name, attributes, records and selection
 - moving, turning, scaling, mirroring and duplicating, and on the selection FlipHor, FlipVer, Scale, Forward, MoveFront…
 - changing a shape: SetPolyPt, InsertVertex, DelVertex, SetPolylineVertex, SetPolyClosed, SetSegPt1, SetArc, SetRRDiam

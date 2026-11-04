@@ -285,7 +285,10 @@ _VS_FN_OUT_LAST = {"circlecircleinters": 2, "linecircleintersect": 2}
 _FACES = {"bold": 1, "italic": 2, "underline": 4, "outline": 8, "shadow": 16}
 _PARAM_TYPES = {"bool": ("bool",), "int": ("int",), "real": ("real",), "str": ("str",)}
 # vs calls whose argument is search criteria written as they are, not as a string
-_CRITERIA = {"count": 0, "foreachobject": 1, "selectobj": 0, "dselectobj": 0}
+_CRITERIA = {"count": 0, "foreachobject": 1, "selectobj": 0, "dselectobj": 0, "area": 0, "arean": 0, "perim": 0,
+    "perimn": 0, "length": 0, "lengthn": 0, "width": 0, "height": 0, "xcenter": 0, "ycenter": 0, "xcentern": 0,
+    "ycentern": 0, "leftbound": 0, "botbound": 0, "rightbound": 0, "topbound": 0, "leftboundn": 0, "botboundn": 0,
+    "rightboundn": 0, "topboundn": 0, "angle": 0, "objecttype": 0}
 # vs calls that take a procedure or function of the script
 _CALLBACK = {"foreachobject": 0, "foreachobjectinlayer": 0, "foreachobjectinlist": 0, "runlayoutdialog": 1}
 

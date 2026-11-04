@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:18:00Z",
+    "script-criteria-functions",
+    "Script criteria functions",
+    `Python scripts and Vectorscripts can measure everything that matches search criteria.
+- Area, Perim, Length, Width and Height add up the matching objects; XCenterN and YCenterN average them.
+- LeftBoundN, RightBoundN, TopBoundN and BotBoundN give their extremes, and ObjectType their type.
+- Area2Str, Str2Area, Volume2Str and Str2Volume write and read areas and volumes in the drawing's units.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:17:00Z",
     "script-shape-editing",
     "Script calls that reshape",
