@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:08:00Z",
+    "color-palette-manager",
+    "Color Palette Manager",
+    `Tools > Utilities > Color Palette Manager keeps colour palettes of your own.
+- Make palettes, blend and lighten colours, or import a drawing's colours.
+- Active palettes show in every colour picker.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:07:00Z",
     "create-sheet-list",
     "Create Sheet List",

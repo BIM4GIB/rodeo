@@ -1,11 +1,16 @@
 // Colour swatch button and its popover palette, after Vectorworks' colour
 // picker. The popover shows the document's colours (doc.colors()) in a grid,
-// White and Black first, with a search box that matches name or hex. One
+// White and Black first, with a search box that matches name or hex. The
+// active custom palettes (Color Palette Manager) are offered beside them; a
+// colour picked from one is added to the document's in the same undo step. One
 // popover is open at a time. It closes on Esc, an outside click, focus leaving
 // it, or closeColorPicker() (panels call that before they re-render).
 
 import type { ColorInfo, VwxDocument } from "../../core/index.ts";
+import { activePalettes, DOCUMENT_PALETTE, type ColorPalette } from "../colorPalettes.ts";
+import { attempt } from "../commands.ts";
 import { h } from "../dom.ts";
+import { store } from "../state.ts";
 import "./colorPicker.css";
 
 /** Palette indices of the classic entries, always listed first. */
@@ -31,6 +36,8 @@ export interface ColorSwatchOptions {
 }
 
 interface Palette {
+  /** the document's colours when this was built: changed, and it is built again */
+  readonly key: string;
   readonly colors: readonly ColorInfo[];
   /** one button per colour, built once per document and moved into the grid on each open */
   readonly cells: readonly HTMLButtonElement[];
@@ -45,6 +52,8 @@ interface OpenPicker {
 
 const palettes = new WeakMap<VwxDocument, Palette>();
 let openPicker: OpenPicker | null = null;
+/** the custom palette last shown, kept for the next open; null for the document's */
+let shownPalette: string | null = null;
 
 /** Closes the open colour popover without moving focus. Call before a panel re-renders. */
 export function closeColorPicker(): void {
@@ -86,7 +95,11 @@ export function colorSwatch(opts: ColorSwatchOptions): HTMLButtonElement {
 /** The document's palette, built on first use: White, Black, then the document colours. */
 function paletteOf(doc: VwxDocument): Palette {
   const known = palettes.get(doc);
-  if (known) return known;
+  const key = doc
+    .colors()
+    .map((c) => `${c.css}${c.name}`)
+    .join("|");
+  if (known && known.key === key) return known;
   const colors: ColorInfo[] = [
     { index: WHITE, css: doc.color(WHITE), name: "White" },
     { index: BLACK, css: doc.color(BLACK), name: "Black" },
@@ -101,7 +114,7 @@ function paletteOf(doc: VwxDocument): Palette {
     cell.style.background = c.css;
     return cell;
   });
-  const pal: Palette = { colors, cells, keys: colors.map((c) => `${c.name} ${c.css}`.toLowerCase()) };
+  const pal: Palette = { key, colors, cells, keys: colors.map((c) => `${c.name} ${c.css}`.toLowerCase()) };
   palettes.set(doc, pal);
   return pal;
 }
@@ -127,12 +140,35 @@ function openPopover(anchor: HTMLElement, opts: ColorSwatchOptions): void {
     });
     head.prepend(clear);
   }
+  const customs = activePalettes();
+  let custom: ColorPalette | null = customs.find((p) => p.name === shownPalette) ?? null;
+  if (customs.length) {
+    const which = h(
+      "select",
+      { cls: "cp-palette", attrs: { "aria-label": "Color palette" } },
+      h("option", { text: DOCUMENT_PALETTE, attrs: { value: "" } }),
+      ...customs.map((p) => h("option", { text: p.name, attrs: { value: p.name } })),
+    );
+    which.value = custom?.name ?? "";
+    which.addEventListener("change", () => {
+      custom = customs.find((p) => p.name === which.value) ?? null;
+      shownPalette = custom?.name ?? null;
+      render();
+    });
+    head.append(which);
+  }
+  const manage = h("button", { cls: "cp-clear cp-manage", text: "Color Palette Manager…", attrs: { type: "button" } });
+  manage.addEventListener("click", () => {
+    close(false);
+    void import("../colorPaletteManager.ts").then((m) => m.colorPaletteManager());
+  });
   const pop = h(
     "div",
     { cls: "cp-pop", attrs: { role: "dialog", "aria-label": `${opts.label} colour` } },
     head,
     grid,
     empty,
+    manage,
   );
 
   // the palette is reused by every open of this document: mark the current colour afresh
@@ -145,11 +181,24 @@ function openPopover(anchor: HTMLElement, opts: ColorSwatchOptions): void {
     else cell.removeAttribute("aria-current");
   });
 
+  // a custom palette's swatches, made as it is shown; the current colour marked by its hex
+  const currentCss = current >= 0 ? opts.doc.color(current).toLowerCase() : "";
+  const customCells = (p: ColorPalette): { cells: HTMLButtonElement[]; keys: string[] } => ({
+    cells: p.colors.map((c) => {
+      const cell = h("button", { cls: "cp-cell", title: c.name || c.css, attrs: { type: "button", "aria-label": c.name || c.css, "data-css": c.css } });
+      cell.style.background = c.css;
+      cell.classList.toggle("on", c.css === currentCss);
+      return cell;
+    }),
+    keys: p.colors.map((c) => `${c.name} ${c.css}`.toLowerCase()),
+  });
+
   let visible: readonly HTMLButtonElement[] = pal.cells;
   const render = (): void => {
     const q = search.value.trim().toLowerCase();
-    visible = q === "" ? pal.cells : pal.cells.filter((_, i) => pal.keys[i].includes(q));
-    for (const cell of pal.cells) cell.tabIndex = -1;
+    const shown = custom ? customCells(custom) : pal;
+    visible = q === "" ? shown.cells : shown.cells.filter((_, i) => shown.keys[i].includes(q));
+    for (const cell of shown.cells) cell.tabIndex = -1;
     grid.replaceChildren(...visible);
     empty.hidden = visible.length > 0;
     // one tab stop in the grid (roving focus): the current colour if it is listed, else the first
@@ -160,6 +209,22 @@ function openPopover(anchor: HTMLElement, opts: ColorSwatchOptions): void {
   const pick = (index: number): void => {
     close(true);
     opts.onPick(index);
+  };
+  /** a custom palette's colour: added to the document's, then picked, as one undo step */
+  const pickCss = (css: string): void => {
+    close(true);
+    const s = store.session;
+    if (s?.doc !== opts.doc) return;
+    attempt("Add colour", (session) =>
+      session.batch(() => {
+        const [index] = session.addColors([css]);
+        opts.onPick(index);
+      }),
+    );
+  };
+  const choose = (cell: HTMLElement): void => {
+    if (cell.dataset.css) pickCss(cell.dataset.css);
+    else pick(Number(cell.dataset.index));
   };
 
   const place = (): void => {
@@ -206,7 +271,7 @@ function openPopover(anchor: HTMLElement, opts: ColorSwatchOptions): void {
       const first = visible[0];
       if (e.key === "Enter" && first) {
         e.preventDefault();
-        pick(Number(first.dataset.index));
+        choose(first);
       } else if (e.key === "ArrowDown" && first) {
         e.preventDefault();
         first.focus();
@@ -251,7 +316,7 @@ function openPopover(anchor: HTMLElement, opts: ColorSwatchOptions): void {
 
   grid.addEventListener("click", (e) => {
     const cell = e.target instanceof Element ? e.target.closest<HTMLElement>(".cp-cell") : null;
-    if (cell) pick(Number(cell.dataset.index));
+    if (cell) choose(cell);
   });
 
   search.addEventListener("input", render);

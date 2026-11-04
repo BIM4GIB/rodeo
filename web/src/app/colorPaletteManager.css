@@ -1,0 +1,104 @@
+/* Tools > Utilities > Color Palette Manager and its Edit Palette and Pick Color dialogs (colorPaletteManager.ts). The swatches are the colour picker's (.cp-cell). */
+
+.menu-dialog.cpm-dialog {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.menu-dialog.cpm-pick {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.cpm-dialog .menu-dialog-field .menu-dialog-input {
+  width: min(320px, 100%);
+  text-align: left;
+}
+
+.cpm-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.cpm-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cpm-list,
+.cpe-list {
+  height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.cpm-row,
+.cpe-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding: 0 8px;
+  cursor: default;
+  user-select: none;
+}
+
+.cpm-row[aria-selected="true"],
+.cpe-row[aria-selected="true"] {
+  background: var(--fill-strong);
+}
+
+.cpe-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.cpe-num {
+  flex: none;
+  width: 28px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpe-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpe-hex {
+  flex: none;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cpm-grid {
+  max-height: 248px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cpm-count {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .cpm-body {
+    grid-template-columns: 1fr;
+  }
+}

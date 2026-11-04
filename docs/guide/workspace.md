@@ -512,6 +512,29 @@ Every instance follows, after a confirmation naming how many definitions change,
 
 **Tools › Utilities › Create Color Chart…** draws the drawing's colour palette on the active layer as a grouped chart of swatches sixteen to a row, each palette index under its swatch when asked, sized on paper as text is, in one undo step.
 
+### Color Palette Manager
+
+**Tools › Utilities › Color Palette Manager…** (also at the foot of every colour picker) keeps palettes of your own beside the drawing's colours.
+
+- Tick a palette's **Active** box to offer it in the colour pickers. **Colors in Active Document**, the drawing's own colours, is always there.
+- **New…**, **Edit…**, **Duplicate** and **Delete** manage the custom palettes. **Cancel** undoes all of it.
+
+Editing a palette, you can:
+
+- Name it, and add or edit colours with **New…** and **Edit…**.
+- Take colours from another palette with **Get…**, or from another .vwx file with **Import…**.
+- **Lighten** or **Darken** the colours picked.
+- Make up to 1000 colours between two picked with **RGB Blend…** or **HSV Blend…**.
+- Sort the list by **Color** or **Name**, or drag colours into another order.
+
+In a colour picker, choose an active palette above the swatches. A colour taken from it is added to the drawing's colours and applied in one undo step.
+
+**Limits:**
+
+- Palettes are kept in this browser, not in the drawing or your account.
+- Vectorworks' standard palettes aren't included.
+- **Purge Unused** isn't offered.
+
 ### List Symbols
 
 **Tools › Utilities › List Symbols…** saves a text file of the symbol folders, each with its definitions or the folders alone, indented a tab a level.

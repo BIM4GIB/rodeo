@@ -1098,6 +1098,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Batch Rename…", enabled: hasDoc, run: () => void batchRenameDialog() },
             { label: "Change Symbol Attrs…", enabled: hasDoc, run: () => void changeSymbolAttrsDialog() },
+            { label: "Color Palette Manager…", run: () => void import("./colorPaletteManager.ts").then((m) => m.colorPaletteManager()) },
             { label: "Create Color Chart…", enabled: hasLayer, run: () => void colorChartDialog() },
             { label: "List Symbols…", enabled: hasDoc, run: () => void listSymbolsDialog() },
             { label: "Purge…", enabled: hasDoc, run: () => void purgeDialog() },

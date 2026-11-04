@@ -89,6 +89,18 @@
   background: var(--surface-hover);
 }
 
+.cp-palette {
+  width: 100%;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.cp-manage {
+  flex: none;
+}
+
 .cp-grid {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
@@ -113,6 +125,7 @@
 
 .cp-cell:focus-visible,
 .cp-clear:focus-visible,
+.cp-palette:focus-visible,
 .cp-search:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
