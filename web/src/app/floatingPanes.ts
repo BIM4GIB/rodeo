@@ -521,6 +521,11 @@ function newPane(): Pane | null {
   return pane;
 }
 
+/** Closes every floating view pane: Reset Multiple View Panes. */
+export function closeFloatingPanes(): void {
+  for (const p of [...panes]) p.close();
+}
+
 /** View > Multiple View Panes > Create Floating View Pane: a new pane over the drawing, showing what the active view shows. */
 export function createFloatingPane(): void {
   const pane = newPane();

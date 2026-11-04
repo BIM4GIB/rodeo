@@ -367,6 +367,9 @@ The menu pictures each arrangement. Other commands:
 - **Close Active View Pane** gives its room to its neighbours.
 - **Enable Multiple View Panes** goes to one pane and back to the last arrangement of several.
 - **Single Pane** goes back to the one view.
+- **Reset Multiple View Panes** goes back to Four Panes, the dividers halfway and each pane in its standard view, and closes the floating panes.
+
+Every pane shows the same layers, classes and clip cube, so **Use Same Visibilities in All Panes** is always on.
 
 ### The active pane
 

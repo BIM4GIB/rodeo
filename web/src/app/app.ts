@@ -247,6 +247,7 @@ import {
   mountPanes,
   multiPane,
   onPanes,
+  onPanesReset,
   paneCount,
   paneKind,
   pictureOf,
@@ -362,6 +363,8 @@ export class App {
   private view3d: View3D | null = null;
   /** where each view pane's 3D view was left, by pane, while another has the live view */
   private readonly paneCams = new Map<number, CameraState>();
+  /** the last arrangement's change, put in place */
+  private panesApplied: Promise<void> = Promise.resolve();
   /** each 3D view pane's render mode and projection, by pane, the live one's being the view's own */
   private readonly paneLooks = new Map<number, PaneLook>();
   private picturesTimer = 0;
@@ -1155,7 +1158,9 @@ export class App {
         this.queuePlanPictures();
       },
     });
-    onPanes(() => void this.applyPanes());
+    onPanes(() => (this.panesApplied = this.applyPanes()));
+    // Reset Multiple View Panes: the live 3D view back to its pane's standard view too, once it's shown
+    onPanesReset(() => void this.panesApplied.then(() => livePane() >= 0 && this.view3d?.setView(startView(livePane()))));
     // View > Multiple View Panes > Create Floating View Pane: more views of the drawing, floating over it
     mountFloatingPanes(stage, {
       scene: this.scene,

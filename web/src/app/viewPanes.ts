@@ -266,6 +266,33 @@ export function onPanes(f: () => void): () => void {
   return () => listeners.delete(f);
 }
 
+/** The arrangement Reset Multiple View Panes goes back to. */
+const DEFAULT_LAYOUT: PaneLayout = "four";
+const resetListeners = new Set<() => void>();
+
+/**
+ * View > Multiple View Panes > Reset Multiple View Panes: Four Panes, the dividers halfway, each pane
+ * back to its standard view (the plan, Front, Right and an isometric view), even when the layout is
+ * already Four Panes.
+ */
+export function resetPanes(): void {
+  layout = DEFAULT_LAYOUT;
+  shareX = 0.5;
+  shareY = 0.5;
+  kinds = startKinds(layout);
+  startLive();
+  persist();
+  place?.();
+  for (const f of listeners) f();
+  for (const f of resetListeners) f();
+}
+
+/** Calls `f` after Reset Multiple View Panes, the new arrangement in place; returns the function that stops it. */
+export function onPanesReset(f: () => void): () => void {
+  resetListeners.add(f);
+  return () => resetListeners.delete(f);
+}
+
 /** A change of arrangement: the new layout and, for each of its panes, the pane of the old one it shows. */
 type Change = readonly [PaneLayout, readonly number[]];
 
@@ -367,6 +394,16 @@ function commandRows(enabled: () => boolean): Row[] {
       enabled: () => enabled() && store.session !== null,
       run: () => void import("./floatingPanes.ts").then((m) => m.createFloatingPane()),
     },
+    {
+      label: "Reset Multiple View Panes",
+      enabled,
+      run: () => {
+        resetPanes();
+        void import("./floatingPanes.ts").then((m) => m.closeFloatingPanes());
+      },
+    },
+    // Rodeo's panes always show the same layer and class visibilities and clip cube
+    { label: "Use Same Visibilities in All Panes", enabled: () => false, checked: () => true },
     "-",
   ];
 }

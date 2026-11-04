@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:06:00Z",
+    "reset-view-panes",
+    "Reset Multiple View Panes",
+    `View > Multiple View Panes > Reset Multiple View Panes tidies a layout that's got out of hand.
+- Back to four panes, dividers halfway, each in its standard view.
+- Floating view panes close.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:05:00Z",
     "align-by-increment",
     "Align by Increment",
