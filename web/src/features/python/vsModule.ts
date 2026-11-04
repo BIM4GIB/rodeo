@@ -101,6 +101,10 @@ class _State(object):
         self.symbols = dict((s["index"], s["name"]) for s in snap["symbols"])
         self.formats = dict((f["name"], f["format"]) for f in snap["formats"])
         self.new_attrs = dict(snap["newAttrs"])
+        # what a new object takes from the drawing where the Attributes palette sets nothing
+        self.template_attrs = snap.get("templateAttrs") or {}
+        self.class_mode = snap.get("classMode")
+        self.layer_mode = snap.get("layerMode")
         self.text_paper_mm = float(snap["textPaperMm"])
         self.jspi = bool(snap["jspi"])
         self.ops = []
@@ -164,6 +168,8 @@ def _result():
         "attrs": s.attrs if s.attrs_set and not s.plugin else None,
         "text": s.text_set if s.text_set and not s.plugin else None,
         "tool": s.tool,
+        "classMode": s.class_mode,
+        "layerMode": s.layer_mode,
     })
 
 
@@ -374,12 +380,12 @@ def _add(shape, copy, extra=None):
     s.seq += 1
     tmp = "new:%d" % s.seq
     attrs = dict(s.attrs)
-    op = ["add", tmp, s.active_layer, shape, s.active_class, attrs or None]
+    full = dict(s.new_attrs)
+    full.update(attrs)
+    op = ["add", tmp, s.active_layer, shape, s.active_class, (attrs if s.plugin else full) or None]
     if extra:
         op.append(extra)
     s.ops.append(op)
-    full = dict(s.new_attrs)
-    full.update(attrs)
     o = {
         "id": tmp, "type": _TYPE_OF_KIND[shape["kind"]], "layer": s.active_layer, "parent": s.pio,
         "cls": s.active_class, "name": "", "sel": False, "attrs": full, "shape": copy, "records": {}, "sym": None,
@@ -1120,11 +1126,16 @@ def SetOpacityN(h, fillOpacity, penOpacity):
     _set_attrs(h, {"fillOpacity": max(0, min(100, int(fillOpacity))), "penOpacity": max(0, min(100, int(penOpacity)))})
 
 
-def _by_class(h, group):
+def _by_class(h, group, on=True):
     o = _obj(h)
     if o.get("attrs") is None:
         raise TypeError("%r has no attributes of its own" % h)
-    _S.ops.append(["byclass", [o["id"]], group])
+    groups = o.setdefault("byClass", [])
+    if on and group not in groups:
+        groups.append(group)
+    elif not on and group in groups:
+        groups.remove(group)
+    _S.ops.append(["byclass", [o["id"]], group, bool(on)])
 
 
 # Rodeo keeps a fill's pattern and colours by class together, as the file does
@@ -1476,11 +1487,11 @@ def Layer(name):
     s.seq += 1
     tmp = "layer:%d" % s.seq
     scale = s.layer_by_id[s.active_layer]["scale"] if s.active_layer in s.layer_by_id else 1
-    l = {"id": tmp, "name": name, "kind": "design", "scale": scale, "vis": "visible"}
+    l = {"id": tmp, "name": name, "kind": "design", "scale": scale, "vis": "visible", "elev": 0.0}
     s.layers.append(l)
     s.layer_by_id[tmp] = l
     s.kids[tmp] = []
-    s.ops.append(["layer", tmp, name])
+    s.ops.append(["layer", tmp, name, "design", scale])
     s.active_layer = tmp
     s.layer_changed = True
 
@@ -2898,4 +2909,406 @@ for _n, _spec in (("EqPt", "ppr"), ("EqPt2D", "ppr"), ("EqualPt", "pp"), ("Equal
                   ("PtInPoly", "ph")):
     globals()[_n] = _takes(_spec)(globals()[_n])
 del _n, _spec
+
+# ---- classes, layers and the attributes new objects take (Vectorworks' Classes, Layers, Object and Document Attributes calls) ----
+
+_VIS_NUM = {"visible": 0, "hidden": -1, "grayed": 2}
+# Layer Options and Class Options as Vectorworks numbers them
+_MODES = {"active-only": 1, "gray-others": 2, "show-others": 3, "show-snap-others": 4, "modify-others": 5, "gray-snap-others": 6}
+
+
+def _mode_of(n):
+    for k, v in _MODES.items():
+        if v == int(n):
+            return k
+    raise ValueError("options go from 1 (Active Only) to 6 (Gray/Snap Others), not %r" % n)
+
+
+def _class_rec(name):
+    c = _S.classes.get(str(name))
+    if c is None:
+        raise ValueError("the drawing has no class named %r" % str(name))
+    return c
+
+
+def _cl_attr(name, key):
+    a = _class_rec(name).get("attrs")
+    return a.get(key, 0) if a else 0
+
+
+def _set_cl(name, attrs):
+    c = _class_rec(name)
+    if c.get("attrs") is None:
+        raise ValueError("class %r keeps no attributes Rodeo can change" % c["name"])
+    c["attrs"].update(attrs)
+    _S.ops.append(["classattrs", c["name"], attrs])
+
+
+def GetCVis(className):
+    c = _S.classes.get(str(className))
+    return _VIS_NUM.get(c["vis"], 0) if c else 0
+
+
+def RenameClass(className, newName):
+    c = _class_rec(className)
+    old, new = c["name"], str(newName)
+    if new == old:
+        return
+    if old == "None":
+        raise ValueError("the None class keeps its name")
+    if not new or new in _S.classes:
+        raise ValueError("there's already a class named %r" % new)
+    _S.ops.append(["renameclass", old, new])
+    c["name"] = new
+    del _S.classes[old]
+    _S.classes[new] = c
+    _S.class_names[_S.class_names.index(old)] = new
+    for o in _S.objs.values():
+        if o.get("cls") == old:
+            o["cls"] = new
+    if _S.active_class == old:
+        _S.active_class = new
+
+
+def DelClass(className):
+    name = _class_rec(className)["name"]
+    if name == "None":
+        raise ValueError("the None class can't be deleted")
+    _S.ops.append(["delclass", name])
+    del _S.classes[name]
+    _S.class_names.remove(name)
+    for o in _S.objs.values():
+        if o.get("cls") == name:
+            o["cls"] = "None"
+    if _S.active_class == name:
+        _S.active_class = "None"
+        _S.class_changed = True
+
+
+def GetClFPat(className):
+    return _cl_attr(className, "fillPattern")
+
+
+def SetClFPat(className, pattern):
+    _set_cl(className, {"fillPattern": int(pattern)})
+
+
+def GetClFillFore(className):
+    return _rgb16(_cl_attr(className, "fillFore"))
+
+
+def GetClFillBack(className):
+    return _rgb16(_cl_attr(className, "fillBack"))
+
+
+def GetClPenFore(className):
+    return _rgb16(_cl_attr(className, "penFore"))
+
+
+def GetClPenBack(className):
+    return _rgb16(_cl_attr(className, "penBack"))
+
+
+def SetClFillFore(className, *color):
+    _set_cl(className, {"fillFore": _index_of(color)})
+
+
+def SetClFillBack(className, *color):
+    _set_cl(className, {"fillBack": _index_of(color)})
+
+
+def SetClPenFore(className, *color):
+    _set_cl(className, {"penFore": _index_of(color)})
+
+
+def SetClPenBack(className, *color):
+    _set_cl(className, {"penBack": _index_of(color)})
+
+
+# Rodeo keeps one line style number, as the file does: 0 none, 2 solid, a negative one a dash style
+def GetClLS(className):
+    return _cl_attr(className, "lineStyle")
+
+
+def SetClLS(className, lineStyle):
+    _set_cl(className, {"lineStyle": int(lineStyle)})
+
+
+GetClLSN = GetClLS
+SetClLSN = SetClLS
+
+
+def GetClLW(className):
+    return _cl_attr(className, "lineWeight")
+
+
+def SetClLW(className, lineWeight):
+    _set_cl(className, {"lineWeight": int(lineWeight)})
+
+
+def GetClOpacity(className):
+    return _cl_attr(className, "fillOpacity")
+
+
+def SetClOpacity(className, opacity):
+    v = max(0, min(100, int(opacity)))
+    _set_cl(className, {"fillOpacity": v, "penOpacity": v})
+
+
+def GetClOpacityN(className):
+    return (_cl_attr(className, "fillOpacity"), _cl_attr(className, "penOpacity"))
+
+
+def SetCLOpacityN(className, penOpacity, fillOpacity):
+    _set_cl(className, {"fillOpacity": max(0, min(100, int(fillOpacity))), "penOpacity": max(0, min(100, int(penOpacity)))})
+
+
+def GetClTextStyleRef(className):
+    return _class_rec(className).get("textStyle", 0)
+
+
+def SetClTextStyleRef(className, textStyleRef):
+    c = _class_rec(className)
+    c["textStyle"] = int(textStyleRef)
+    _S.ops.append(["classtextstyle", c["name"], int(textStyleRef)])
+
+
+def GetClassOptions():
+    return _MODES.get(_S.class_mode, 5)
+
+
+def SetClassOptions(classOpts):
+    _S.class_mode = _mode_of(classOpts)
+
+
+def GetLayerOptions():
+    return _MODES.get(_S.layer_mode, 5)
+
+
+def SetLayerOptions(layerOpts):
+    _S.layer_mode = _mode_of(layerOpts)
+
+
+def NumLayers():
+    return len(_S.layers)
+
+
+def _act_layer():
+    l = _S.layer_by_id.get(_S.active_layer)
+    if l is None:
+        raise ValueError("the drawing has no active layer")
+    return l
+
+
+def GetLVis(h):
+    return _VIS_NUM.get(_layer(h)["vis"], 0)
+
+
+def _layer_vis(vis):
+    l = _act_layer()
+    l["vis"] = vis
+    _S.ops.append(["layervis", l["id"], vis])
+
+
+def ShowLayer():
+    _layer_vis("visible")
+
+
+def HideLayer():
+    _layer_vis("hidden")
+
+
+def GrayLayer():
+    _layer_vis("grayed")
+
+
+def GetLScale(h):
+    return _layer(h)["scale"] or 1
+
+
+def SetLScale(h, scale):
+    l = _layer(h)
+    v = float(scale)
+    if v <= 0:
+        raise ValueError("a layer's scale is more than 0, not %r" % scale)
+    l["scale"] = v
+    _S.ops.append(["layerscale", l["id"], v])
+
+
+def SetScale(actualSize):
+    SetLScale(ActLayer(), actualSize)
+
+
+def _design(l):
+    if l["kind"] != "design":
+        raise TypeError("layer %r is a sheet layer, which has no elevation" % l["name"])
+    return l
+
+
+def _set_elev(l, mm):
+    _design(l)["elev"] = mm
+    _S.ops.append(["layerelev", l["id"], mm])
+
+
+# Rodeo keeps a design layer's elevation, not its thickness, which reads 0
+def GetLayerElevation(h):
+    return (float(_design(_layer(h)).get("elev") or 0), 0.0)
+
+
+def SetLayerElevation(h, baseElev, thickness):
+    _set_elev(_layer(h), float(baseElev))
+
+
+def GetZVals():
+    return (_un(float(_design(_act_layer()).get("elev") or 0)), 0.0)
+
+
+def SetZVals(zDistance, deltaZDistance):
+    _set_elev(_act_layer(), _mm(zDistance))
+
+
+def CreateLayer(layerName, layerType):
+    s = _S
+    name = str(layerName)
+    if any(l["name"] == name for l in s.layers):
+        raise ValueError("there's already a layer named %r" % name)
+    kind = "sheet" if int(layerType) == 2 else "design"
+    scale = 1 if kind == "sheet" else (s.layer_by_id[s.active_layer]["scale"] if s.active_layer in s.layer_by_id else 1)
+    s.seq += 1
+    tmp = "layer:%d" % s.seq
+    l = {"id": tmp, "name": name, "kind": kind, "scale": scale, "vis": "visible", "elev": 0.0}
+    s.layers.append(l)
+    s.layer_by_id[tmp] = l
+    s.kids[tmp] = []
+    s.ops.append(["layer", tmp, name, kind, scale])
+    return Handle(tmp)
+
+
+def NumSelectedObjects():
+    return sum(1 for o in _S.objs.values() if o["sel"])
+
+
+def NumColors():
+    return max([p[0] for p in _S.palette] or [0])
+
+
+# an object's line style, opacity, and what it takes from its class
+def GetLS(h):
+    return _attr(h, "lineStyle")
+
+
+def SetLS(h, lineStyle):
+    _set_attrs(h, {"lineStyle": int(lineStyle)})
+
+
+GetLSN = GetLS
+SetLSN = SetLS
+
+
+def GetOpacityN(h):
+    a = _obj(h).get("attrs")
+    if a is None:
+        return (False, 0, 0)
+    return (True, a.get("penOpacity", 100), a.get("fillOpacity", 100))
+
+
+def _is_by_class(h, group):
+    return group in (_obj(h).get("byClass") or [])
+
+
+def IsFPatByClass(h):
+    return _is_by_class(h, "fill")
+
+
+def IsFillColorByClass(h):
+    return _is_by_class(h, "fill")
+
+
+def IsLSByClass(h):
+    return _is_by_class(h, "lineStyle")
+
+
+def IsLWByClass(h):
+    return _is_by_class(h, "lineWeight")
+
+
+def IsPenColorByClass(h):
+    return _is_by_class(h, "penColor")
+
+
+def GetOpacityByClass(h):
+    return _is_by_class(h, "opacity")
+
+
+def GetOpacityByClassN(h):
+    b = _is_by_class(h, "opacity")
+    return (b, b)
+
+
+# Rodeo keeps an object's pen and fill opacity by class together
+def SetOpacityByClassN(h, inIsPenOpacityByClass, inIsFillOpacityByClass):
+    _by_class(h, "opacity", bool(inIsPenOpacityByClass) or bool(inIsFillOpacityByClass))
+
+
+# the attributes new objects take: the script's, the Attributes palette's, or the drawing's
+def _new_attr(key):
+    for a in (_S.attrs, _S.new_attrs, _S.template_attrs):
+        if key in a:
+            return a[key]
+    return 0
+
+
+def FFillPat():
+    return _new_attr("fillPattern")
+
+
+def FPenPat():
+    return _new_attr("lineStyle")
+
+
+FPenPatN = FPenPat
+
+
+def PenPatN(patNumber):
+    PenPat(patNumber)
+
+
+def FPenSize():
+    return _new_attr("lineWeight")
+
+
+def FFillFore():
+    return _rgb16(_new_attr("fillFore"))
+
+
+def FFillBack():
+    return _rgb16(_new_attr("fillBack"))
+
+
+def FPenFore():
+    return _rgb16(_new_attr("penFore"))
+
+
+def FPenBack():
+    return _rgb16(_new_attr("penBack"))
+
+
+def GetDefaultOpacity():
+    return _new_attr("fillOpacity")
+
+
+def GetDefaultOpacityN():
+    return (_new_attr("penOpacity"), _new_attr("fillOpacity"))
+
+
+def OpacityN(fillOpacity, penOpacity):
+    SetDefaultOpacityN(fillOpacity, penOpacity)
+
+
+# new objects never take their attributes from the class in Rodeo
+def FFPatByClass():
+    return False
+
+
+FFillColorByClass = FLSByClass = FLWByClass = FPenColorByClass = FMarkerByClass = FFPatByClass
 `;

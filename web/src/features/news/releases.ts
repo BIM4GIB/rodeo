@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:15:00Z",
+    "script-classes-layers",
+    "Script calls for classes and layers",
+    `Python scripts and Vectorscripts can change classes, layers and the attributes new objects take.
+- A class's fill, pen, line weight and opacity: SetClFPat, SetClLW, SetCLOpacityN, GetClFillFore and more.
+- RenameClass, DelClass, Class and Layer Options, CreateLayer, and a layer's scale, elevation and visibility.
+- What a script draws now takes the Attributes palette's settings, as in Vectorworks.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:14:00Z",
     "script-math-geometry",
     "More script calls",

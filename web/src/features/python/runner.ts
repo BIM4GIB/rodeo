@@ -16,7 +16,8 @@ import { h } from "../../app/dom.ts";
 import { appContext, registerOverlay } from "../../app/ext.ts";
 import { showDialog } from "../../app/menubar.ts";
 import { toolOfSelector } from "../../app/customScripts.ts";
-import { store, type ToolId } from "../../app/state.ts";
+import { store, type DisplayMode, type ToolId } from "../../app/state.ts";
+import { DISPLAY_MODES } from "../../app/displayModes.ts";
 import { textDefaults } from "../../app/tools/text.ts";
 import { toast } from "../../app/toast.ts";
 import { millimetresPerUnit, parseLength } from "../../app/units.ts";
@@ -248,6 +249,7 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
         name: o.name ?? "",
         bbox: box ? [box.x0, box.y0, box.x1, box.y1] : null,
         attrs: o.attrs,
+        byClass: o.byClass ?? [],
         sym: o.symbol ?? null,
         records,
         shape: g
@@ -298,8 +300,8 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
   }
   return JSON.stringify({
     units,
-    layers: doc.layers().map((l) => ({ id: l.id, name: l.name, kind: l.kind, scale: l.scale, vis: l.visibility })),
-    classes: classes.map((c) => ({ name: c.name, vis: c.visibility })),
+    layers: doc.layers().map((l) => ({ id: l.id, name: l.name, kind: l.kind, scale: l.scale, vis: l.visibility, elev: l.elevation ?? 0 })),
+    classes: classes.map((c) => ({ name: c.name, vis: c.visibility, attrs: c.attrs, textStyle: c.textStyle })),
     activeLayer,
     activeClass: className.get(store.activeClassIndex) ?? "None",
     palette: doc.colors().map((c) => [c.index, ...rgb(c.css)]),
@@ -308,6 +310,9 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
     objects,
     selection: [...store.selection],
     newAttrs: store.drawAttrs,
+    templateAttrs: s.templateAttributes("rect"),
+    classMode: store.classMode,
+    layerMode: store.layerMode,
     textPaperMm: TEXT_PAPER_MM,
     jspi,
     plugin,
@@ -341,6 +346,9 @@ interface Result {
   readonly text?: { readonly pts?: number; readonly h?: number; readonly v?: number } | null;
   /** the tool it chose with SetTool, by Vectorworks' number */
   readonly tool?: number | null;
+  /** Layer Options and Class Options as it leaves them (SetLayerOptions, SetClassOptions) */
+  readonly layerMode?: DisplayMode | null;
+  readonly classMode?: DisplayMode | null;
   readonly error: ScriptError | null;
 }
 
@@ -470,7 +478,7 @@ function applySteps(s: EditSession, steps: readonly unknown[][], around: Around 
           break;
         case "byclass":
           if (!BY_CLASS.has(str(a[1]))) throw new Error(`unknown attribute group ${str(a[1])}`);
-          s.setAttributesByClass(ids(a[0]).map(real), str(a[1]) as ByClassGroup, true);
+          s.setAttributesByClass(ids(a[0]).map(real), str(a[1]) as ByClassGroup, a[2] !== false);
           break;
         case "name":
           s.setObjectName(real(a[0]), str(a[1]));
@@ -483,10 +491,32 @@ function applySteps(s: EditSession, steps: readonly unknown[][], around: Around 
           s.arrangeObjects(ids(a[0]).map(real), str(a[1]) as Arrange);
           break;
         case "layer":
-          made.set(str(a[0]), s.createLayer(str(a[1])));
+          made.set(str(a[0]), s.createLayer(str(a[1]), a[2] === "sheet" ? "sheet" : "design", a[3] == null ? undefined : Number(a[3])));
+          break;
+        case "layervis":
+          if (!VISIBILITY.has(str(a[1]))) throw new Error(`unknown visibility ${str(a[1])}`);
+          s.setLayerVisibility(real(a[0]), str(a[1]) as Visibility);
+          break;
+        case "layerscale":
+          s.setLayerScale(real(a[0]), Number(a[1]));
+          break;
+        case "layerelev":
+          s.setLayerElevation(real(a[0]), Number(a[1]));
           break;
         case "newclass":
           classIndex(str(a[0]));
+          break;
+        case "classattrs":
+          s.setClassAttributes(classIndex(str(a[0])), a[1] as Partial<Attributes>);
+          break;
+        case "classtextstyle":
+          s.setClassTextStyle(classIndex(str(a[0])), Number(a[1]));
+          break;
+        case "renameclass":
+          s.renameClass(classIndex(str(a[0])), str(a[1]));
+          break;
+        case "delclass":
+          s.deleteClass(classIndex(str(a[0])));
           break;
         case "classvis":
           if (!VISIBILITY.has(str(a[1]))) throw new Error(`unknown visibility ${str(a[1])}`);
@@ -785,6 +815,16 @@ function applyDefaults(result: Result): void {
     if (text.pts) textDefaults.paperHeight = text.pts * MM_PER_POINT;
     textDefaults.align = { h: text.h ?? textDefaults.align.h, v: text.v ?? textDefaults.align.v };
   }
+  const modes = DISPLAY_MODES.map((m) => m.value);
+  let display = false;
+  for (const key of ["layerMode", "classMode"] as const) {
+    const mode = result[key];
+    if (mode && modes.includes(mode) && store[key] !== mode) {
+      store[key] = mode;
+      display = true;
+    }
+  }
+  if (display) store.emit("display");
   if (result.tool != null) {
     const id = toolOfSelector(result.tool);
     if (id) appContext()?.setTool(id as ToolId);

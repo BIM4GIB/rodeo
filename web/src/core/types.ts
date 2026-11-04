@@ -1767,6 +1767,8 @@ export interface EditSession {
   // objects
   /** add a shape to a layer; `attrs` overrides the attributes copied from the template */
   addObject(layerId: string, shape: NewShape, classIndex?: number, attrs?: Partial<Attributes>): string;
+  /** the attributes a new object of `kind` copies from the template, before addObject's `attrs`; null when the template has none */
+  templateAttributes(kind: NewShape["kind"]): Attributes | null;
   /** Adds several shapes at once, in order, as addObject would one by one; returns their ids. `attrs` is for all, or per shape. */
   addObjects(layerId: string, shapes: readonly NewShape[], classIndex?: number, attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[]): string[];
   /** whether the file has an object of this kind to copy settings from, which addObject needs */

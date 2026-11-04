@@ -9,7 +9,7 @@
 //   * objects are inserted before their container's terminator, with next != 0.
 //   * every cloned record gets a new GUID.
 
-import { ATTR_END, BLACK, BY_CLASS, BY_CLASS_BITS, BY_CLASS_KEYS, CLASS_TEXT_STYLE, CLASS_TEXTURE, WHITE, addTableColors, byClassGroup, writeAttrs, writeClassAttrs, writeLineType } from "./attrs.ts";
+import { ATTR_END, BLACK, BY_CLASS, BY_CLASS_BITS, BY_CLASS_KEYS, CLASS_TEXT_STYLE, CLASS_TEXTURE, WHITE, addTableColors, byClassGroup, readAttrs, writeAttrs, writeClassAttrs, writeLineType } from "./attrs.ts";
 import { concat, encodeUtf16, f64, i16, i32, setF64, setI16, setI32, setU16, setU32, setU64, u16, u32, u64 } from "./bytes.ts";
 import { symbolDefinitionTemplate, symbolLibraryTemplate, builtinTemplates, imageTexture, shaderFormatList, extrudeShell as builtinExtrudeShell, meshShell as builtinMeshShell, pluginTemplate, poly3dHead as builtinPoly3dHead, WALL_SHELL_LENGTH, plainWall, wallShell, viewportShell as builtinViewportShell, recordFormatTemplate, type Template } from "./builtins.ts";
 import {
@@ -3975,6 +3975,11 @@ export class Session implements EditSession {
 
   addObject(layerId: string, shape: NewShape, classIndex?: number, attrs?: Partial<Attributes>): string {
     return this.addObjects(layerId, [shape], classIndex, attrs)[0];
+  }
+
+  templateAttributes(kind: NewShape["kind"]): Attributes | null {
+    const t = Object.hasOwn(TYPE_OF_KIND, kind) ? this.templates.get(TYPE_OF_KIND[kind]) : undefined;
+    return t ? readAttrs(t.recs[0]) : null;
   }
 
   addObjects(layerId: string, shapes: readonly NewShape[], classIndex?: number, attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[]): string[] {

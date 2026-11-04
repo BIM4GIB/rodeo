@@ -267,13 +267,16 @@ _BUILTIN_VAR = {
 _VS_OUT = {
     "colorindextorgb": 1, "getbbox": 1, "getfillback": 1, "getfillfore": 1, "getlocpt": 1, "getopacity": 1,
     "getpenback": 1, "getpenfore": 1, "getpolypt": 2, "getpolylinevertex": 2, "getsegpt1": 1, "getsegpt2": 1,
+    "getclfillfore": 1, "getclfillback": 1, "getclpenfore": 1, "getclpenback": 1, "getclopacityn": 1, "getopacitybyclassn": 1,
+    "ffillfore": 0, "ffillback": 0, "fpenfore": 0, "fpenback": 0, "getdefaultopacity": 0, "getdefaultopacityn": 0,
+    "getzvals": 0, "getlayerelevation": 1,
     "getunits": 0, "hcenter": 1, "rgbtocolorindex": 3, "vsogeteventinfo": 0,
     "getpt": 0, "getline": 0, "getrect": 0,
     "getitemtext": 2, "getbooleanitem": 2, "getthreestatecheckboxstate": 2, "getchoicecount": 2, "getcolorchoice": 2,
     "getchoicetext": 3, "getchoiceindex": 3, "getselectedchoiceinfo": 3, "getselectedchoiceindex": 3,
 }
 # vs functions that also hand values back through their arguments: how many arguments come in
-_VS_FN_OUT = {"getcustomobjectinfo": 0, "getplugininfo": 0, "geteditreal": 3, "geteditinteger": 2, "centroid": 1}
+_VS_FN_OUT = {"getcustomobjectinfo": 0, "getplugininfo": 0, "geteditreal": 3, "geteditinteger": 2, "centroid": 1, "getopacityn": 1}
 # vs procedures and functions with POINT arguments, which a script may pass as a point or as x and y, that
 # hand values back through their last arguments: how many those are
 _VS_OUT_LAST = {"linelineintersection": 3, "comp": 2, "unionrect": 2}
