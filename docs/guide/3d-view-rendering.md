@@ -278,6 +278,25 @@ It shows its progress, with **Finish now** and **Cancel**, then shows the pictur
 
 **File › Export › Export Panorama…** makes a 360° picture from the 3D view's eye (Shaded, Realistic or Path Traced, up to 8192 × 4096). It saves it as a .jpg, or as one .html page with the picture inside it, to look around in by dragging, the wheel or a pinch.
 
+### Render Bitmap
+
+The **Render Bitmap** tool (Visualization, after Heliodon) turns part of the view into a picture on the drawing.
+
+1. Choose the tool. Its **Preferences** open the Render Bitmap Options:
+   - **Mode**, any of the 3D view's render modes;
+   - **Resolution (DPI)**, dots per inch on paper at the active layer's scale;
+   - **Enable Alpha Transparency**, to leave the background clear.
+2. Drag round the area to render, in Top/Plan or over the 3D view. A click without dragging takes the whole window.
+3. The bitmap is placed on the active layer and selected. From the 3D view it goes where the same part of the screen is in Top/Plan, which is then shown.
+
+Path Traced shows its progress; **Finish now** keeps the picture so far.
+
+**Limits:**
+
+- In Top/Plan the plan is drawn as it shows, whatever the mode.
+- A bitmap is at most 8000 pixels a side; the resolution is lowered to fit.
+- The drawing must already hold an image, as for Import Image.
+
 ### Create Animation
 
 **Model › Create Animation** makes an animation path: a camera's route through the model, to play in the 3D view and make a movie of.

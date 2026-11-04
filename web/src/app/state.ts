@@ -425,6 +425,7 @@ export type ToolId =
   | "alignleaders"
   | "rotate3dcentre"
   | "roofaxis"
+  | "renderbitmap"
   | "placeat"
   | "adddims"
   | "visualzone"

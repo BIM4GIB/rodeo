@@ -696,13 +696,15 @@ export class View3D {
    * exactly when given: a movie's frame), in `look`'s render mode and projection (Realistic as Shaded
    * while the render feature gets ready); the view itself is drawn again as it was. Path Traced
    * refines a sample a call with the render feature's own renderer, the view left alone: true while
-   * it wants calling again.
+   * it wants calling again. `clear` draws it on that colour in place of the view's own background
+   * (Render Bitmap's alpha, from a picture on black and one on white).
    */
   picture(
     state: CameraState,
     canvas: HTMLCanvasElement,
     look: PaneLook = { mode: this.mode, projection: this.viz.projection },
     size?: { readonly width: number; readonly height: number },
+    clear?: number,
   ): boolean {
     const renderer = this.renderer;
     const w = size?.width ?? canvas.clientWidth;
@@ -732,7 +734,7 @@ export class View3D {
     this.setAspect(w / h);
     this.placeCamera(state);
     this.camera.updateMatrixWorld();
-    renderer.setClearColor(this.background());
+    renderer.setClearColor(clear ?? this.background());
     this.placeSun();
     // Realistic and Path Traced from the render feature, the view's own Shaded picture until it is ready
     const realistic = isRealistic(this.mode) && this.hook !== null;
@@ -743,6 +745,7 @@ export class View3D {
     canvas.width = Math.round(w * scale);
     canvas.height = Math.round(h * scale);
     canvas.getContext("2d")?.drawImage(renderer.domElement, 0, 0, canvas.width, canvas.height);
+    if (clear !== undefined) renderer.setClearColor(this.background());
     if (this.mode !== mode) {
       this.mode = mode;
       this.applyMode();

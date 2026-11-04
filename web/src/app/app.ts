@@ -57,6 +57,7 @@ import { DividingTool } from "./tools/dividing.ts";
 import { AlignLeadersTool } from "./tools/alignLeaders.ts";
 import { Rotate3DCentreTool } from "./tools/rotate3dCentre.ts";
 import { RoofFaceAxisTool } from "./tools/roofFaceAxis.ts";
+import { RenderBitmapTool } from "./tools/renderBitmap.ts";
 import { roofFaceDialog } from "./roofFace.ts";
 import { startDividingLines } from "./dividingLines.ts";
 import { startAlignLeaders } from "./leaderLines.ts";
@@ -453,6 +454,7 @@ export class App {
       new AlignLeadersTool(env, () => this.controller.setTool(this.clicksFrom)),
       new Rotate3DCentreTool(env, () => this.controller.setTool(this.clicksFrom)),
       new RoofFaceAxisTool(env, () => this.controller.setTool(this.clicksFrom)),
+      new RenderBitmapTool(env),
       new PlaceAtTool(env),
       new AddDimensionsTool(env),
       new RotatePlanTool(env),

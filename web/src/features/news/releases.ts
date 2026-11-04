@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:04:00Z",
+    "render-bitmap",
+    "Render Bitmap",
+    `The Render Bitmap tool turns part of the view into a picture on the drawing.
+- Drag round an area in Top/Plan or the 3D view, or click for the whole window.
+- Its preferences set the render mode, the resolution and a clear background.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:03:00Z",
     "roof-face",
     "Roof Face",

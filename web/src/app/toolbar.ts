@@ -569,6 +569,7 @@ const TOOL_SETS: readonly ToolSet[] = [
       { id: "translateview", label: "Translate View" },
       { id: "walkthrough", label: "Walkthrough" },
       { id: "heliodon", label: "Heliodon" },
+      { id: "renderbitmap", label: "Render Bitmap" },
     ],
   },
   {
