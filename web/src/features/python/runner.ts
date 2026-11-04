@@ -262,6 +262,7 @@ function snapshot(s: EditSession, jspi: boolean, run?: PluginRun): string {
               center: g.center ? [g.center.x, g.center.y] : undefined,
               rx: g.rx,
               ry: g.ry,
+              rr: g.roundRect ? [g.roundRect.rx, g.roundRect.ry] : undefined,
               start: g.startAngle,
               sweep: g.sweepAngle,
               text: g.text,
@@ -511,6 +512,9 @@ function applySteps(s: EditSession, steps: readonly unknown[][], around: Around 
           });
           break;
         }
+        case "geom":
+          s.setGeometry(real(a[0]), a[1] as NewShape);
+          break;
         case "name":
           s.setObjectName(real(a[0]), str(a[1]));
           break;

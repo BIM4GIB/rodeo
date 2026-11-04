@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:17:00Z",
+    "script-shape-editing",
+    "Script calls that reshape",
+    `Python scripts and Vectorscripts can change shapes they're handed, and the selection.
+- Move, add and delete a polygon's or polyline's vertices, open or close it: SetPolyPt, InsertVertex, DelVertex, SetPolylineVertex, SetPolyClosed.
+- A line's ends, an arc's angles and a rounded rectangle's corners: SetSegPt1, SetArc, SetRRDiam.
+- FlipHor, FlipVer, Scale, Forward, Backward, MoveFront and MoveBack on the selection.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:16:00Z",
     "script-text-calls",
     "Script calls for text",

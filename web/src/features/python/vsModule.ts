@@ -3510,4 +3510,233 @@ def TextFace(s):
 
 def TextRotate(Rotation):
     _S.text_angle = float(Rotation)
+
+
+
+# ---- changing a shape by handle, and the selection (Vectorworks' Objects - Polys, Objects - 2D, General Edit calls) ----
+
+def _poly_of(h, what):
+    o = _obj(h, "a polygon or polyline")
+    g = o.get("shape") or {}
+    if g.get("kind") not in ("polygon", "polyline"):
+        raise TypeError("vs.%s takes a polygon or polyline" % what)
+    verts = [list(v) for v in g["verts"]] if g.get("verts") else [list(p) + ["corner", 0.0] for p in g["pts"]]
+    return o, g, verts
+
+
+def _put_poly(o, g, verts, closed, what):
+    """A polygon or polyline's new vertices (x, y in mm, kind, radius in mm), in the copy and in the drawing."""
+    if len(verts) < 2:
+        raise ValueError("vs.%s would leave fewer than two vertices" % what)
+    if g["kind"] == "polygon":
+        if any(v[2] != "corner" for v in verts):
+            raise TypeError("vs.%s: a polygon's vertices are corners; Rodeo can't make it a polyline here" % what)
+        shape = {"kind": "polygon", "points": [_pt(v) for v in verts], "closed": closed}
+        g.pop("verts", None)
+    else:
+        shape = {"kind": "polyline", "points": [_pt(v) for v in verts], "closed": closed,
+                 "vertices": [v[2] for v in verts], "radii": [v[3] for v in verts]}
+        g["verts"] = verts
+    g["pts"] = [v[:2] for v in verts]
+    g["closed"] = closed
+    o["bbox"] = _shape_box(g)
+    _S.ops.append(["geom", o["id"], shape])
+
+
+def _vertex_at(verts, n, what):
+    i = int(n) - 1
+    if not 0 <= i < len(verts):
+        raise IndexError("vs.%s: there's no vertex %r (1 to %d)" % (what, n, len(verts)))
+    return i
+
+
+def SetPolyPt(objectHd, index, *p):
+    o, g, verts = _poly_of(objectHd, "SetPolyPt")
+    x, y = _nums(p, 2, "SetPolyPt")
+    i = _vertex_at(verts, index, "SetPolyPt")
+    verts[i][0], verts[i][1] = _mm(x), _mm(y)
+    _put_poly(o, g, verts, bool(g.get("closed")), "SetPolyPt")
+
+
+def SetPolylineVertex(obj, vertexNum, *args):
+    v = _flat(args)
+    if len(v) < 4:
+        raise TypeError("vs.SetPolylineVertex takes the vertex's point, type and radius")
+    o, g, verts = _poly_of(obj, "SetPolylineVertex")
+    i = _vertex_at(verts, vertexNum, "SetPolylineVertex")
+    verts[i] = [_mm(v[0]), _mm(v[1]), _VERTEX_KIND.get(int(v[2]), "corner"), abs(_mm(v[3]))]
+    _put_poly(o, g, verts, bool(g.get("closed")), "SetPolylineVertex")
+
+
+def InsertVertex(objectHandle, x, y, beforeVertexNum, vertexType=0, arcRadius=0):
+    o, g, verts = _poly_of(objectHandle, "InsertVertex")
+    i = max(0, min(len(verts), int(beforeVertexNum) - 1))
+    verts.insert(i, [_mm(x), _mm(y), _VERTEX_KIND.get(int(vertexType), "corner"), abs(_mm(arcRadius))])
+    _put_poly(o, g, verts, bool(g.get("closed")), "InsertVertex")
+
+
+def DelVertex(objectHd, vertexNum):
+    o, g, verts = _poly_of(objectHd, "DelVertex")
+    verts.pop(_vertex_at(verts, vertexNum, "DelVertex"))
+    _put_poly(o, g, verts, bool(g.get("closed")), "DelVertex")
+
+
+def IsPolyClosed(polyHandle):
+    return bool(_poly_of(polyHandle, "IsPolyClosed")[1].get("closed"))
+
+
+def SetPolyClosed(polyHandle, isClosed):
+    o, g, verts = _poly_of(polyHandle, "SetPolyClosed")
+    _put_poly(o, g, verts, bool(isClosed), "SetPolyClosed")
+
+
+def Add2DVertex(*args):
+    v = _flat(args)
+    if len(v) < 3:
+        raise TypeError("vs.Add2DVertex takes a point, a vertex type and a radius")
+    _vertex([v[0], v[1], v[3] if len(v) > 3 else 0], _VERTEX_KIND.get(int(v[2]), "corner"), "Add2DVertex")
+
+
+def _set_seg(h, i, p, what):
+    o = _obj(h, "a line")
+    g = o.get("shape") or {}
+    if g.get("kind") != "line":
+        raise TypeError("vs.%s takes a line" % what)
+    x, y = _nums(p, 2, what)
+    g["pts"][i] = [_mm(x), _mm(y)]
+    a, b = g["pts"]
+    o["bbox"] = _shape_box(g)
+    _S.ops.append(["geom", o["id"], {"kind": "line", "a": _pt(a), "b": _pt(b)}])
+
+
+def SetSegPt1(h, *p):
+    _set_seg(h, 0, p, "SetSegPt1")
+
+
+def SetSegPt2(h, *p):
+    _set_seg(h, 1, p, "SetSegPt2")
+
+
+def _arc_of(h, what):
+    o = _obj(h, "an arc")
+    g = o.get("shape") or {}
+    if g.get("kind") != "arc" or g.get("center") is None:
+        raise TypeError("vs.%s takes an arc" % what)
+    return o, g
+
+
+def GetArc(h):
+    g = _arc_of(h, "GetArc")[1]
+    return (float(g.get("start") or 0), float(g.get("sweep") or 0))
+
+
+def SetArc(h, startAngle, arcAngle):
+    o, g = _arc_of(h, "SetArc")
+    g["start"], g["sweep"] = float(startAngle), float(arcAngle)
+    shape = {"kind": "arc", "center": _pt(g["center"]), "radius": g["rx"], "startAngle": g["start"], "sweepAngle": g["sweep"]}
+    if abs(g["ry"] - g["rx"]) > 1e-9:
+        shape["radiusY"] = g["ry"]
+    _S.ops.append(["geom", o["id"], shape])
+
+
+def _rrect_of(h, what):
+    o = _obj(h, "a rounded rectangle")
+    g = o.get("shape") or {}
+    if g.get("kind") != "roundrect" or not g.get("rr"):
+        raise TypeError("vs.%s takes a rounded rectangle" % what)
+    return o, g
+
+
+def GetRRDiam(h):
+    rx, ry = _rrect_of(h, "GetRRDiam")[1]["rr"]
+    return (_un(2 * rx), _un(2 * ry))
+
+
+def SetRRDiam(h, xDiam, yDiam):
+    o, g = _rrect_of(h, "SetRRDiam")
+    xs = [p[0] for p in g["pts"]]
+    ys = [p[1] for p in g["pts"]]
+    if len(set(round(x, 6) for x in xs)) > 2 or len(set(round(y, 6) for y in ys)) > 2:
+        raise ValueError("vs.SetRRDiam: Rodeo changes the corners of a rounded rectangle that isn't turned")
+    g["rr"] = [abs(_mm(xDiam)) / 2, abs(_mm(yDiam)) / 2]
+    _S.ops.append(["geom", o["id"], {"kind": "roundrect", "x0": min(xs), "y0": min(ys), "x1": max(xs), "y1": max(ys), "rx": g["rr"][0], "ry": g["rr"][1]}])
+
+
+def HAngle(h):
+    g = _obj(h).get("shape") or {}
+    k = g.get("kind")
+    if k == "line" or (k in ("rect", "roundrect") and len(g.get("pts") or []) >= 2):
+        (x0, y0), (x1, y1) = g["pts"][0], g["pts"][1]
+        return _math.degrees(_math.atan2(y1 - y0, x1 - x0))
+    if k == "text":
+        return float(g.get("angle") or 0)
+    return 0.0
+
+
+def _selection_box():
+    ids = _selected_top()
+    boxes = [b for b in (_box(_S.objs[i]) for i in ids) if b]
+    if not boxes:
+        return ids, None
+    return ids, ((min(b[0] for b in boxes) + max(b[2] for b in boxes)) / 2, (min(b[1] for b in boxes) + max(b[3] for b in boxes)) / 2)
+
+
+def FlipHor():
+    ids, c = _selection_box()
+    if c:
+        _xform(ids, [-1, 0, 0, 1, 2 * c[0], 0])
+
+
+def FlipVer():
+    ids, c = _selection_box()
+    if c:
+        _xform(ids, [1, 0, 0, -1, 0, 2 * c[1]])
+
+
+def Scale(scaleXR, scaleYR):
+    sx, sy = float(scaleXR), float(scaleYR)
+    if sx == 0 or sy == 0:
+        raise ValueError("vs.Scale can't scale to nothing")
+    ids, c = _selection_box()
+    if c:
+        _xform(ids, [sx, 0, 0, sy, c[0] * (1 - sx), c[1] * (1 - sy)])
+
+
+def RotatePoint(*args):
+    x, y, angle = _nums(args, 3, "RotatePoint")
+    _xform(_selected_top(), _rotation(_mm(x), _mm(y), angle))
+
+
+def _arrange_selection(how):
+    for i in (_selected_top() if how in ("front", "backward") else list(reversed(_selected_top()))):
+        _arrange(Handle(i), how)
+
+
+def Forward():
+    _arrange_selection("forward")
+
+
+def Backward():
+    _arrange_selection("backward")
+
+
+def MoveFront():
+    _arrange_selection("front")
+
+
+def MoveBack():
+    _arrange_selection("back")
+
+
+def MirrorN(h, dup, *args):
+    v = _flat(args)
+    return Mirror(h, dup, *v[:4])
+
+
+def CreateDuplicateObject(objectToDuplicate, containerHandle=None):
+    o = _obj(objectToDuplicate)
+    if containerHandle is not None and containerHandle._id != _container(o):
+        raise ValueError("vs.CreateDuplicateObject: Rodeo duplicates into the object's own layer or group")
+    return Handle(_duplicate([o["id"]], 0, 0)[0])
+
 `;
