@@ -62,9 +62,17 @@ Drawings export as DXF (R12, in the document's units) and SVG, and with **Export
 
 **Limits:** multileaders, 3D solids, images and xrefs are left out, and the import says how many.
 
-### Import Image… and Paste as Bitmap
+### Import Image File(s)… and Paste as Bitmap
 
-**File › Import › Import Image…** places a PNG or JPEG (GIF, WebP and BMP become PNG) on the active layer at 72 dpi.
+**File › Import › Import Image File(s)…** places one picture or several on the active layer at 72 dpi. It takes PNG and JPEG, and GIF, WebP and BMP come in as PNG. Pictures dropped on an open drawing come in the same way.
+
+The **Image Import Options** dialog asks once for all the pictures:
+
+- **Compression Method:** JPEG or PNG. The line under it says how big each would make them.
+- **Import as black and white** (PNG): each pixel becomes black or white.
+- **Import alpha channel** (PNG, when a picture has transparent parts): keeps the transparency. Without it, the picture is laid on white, as JPEG always is.
+
+Several pictures go in a row across the middle of the view, all selected, and one undo takes them all away.
 
 **Edit › Paste as Bitmap** does the same with a picture on the clipboard, or else turns the objects last copied or cut into one picture their own size.
 

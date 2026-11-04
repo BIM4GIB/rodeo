@@ -312,7 +312,7 @@ export interface MenuActions extends View3dActions {
   importDxf(): void;
   /** File > Import DWG… */
   importDwg(): void;
-  /** File > Import Image… */
+  /** File > Import > Import Image File(s)… */
   importImage(): void;
   /** File > Import PDF… */
   importPdf(): void;
@@ -569,7 +569,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Import DXF…", run: () => actions.importDxf() },
             { label: "Import DWG…", run: () => actions.importDwg() },
-            { label: "Import Image…", enabled: hasLayer, run: () => actions.importImage() },
+            { label: "Import Image File(s)…", enabled: hasLayer, run: () => actions.importImage() },
             { label: "Import PDF…", enabled: hasLayer, run: () => actions.importPdf() },
             { label: "Import Metafile…", enabled: hasLayer, run: () => actions.importMetafile() },
             { label: "Import OBJ…", enabled: hasLayer, run: () => actions.importMesh("obj") },

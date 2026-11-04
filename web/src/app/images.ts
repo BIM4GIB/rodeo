@@ -1,6 +1,7 @@
-// File > Import Image… and Edit > Paste as Bitmap: a PNG or JPEG (or any picture the browser can
-// read, kept as PNG) placed on the active layer as an image object, centred in the view and
-// sized at 72 pixels to the paper inch at the layer's scale, as Vectorworks places a picture.
+// File > Import Image File(s)… (imageImport.ts asks how) and Edit > Paste as Bitmap: a PNG or JPEG
+// (or any picture the browser can read, kept as PNG) placed on the active layer as an image object,
+// centred in the view and sized at 72 pixels to the paper inch at the layer's scale, as Vectorworks
+// places a picture; several imported at once go in a row across the middle of the view.
 // Paste as Bitmap takes the picture on the system clipboard, or else the objects last copied
 // here drawn as one picture their own size (copyPicture.ts), as sharp as the view shows them or
 // 150 pixels to the paper inch, whichever is finer.
@@ -21,7 +22,7 @@ const PLACE_DPI = 72;
 /** pixels to the paper inch copied objects are drawn at, pasted as a bitmap */
 const BITMAP_DPI = 150;
 
-interface Picture {
+export interface Picture {
   bytes: Uint8Array;
   mime: "image/png" | "image/jpeg";
   width: number;
@@ -29,7 +30,7 @@ interface Picture {
 }
 
 /** The picture in `blob`: PNG and JPEG as they are, anything else the browser reads redrawn as PNG. */
-async function pictureOf(blob: Blob): Promise<Picture> {
+export async function pictureOf(blob: Blob): Promise<Picture> {
   const bitmap = await createImageBitmap(blob);
   const { width, height } = bitmap;
   try {
@@ -47,7 +48,7 @@ async function pictureOf(blob: Blob): Promise<Picture> {
 }
 
 /** True when a picture can go on the active layer now; otherwise says why. */
-function ready(what: string): boolean {
+export function ready(what: string): boolean {
   const s = store.session;
   if (!s) {
     toast(`Open a drawing before ${what}.`, "info");
@@ -64,51 +65,61 @@ function ready(what: string): boolean {
   return true;
 }
 
+/** A picture's size in the drawing at 72 dpi on the active layer's paper. */
+function placedSize(picture: Picture): { w: number; h: number } {
+  const layer = store.activeLayerId ? layerInfo(store.activeLayerId) : undefined;
+  const scale = layer?.kind === "design" && layer.scale > 0 ? layer.scale : 1;
+  return { w: (picture.width / PLACE_DPI) * MM_PER_INCH * scale, h: (picture.height / PLACE_DPI) * MM_PER_INCH * scale };
+}
+
+/** The image object of `picture` `w` by `hgt` centred on (cx, cy). */
+const imageShape = (picture: Picture, cx: number, cy: number, w: number, hgt: number): NewShape => ({
+  kind: "image",
+  x0: cx - w / 2,
+  y0: cy - hgt / 2,
+  x1: cx + w / 2,
+  y1: cy + hgt / 2,
+  bytes: picture.bytes,
+  mime: picture.mime,
+  width: picture.width,
+  height: picture.height,
+});
+
 /** Places the picture on the active layer, centred in the view, and selects it: `size` in the drawing, or 72 dpi on paper. */
 function place(picture: Picture, view: View, label: string, size?: { readonly w: number; readonly h: number }): void {
   const layerId = store.activeLayerId;
-  const doc = store.session?.doc;
-  if (!layerId || !doc) return;
-  const layer = layerInfo(layerId);
-  const scale = layer?.kind === "design" && layer.scale > 0 ? layer.scale : 1;
-  const w = size?.w ?? (picture.width / PLACE_DPI) * MM_PER_INCH * scale;
-  const hgt = size?.h ?? (picture.height / PLACE_DPI) * MM_PER_INCH * scale;
-  const shape: NewShape = {
-    kind: "image",
-    x0: view.cx - w / 2,
-    y0: view.cy - hgt / 2,
-    x1: view.cx + w / 2,
-    y1: view.cy + hgt / 2,
-    bytes: picture.bytes,
-    mime: picture.mime,
-    width: picture.width,
-    height: picture.height,
-  };
-  const r = attempt(label, (s) => s.addObject(layerId, shape, store.activeClassIndex));
+  if (!layerId || !store.session) return;
+  const { w, h: hgt } = size ?? placedSize(picture);
+  const r = attempt(label, (s) => s.addObject(layerId, imageShape(picture, view.cx, view.cy, w, hgt), store.activeClassIndex));
   if (r) setEditGroup(null, [r.value]);
+}
+
+/** the gap between pictures placed in a row, against the tallest's height */
+const ROW_GAP = 0.1;
+
+/** Places `pictures` at 72 dpi on paper in a row left to right across the middle of the view, as one undo step, and selects them. */
+export function placeRow(pictures: readonly Picture[], view: View, label: string): void {
+  const layerId = store.activeLayerId;
+  if (!layerId || !store.session || !pictures.length) return;
+  const sizes = pictures.map(placedSize);
+  const gap = ROW_GAP * Math.max(...sizes.map((z) => z.h));
+  let x = view.cx - (sizes.reduce((sum, z) => sum + z.w, 0) + gap * (pictures.length - 1)) / 2;
+  const r = attempt(label, (s) =>
+    s.batch(() =>
+      pictures.map((p, i) => {
+        const { w, h: hgt } = sizes[i];
+        const id = s.addObject(layerId, imageShape(p, x + w / 2, view.cy, w, hgt), store.activeClassIndex);
+        x += w + gap;
+        return id;
+      }),
+    ),
+  );
+  if (r) setEditGroup(null, r.value);
 }
 
 /** A PNG `width` by `height` pixels placed on the active layer as Import Image places a picture, or a message saying why it can't go there. */
 export function placePng(bytes: Uint8Array, width: number, height: number, view: View, label: string): void {
   if (ready("placing a picture")) place({ bytes, mime: "image/png", width, height }, view, label);
-}
-
-/** File > Import Image…: asks for a picture file and places it. */
-export function importImageFile(view: View): void {
-  if (!ready("importing an image")) return;
-  const input = h("input", { attrs: { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp,image/bmp" }, hidden: true });
-  document.body.append(input);
-  input.addEventListener("change", () => {
-    const file = input.files?.[0];
-    input.remove();
-    if (!file) return;
-    void pictureOf(file).then(
-      (picture) => place(picture, view, "Import image"),
-      (err) => toast(`Could not read ${file.name}: ${errorMessage(err)}`),
-    );
-  });
-  input.addEventListener("cancel", () => input.remove());
-  input.click();
 }
 
 /**

@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:10:00Z",
+    "import-image-files",
+    "Import Image File(s)",
+    `File > Import > Import Image File(s) brings in several pictures at once.
+- One Image Import Options dialog for all of them: JPEG or PNG, with the size each makes.
+- Import as black and white, or keep the alpha channel.
+- Dropped pictures go through the same dialog and land in a row.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:09:00Z",
     "export-ascii-patch",
     "Export ASCII Patch",

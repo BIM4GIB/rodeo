@@ -201,9 +201,10 @@ interface HandleItem {
 
 /**
  * Calls onFile for the first file dropped anywhere in the window, with its handle
- * where the browser offers one (null otherwise). Shows the drop overlay while dragging.
+ * where the browser offers one (null otherwise) and every file dropped with it. Shows the drop
+ * overlay while dragging.
  */
-export function installFileDrop(onFile: (file: File, handle: Promise<FileSystemFileHandle | null>) => void): void {
+export function installFileDrop(onFile: (file: File, handle: Promise<FileSystemFileHandle | null>, all: readonly File[]) => void): void {
   const overlay = document.getElementById("drop-overlay");
   let depth = 0;
   const carriesFiles = (e: DragEvent): boolean => Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -235,7 +236,7 @@ export function installFileDrop(onFile: (file: File, handle: Promise<FileSystemF
       (h) => (h?.kind === "file" ? (h as FileSystemFileHandle) : null),
       () => null,
     );
-    const file = e.dataTransfer?.files[0];
-    if (file) onFile(file, handle);
+    const all = [...(e.dataTransfer?.files ?? [])];
+    if (all[0]) onFile(all[0], handle, all);
   });
 }

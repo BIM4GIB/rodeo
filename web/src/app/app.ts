@@ -36,7 +36,8 @@ import { keep3d, last3d, onPrefs, prefs, TURN_STEPS } from "./prefs.ts";
 import { showLoading, slowLoading } from "./loading.ts";
 import { exportImageFile } from "./pngExport.ts";
 import { publishDialog } from "./publish.ts";
-import { importImageFile, pasteAsBitmap } from "./images.ts";
+import { importImageFiles, importImages, isImageName } from "./imageImport.ts";
+import { pasteAsBitmap } from "./images.ts";
 import { PALETTE_ICON } from "./icons.ts";
 import { exportAdvice, importMesh, importMeshFile, meshFormat } from "./meshImport.ts";
 import { revitModelDrawing, revitSummary, showRevitFile } from "./revitFile.ts";
@@ -943,7 +944,7 @@ export class App {
         },
         importDxf: () => void importDxfFile(this.scene, this.view),
         importDwg: () => void importDwgFile(this.scene, this.view),
-        importImage: () => importImageFile(this.view),
+        importImage: () => importImageFiles(this.view),
         importPdf: () => importPdfFile(this.scene, this.view),
         importMetafile: () => importMetafileFile(this.scene, this.view),
         importMesh: (format) => importMeshFile(format, this.scene, this.view),
@@ -1126,7 +1127,12 @@ export class App {
       menuBar.drawing(e.clientX, e.clientY, under, behind, coincident, pick);
     });
     installCoincidentKey(this.canvas, this.scene, this.view);
-    installFileDrop((file, handle) => void this.openFile(file, handle));
+    // pictures dropped on an open drawing are imported together, as Import Image File(s) does
+    installFileDrop((file, handle, all) => {
+      const pictures = all.filter((f) => isImageName(f.name));
+      if (store.session && isImageName(file.name)) void importImages(pictures, this.view);
+      else void this.openFile(file, handle);
+    });
     void loadRecent();
     installAutosave({ openDocument: async (bytes, name) => void (await this.openDocument(bytes, name, null)) });
     window.addEventListener("beforeunload", (e) => {
