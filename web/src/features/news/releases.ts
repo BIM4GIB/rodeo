@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:07:00Z",
+    "create-sheet-list",
+    "Create Sheet List",
+    `Tools > Reports > Create Sheet List makes an index of the drawing's sheets.
+- Pick title blocks, add your own entries, reorder and edit them.
+- Place it as text by two clicks, or make it a worksheet.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:06:00Z",
     "reset-view-panes",
     "Reset Multiple View Panes",

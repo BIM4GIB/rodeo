@@ -118,6 +118,22 @@ It has the columns chosen: type, name, class, layer, area, perimeter, length and
 - It holds the values as they are now (formulas can't be written yet).
 - It is made from a worksheet the drawing has, so a drawing with none can't have one yet.
 
+### Create Sheet List…
+
+**Tools › Reports › Create Sheet List…** makes an index of the drawing's sheets.
+
+1. The title block borders are listed on the left by sheet number and title. Move the ones you want to the **Proposed Sheet List** with **Add >** (or a double-click), and back with **< Remove**.
+2. **New…** adds an entry of your own. **Move Up** and **Move Dn** reorder the list. The picked entry's **Sheet No.** and **Title** can be edited below it.
+3. **Format…** chooses a **Text Block** or a **Worksheet**, and sets the heading and the text size.
+4. Click **OK**. For a text block, click the top left corner of its area, then the bottom right. The entries wrap to that width, and a long title's continued lines sit under it.
+
+A worksheet has a Sheet No. and a Title column and opens in the worksheet editor.
+
+**Limits:**
+
+- The worksheet isn't placed on the drawing.
+- It is made from a worksheet the drawing has, so a drawing with none can only have a text block.
+
 ## Title blocks and section lines
 
 ### Title Block Border

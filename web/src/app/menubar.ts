@@ -212,6 +212,7 @@ import { canCreateRecordFormat, editRecordFormatRows, newRecordFormat } from "./
 import { alignDistributeDialog, alignDistributeRows } from "./alignDistribute.ts";
 import { alignDistribute3dDialog } from "./alignDistribute3d.ts";
 import { alignByIncrementCommand } from "./alignIncrement.ts";
+import { canCreateSheetList, createSheetList } from "./sheetList.ts";
 import { showHome } from "./welcome.ts";
 import { canExportDatabase, exportDatabaseDialog } from "./exportDatabase.ts";
 import { canCentroid, canEngineeringProperties, centroidDialog, engineeringPropertiesDialog } from "./engineeringProperties.ts";
@@ -1087,6 +1088,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           enabled: hasDoc,
           items: [
             { label: "Create Report…", enabled: hasDoc, run: () => void createReportDialog() },
+            { label: "Create Sheet List…", enabled: canCreateSheetList, run: () => void createSheetList() },
             { label: "Edit Worksheet…", enabled: canEditWorksheet, run: () => void editWorksheet() },
           ],
         },
