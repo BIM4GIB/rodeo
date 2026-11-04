@@ -54,6 +54,7 @@ Right-click a chain's witness line for:
 Right-click a dimension in it (its line, markers or value) for:
 
 - **Split Dimension**: that dimension goes, and the chains either side stay.
+- **Delete Dimension**: that dimension goes, and the ones after it move back to close the gap. Each keeps its length and value.
 - **Edit Dimension**: the chain opened with that dimension selected, for Object Info.
 
 **Add Dimension(s)**, on a chain or a linear dimension on its own, takes clicks where new witness lines end:
@@ -65,7 +66,7 @@ Double-click or <kbd>Enter</kbd> ends; <kbd>Backspace</kbd> takes back the last.
 
 A chain left with one dimension is that dimension on its own. Each command is one undo step (each click, for Add Dimension(s)).
 
-**Limits:** Delete Dimension isn't there yet.
+**Limits:** after Delete Dimension, the dimensions that moved back no longer line up with what they measured. Vectorworks only says the rest adjust, so this is Rodeo's reading.
 
 ### Arc Length Dimension
 

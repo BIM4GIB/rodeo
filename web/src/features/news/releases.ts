@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:21:00Z",
+    "delete-dimension",
+    "Delete Dimension on chains",
+    `Right-click a dimension in a chain and choose Delete Dimension.
+- That dimension goes, and the ones after it move back to close the gap.
+- Each keeps its length and value; a chain of two leaves a lone dimension.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:20:00Z",
     "associative-dimensions",
     "Dimensions that follow",

@@ -61,6 +61,7 @@ import {
   canAddDimensions,
   canSplitDimension,
   chainPartAt,
+  deleteDimension,
   deleteWitnessLine,
   editDimension,
   splitDimension,
@@ -1819,6 +1820,7 @@ function drawingRows(
           { label: "Delete Witness Line", run: () => deleteWitnessLine(part) },
         ]
       : [
+          { label: "Delete Dimension", run: () => deleteDimension(part) },
           { label: "Split Dimension", run: () => splitDimension(part) },
           {
             label: "Edit Dimension",

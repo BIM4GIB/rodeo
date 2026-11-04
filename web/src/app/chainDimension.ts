@@ -1,10 +1,12 @@
-// The right-click menu's chain dimension commands, as Vectorworks has them: Delete Witness Line,
-// Split Dimension, Edit Dimension and Add Dimension(s). A chain here is a group of linear dimension objects (the Dimension tool's
+// The right-click menu's chain dimension commands, as Vectorworks has them: Delete Dimension, Delete
+// Witness Line, Split Dimension, Edit Dimension and Add Dimension(s). A chain here is a group of linear dimension objects (the Dimension tool's
 // Chain mode makes one when the drawing has a dimension to copy) whose dimension lines run along
 // one line, each starting where the last ends. Where the right-click was says what it acts on: a
 // witness line (one of the chain's points, out to its dimension line) or a dimension (its stretch
 // of dimension line, or its value beside it).
 //
+// Delete Dimension, on a dimension: it goes, and those after it move back along the chain to close
+// the gap, each measuring the length it did (Vectorworks says only that the rest "adjust").
 // Delete Witness Line: the two dimensions either side of it become one, measuring both (its value
 // measured again when it said its length, as Object Info has it); at an end, the end dimension goes.
 // Split Dimension: at a witness line, two chains meeting there, the second selected; on a
@@ -141,6 +143,30 @@ export function deleteWitnessLine(part: ChainPart): void {
         s.deleteObjects([dims[i]]);
         left = dims.filter((_, k) => k !== i);
       }
+      if (left.length > 1) return [chain.group];
+      s.ungroupObjects([chain.group]);
+      return left;
+    }),
+  );
+  if (r) select(chain, r.value);
+}
+
+/** Delete Dimension: the dimension `part` is on goes, and those after it move back to close the gap. */
+export function deleteDimension(part: ChainPart): void {
+  if (!("dim" in part)) return;
+  const { chain, dim: k } = part;
+  const { dims, points, u } = chain;
+  const gap = dot(points[k + 1], u) - dot(points[k], u);
+  const back = (p: Pt): Pt => ({ x: p.x - u.x * gap, y: p.y - u.y * gap });
+  const r = attempt("Delete Dimension", (s) =>
+    s.batch(() => {
+      s.deleteObjects([dims[k]]);
+      // along the chain's line, so each keeps its length, value and line
+      for (const id of dims.slice(k + 1)) {
+        const d = s.linearDimension(id)!;
+        s.setLinearDimension(id, { a: back(d.a), b: back(d.b) });
+      }
+      const left = dims.filter((_, j) => j !== k);
       if (left.length > 1) return [chain.group];
       s.ungroupObjects([chain.group]);
       return left;
