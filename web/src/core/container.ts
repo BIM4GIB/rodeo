@@ -100,9 +100,12 @@ interface Head {
 
 /** Reads the header of a file `size` bytes long from `data`, its first bytes (all of them up to the body, when it says where that is). */
 function readHead(data: Uint8Array, size: number): Head {
-  if (size < 0x94) throw new Error("file too small to be a .vwx document");
+  if (size < 0x94 || data.length < 0x94) throw new Error("file too small to be a .vwx document");
   const settingsLen = u32be(data, 0);
   const settingsOff = u32be(data, 8);
+  if (settingsOff < 0x94 || settingsOff > size || settingsLen > size - settingsOff) {
+    throw new Error("settings block is outside the file");
+  }
   if (!hasSignature(data)) {
     throw new Error("missing VectorWorks signature; not a VW 2018+ file?");
   }
@@ -270,6 +273,7 @@ export async function readContainerStream(src: ByteSource, options: StreamOption
   let start = await src.read(0, Math.min(size, 0x10000));
   const head = readHead(start, size);
   if (head.body > start.length) start = await src.read(0, Math.min(size, head.body));
+  if (start.length < head.body) throw new Error("truncated settings block");
   const header = start.slice(0, head.body);
   const table = options.hold ? new ChunkTable() : null;
   const stream = table ? new FileStream(src, table, inflate, options.refresh ?? null) : null;
