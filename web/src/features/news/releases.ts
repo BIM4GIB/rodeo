@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-03T13:19:00Z",
+    "image-effects",
+    "Image effects",
+    `Right-click an image and choose Edit Image Effects… to adjust it with a live preview.
+- Exposure, contrast, highlights, shadows, saturation, temperature, blur and sharpness, sepia and soft edges.
+- Invert Colors, Auto-Level and Reset; several images at once.`,
+    "announce",
+  ),
+  release(
     "2026-11-03T13:18:00Z",
     "update-viewports",
     "Update section and elevation viewports",

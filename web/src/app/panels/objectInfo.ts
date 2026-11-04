@@ -1113,7 +1113,15 @@ function imageSection(id: string, shape: Shape): HTMLElement {
           ),
         ]
       : []),
+    ...(shape.image || shape.heldImage ? [imageEffectsButton(id)] : []),
   );
+}
+
+/** Image Effects…: the dialog for the selected images, this one among them. */
+function imageEffectsButton(id: string): HTMLElement {
+  const btn = h("button", { cls: "btn small", text: "Image Effects…", attrs: { type: "button", title: "Exposure, contrast, colour, blur and more, worked into the picture" } });
+  btn.addEventListener("click", () => void import("../imageEffects.ts").then((m) => m.editImageEffectsDialog(id)));
+  return h("div", { cls: "row-end" }, btn);
 }
 
 // ---- viewports and records ------------------------------------------------

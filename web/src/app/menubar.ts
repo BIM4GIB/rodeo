@@ -1864,6 +1864,7 @@ function drawingRows(
       ? [{ label: "Duplicate on Layers…", run: () => void import("./duplicateOnLayers.ts").then((m) => m.duplicateOnLayersDialog(under)) }]
       : []),
     ...(isCroppableImage(under) ? [{ label: "Edit Crop…", run: () => void editCropDialog(under) }] : []),
+    ...(isCroppableImage(under) ? [{ label: "Edit Image Effects…", run: () => void import("./imageEffects.ts").then((m) => m.editImageEffectsDialog(under)) }] : []),
     ...(isSiteModel(under) ? [{ label: "Edit Crop…", run: () => editSiteCrop(under) }] : []),
     ...(isAutoHybrid(under) ? [{ label: "Edit", run: () => editAutoHybrid(under) }] : []),
     ...textureRows(under),

@@ -458,3 +458,17 @@ The result is grouped over the image, in one undo step. Specks and how closely t
 With the image alone selected, it trims a length off each side. One undo step.
 
 **Limits:** unlike Vectorworks, the crop can't be edited later: the pixels outside are gone (Undo brings them back).
+
+### Edit Image Effects
+
+Right-click an image and choose **Edit Image Effects…**, or click **Image Effects…** in Object Info, to adjust the picture. With several images selected, they all take the same effects.
+
+- **Exposure**, **Contrast**, **Highlights** and **Shadows** set how light it is. Shadows to the right darkens the dark parts.
+- **Saturation** sets how strong the colours are, and **Temperature** turns it bluer or redder.
+- **Blur and Sharpness** blurs to the left and sharpens to the right.
+- **Sepia** tints it brown, and **Soft Edges** fades it out toward its sides.
+- **Invert Colors** makes a negative, **Auto-Level** picks Exposure and Contrast for you, and **Reset** puts every slider back.
+
+The preview shows the first image as you go. **Apply** changes the pictures in one undo step.
+
+**Limits:** the effects are worked into the pixels, so they can't be turned off or changed later, as Vectorworks allows (Undo brings the picture back). There are no saved sets of effects, and they work on images only, not on image resources, textures, backgrounds or viewports. The sliders follow Vectorworks' descriptions, not its exact formulas.
