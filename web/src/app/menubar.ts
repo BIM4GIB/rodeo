@@ -115,7 +115,7 @@ import {
   smoothSelection,
 } from "./compose.ts";
 import { canCut2DSection, canCut3DSection } from "./cutSection.ts";
-import { addSurface, clipSurface, hasClosedSelection, intersectSurface } from "./surfaces.ts";
+import { addSurface, canClipSurface, clipSurface, hasClosedSelection, intersectSurface } from "./surfaces.ts";
 import { canCombineIntoSurface, combineIntoSurface } from "./boundary.ts";
 import { canSelectSimilar, isSymbolInstance, selectSameSymbol, selectSimilar } from "./selectSimilar.ts";
 import { canConvertArc, convertArcToRadiusPolyline } from "./radiusPolyline.ts";
@@ -178,6 +178,7 @@ import { canFrameWalls, wallFramerDialog } from "./wallFramer.ts";
 import { canFrameRoof, roofFramerDialog } from "./roofFramer.ts";
 import { canCreateAutoHybrid, createAutoHybrid, editAutoHybrid, isAutoHybrid, selectedAutoHybrid } from "./autoHybrid.ts";
 import { canCreateRoof, createRoofDialog } from "./createRoof.ts";
+import { canMakeRoofFace } from "./roofFace.ts";
 import { canMoveGeographic, georeferencingDialog, moveGeographicDialog } from "./georef.ts";
 import { beltLengthDialog, chainLengthDialog, conversionFactorsDialog, solutionOfTrianglesDialog, springCalculatorDialog } from "./calculators.ts";
 import { simpleBeamDialog } from "./simpleBeam.ts";
@@ -329,6 +330,7 @@ export interface MenuActions extends View3dActions {
   alignLeaders(): void;
   /** Modify > Rotate 3D…: with Next Mouse Click, the center is clicked on the drawing */
   rotate3D(): void;
+  roofFace(): void;
   /** Edit > Paste as Bitmap */
   pasteAsBitmap(): void;
   print(): void;
@@ -787,10 +789,10 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         "-",
         {
           label: "Surfaces",
-          enabled: hasTwoClosed,
+          enabled: () => hasTwoClosed() || canClipSurface(),
           items: [
             { label: "Add Surface", enabled: hasTwoClosed, run: addSurface },
-            { label: "Clip Surface", enabled: hasTwoClosed, run: clipSurface },
+            { label: "Clip Surface", enabled: canClipSurface, run: clipSurface },
             { label: "Intersect Surface", enabled: hasTwoClosed, run: intersectSurface },
           ],
         },
@@ -970,6 +972,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Create Polys from Walls…", enabled: canCreatePolysFromWalls, run: () => void createPolysFromWallsDialog() },
         { label: "Dimension Exterior Walls…", enabled: canDimensionExteriorWalls, run: () => void dimensionExteriorWalls() },
         { label: "Create Roof…", enabled: canCreateRoof, run: () => void createRoofDialog() },
+        { label: "Roof Face…", enabled: canMakeRoofFace, run: () => actions.roofFace() },
         { label: "Pillar…", enabled: canMakePillar, run: () => void pillarDialog() },
         "-",
         {

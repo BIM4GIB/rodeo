@@ -424,6 +424,7 @@ export type ToolId =
   | "dividing"
   | "alignleaders"
   | "rotate3dcentre"
+  | "roofaxis"
   | "placeat"
   | "adddims"
   | "visualzone"

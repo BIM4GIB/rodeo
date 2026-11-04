@@ -655,6 +655,7 @@ const COMMAND_TOOLS: readonly ToolDef[] = [
   { id: "dividing", label: "Dividing Lines" },
   { id: "alignleaders", label: "Leader Lines" },
   { id: "rotate3dcentre", label: "Rotate 3D" },
+  { id: "roofaxis", label: "Roof Face" },
   { id: "placeat", label: "Place" },
   { id: "adddims", label: "Add Dimensions" },
   { id: "visualzone", label: "Zone of Visual Influence" },

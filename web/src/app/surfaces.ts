@@ -5,7 +5,7 @@
 // holes joined in (see joinHoles). Selected objects that are not closed shapes are left alone.
 
 import polygonClipping, { type MultiPolygon, type Pair, type Polygon } from "polygon-clipping";
-import type { NewShape, ObjectInfo, Pt, Shape } from "../core/index.ts";
+import type { EditSession, NewShape, ObjectInfo, Pt, Shape, VwxDocument } from "../core/index.ts";
 import { attempt, setEditGroup, setSelection } from "./commands.ts";
 import { dist, ellipsePoints } from "./geom.ts";
 import { arcRadii, isClosedShape } from "./shapes.ts";
@@ -225,6 +225,29 @@ function isClosable(shape: Shape): boolean {
   return shape.kind === "arc" ? arcRadii(shape) !== null && shape.center !== undefined : shape.points.length >= 3;
 }
 
+/** An object other than a closed shape that Clip Surface cuts (a roof face): whether it took the cut. */
+export interface ClipTarget {
+  is(doc: VwxDocument, id: string): boolean;
+  cut(s: EditSession, id: string, cutter: readonly Pt[]): boolean;
+}
+
+const clipTargets: ClipTarget[] = [];
+
+export function registerClipTarget(target: ClipTarget): void {
+  clipTargets.push(target);
+}
+
+const clipTargetOf = (doc: VwxDocument, id: string): ClipTarget | undefined => clipTargets.find((t) => t.is(doc, id));
+
+/** Clip Surface takes two closed shapes, or one and an object it cuts. */
+export function canClipSurface(): boolean {
+  if (hasClosedSelection(2)) return true;
+  const doc = store.session?.doc;
+  if (!doc || !hasClosedSelection(1)) return false;
+  for (const id of store.selection) if (clipTargetOf(doc, id)) return true;
+  return false;
+}
+
 // ---- commands -------------------------------------------------------------------
 
 /**
@@ -249,12 +272,18 @@ export function addSurface(): void {
  */
 export function clipSurface(): void {
   const items = closedSelection();
-  if (items.length < 2) return;
+  const doc = store.session?.doc;
+  const others = doc ? [...store.selection].filter((id) => !items.some((i) => i.id === id) && clipTargetOf(doc, id)) : [];
+  if (items.length < 1 || items.length + others.length < 2) return;
   const cutter = items[items.length - 1];
   const r = attempt("Clip Surface", (s) =>
     s.batch(() => {
       const kept = [cutter.id];
       let cut = false;
+      for (const id of others) {
+        if (clipTargetOf(s.doc, id)?.cut(s, id, cutter.outline)) cut = true;
+        kept.push(id);
+      }
       for (const item of items.slice(0, -1)) {
         if (intersectionOf([item.outline, cutter.outline]).length === 0) {
           kept.push(item.id);

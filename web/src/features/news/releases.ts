@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:03:00Z",
+    "roof-face",
+    "Roof Face",
+    `AEC > Roof Face turns a closed shape into one sloping roof plane.
+- Click its axis and the side that rises, or give the height of a second click.
+- Change its angle, cuts and levels in Object Info, and cut holes with Clip Surface.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:02:00Z",
     "walkthrough-saved-views",
     "Walkthroughs from saved views",

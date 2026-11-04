@@ -167,6 +167,32 @@ Simple Stair and Ramp run straight, through a landing, turn left or right at one
 
 **Limits:** it's a plain group of plan and solid, so to change it, make it again.
 
+### Roof Face
+
+**AEC › Roof Face** turns a closed shape into one sloping roof plane.
+
+1. Draw the shape the roof covers, select it, and choose **AEC › Roof Face**.
+2. In the dialog, choose how the slope is given:
+   - an **Angle**;
+   - a **Rise over Run**;
+   - **2nd Click Height**, the height where you'll click.
+3. Set the cuts and levels, then click **OK**:
+   - the **Eave Cut**: Vertical, Horizontal, Double or Square;
+   - the **Hole Cut**: Vertical, Splayed or Square;
+   - **Axis Z**, the underside's height at the axis;
+   - the **Thickness**.
+4. Click the start and end of the roof's axis, or drag along it. An arrow shows which side rises.
+5. Click the side that rises. With 2nd Click Height, click where the roof is that high.
+
+Object Info changes the angle, rise and run, levels and cuts, and shows its area. Reshape moves its corners. **Modify › Surfaces › Clip Surface** with a shape on top cuts a hole in it.
+
+**Limits:**
+
+- The eave is each edge facing down the slope; the other edges are cut vertically.
+- There are no roof styles, components, dormers or skylights.
+- Roof faces can't be joined to each other.
+- Vectorworks sees it as a plug-in drawn in plan and 3D, not its own roof face object.
+
 ## Spaces and space planning
 
 ### Space

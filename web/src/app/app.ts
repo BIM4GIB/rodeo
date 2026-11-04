@@ -56,6 +56,8 @@ import { RotatePlanTool } from "./tools/rotatePlan.ts";
 import { DividingTool } from "./tools/dividing.ts";
 import { AlignLeadersTool } from "./tools/alignLeaders.ts";
 import { Rotate3DCentreTool } from "./tools/rotate3dCentre.ts";
+import { RoofFaceAxisTool } from "./tools/roofFaceAxis.ts";
+import { roofFaceDialog } from "./roofFace.ts";
 import { startDividingLines } from "./dividingLines.ts";
 import { startAlignLeaders } from "./leaderLines.ts";
 import { rotate3DDialog } from "./rotate3d.ts";
@@ -337,7 +339,7 @@ interface OpenDrawing {
 }
 
 /** Tools a command takes up for its clicks: each hands back to the tool used before the command. */
-const CLICK_TOOLS: ReadonlySet<ToolId> = new Set<ToolId>(["hatch", "dividing", "alignleaders", "rotate3dcentre"]);
+const CLICK_TOOLS: ReadonlySet<ToolId> = new Set<ToolId>(["hatch", "dividing", "alignleaders", "rotate3dcentre", "roofaxis"]);
 
 export class App {
   readonly view = new View();
@@ -450,6 +452,7 @@ export class App {
       new DividingTool(env, () => this.controller.setTool(this.clicksFrom)),
       new AlignLeadersTool(env, () => this.controller.setTool(this.clicksFrom)),
       new Rotate3DCentreTool(env, () => this.controller.setTool(this.clicksFrom)),
+      new RoofFaceAxisTool(env, () => this.controller.setTool(this.clicksFrom)),
       new PlaceAtTool(env),
       new AddDimensionsTool(env),
       new RotatePlanTool(env),
@@ -945,6 +948,7 @@ export class App {
         dividingLines: () => this.startDividing(),
         alignLeaders: () => void this.startLeaders(),
         rotate3D: () => this.startRotate3D(),
+        roofFace: () => void this.startRoofFace(),
         pasteAsBitmap: () => void pasteAsBitmap(this.view),
         print: () => void this.print(),
         fit: () => this.fit(true),
@@ -1677,6 +1681,14 @@ export class App {
       if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
       this.controller.setTool("rotate3dcentre");
     });
+  }
+
+  /** AEC > Roof Face…: once the dialog is set, the Roof Face tool takes the axis' clicks on the 2D drawing, then hands back. */
+  private async startRoofFace(): Promise<void> {
+    if (!(await roofFaceDialog())) return;
+    if (store.view3d) this.toggle3d();
+    if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
+    this.controller.setTool("roofaxis");
   }
 
   /** View > Standard Views > Top/Plan: back to the 2D drawing; with several panes, the active pane becomes a plan. */

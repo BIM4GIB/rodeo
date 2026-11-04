@@ -70,6 +70,7 @@ export const TOOL_ICON: Record<ToolId, string> = {
   alignleaders: svg('<path d="M4 6l5 0 0 0M4 12l6 0M4 18l7 0" stroke-width="2"/><path d="M9 6l8-3M10 12l8-2M11 18l8-1"/><path d="M8 21l4-19" stroke-dasharray="2 2"/>'),
   // place (a command's click on the drawing): crosshairs beside lines of text
   rotate3dcentre: svg('<path d="M4.5 12A7.5 7.5 0 1 0 15.75 5.5"/><path d="M17.1 9.3L15.75 5.5L19.7 4.8"/>'),
+  roofaxis: svg('<path d="M3 15l9-9 9 9"/><path d="M5 13v6h14v-6"/>'),
   placeat: svg('<path d="M9 5h11M9 9h11M9 13h7"/><path d="M5 15v6M2 18h6"/>'),
   // add dimensions (a chain dimension's Add Dimension(s)): a chain's line with a new witness line dashed past its end
   adddims: svg('<path d="M3 8h12M3 5v8M9 5v8M15 5v8"/><path d="M15 8h6M21 5v14" stroke-dasharray="2 2"/>'),
