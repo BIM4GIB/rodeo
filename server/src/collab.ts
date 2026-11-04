@@ -60,8 +60,8 @@ export interface CollabHub {
   versionSaved(fileId: string, versionId: string, collabSeq: number): void;
   /** A save from the live session was refused for the owner's plan: none is asked for until one this size would fit. */
   saveRefused(fileId: string, size: number): void;
-  /** The drawing's content was replaced (a version restored): everyone reloads; returns the seq the new version holds. */
-  reset(fileId: string): number;
+  /** Runs the synchronous replacement and persistent log reset in one transaction, then reloads everyone. `replace` must not await or start a transaction. */
+  reset<T>(fileId: string, replace: (seq: number) => T): T;
   broadcastComment(fileId: string, comment: Comment): void;
   broadcastCommentDeleted(fileId: string, id: string): void;
   /** Disconnects a user (removed from the drawing), or everyone (drawing deleted) when userId is left out. */
@@ -224,11 +224,12 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
   const connections = new Set<Client>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD });
 
-  function transaction(fn: () => void): void {
+  function transaction<T>(fn: () => T): T {
     db.exec("BEGIN");
     try {
-      fn();
+      const result = fn();
       db.exec("COMMIT");
+      return result;
     } catch (err) {
       db.exec("ROLLBACK");
       throw err;
@@ -576,17 +577,19 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
       room.saveAskedAt = null;
     },
 
-    reset(fileId) {
-      const room = lookup(fileId);
-      if (!room) return 0;
-      room.ops = [];
-      room.savedSeq = room.lastSeq;
-      room.firstUnsavedAt = null;
-      room.saveAskedAt = null;
-      transaction(() => {
-        deleteAllOps.run(fileId);
-        upsertHeader.run(fileId, room.lastSeq, room.savedSeq, null);
+    reset(fileId, replace) {
+      const state = stateOf(fileId);
+      const result = transaction(() => {
+        const saved = replace(state?.lastSeq ?? 0);
+        if (state) {
+          deleteAllOps.run(fileId);
+          upsertHeader.run(fileId, state.lastSeq, state.lastSeq, null);
+        }
+        return saved;
       });
+      // Nothing in memory or on the sockets changes until the replacement is committed.
+      const room = rooms.get(fileId);
+      if (!room) return result;
       // everyone reloads; they leave the room and come back with a hello on the new head
       const members = [...room.clients];
       room.clients.clear();
@@ -597,7 +600,7 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
       }
       if (rooms.get(fileId) === room) rooms.delete(fileId);
       for (const m of members) sendMsg(m.ws, { t: "reload" });
-      return room.lastSeq;
+      return result;
     },
 
     broadcastComment(fileId, comment) {

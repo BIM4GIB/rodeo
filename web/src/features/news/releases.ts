@@ -22,6 +22,14 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:21:00Z",
+    "restore-live-edits",
+    "Safer version restores",
+    `A cloud version restore that cannot be saved leaves your live session's edits intact.
+- Everyone reloads the restored version only after it has been saved successfully.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:19:00Z",
     "script-symbol-calls",
     "Script calls for symbols",

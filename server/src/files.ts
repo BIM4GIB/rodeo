@@ -221,7 +221,7 @@ function autosaveOf(v: string | undefined): Autosave | undefined {
   fail(400, "X-Autosave must be keep or replace");
 }
 
-/** Adds a version and makes it the head, prunes past the owner's version limit, checks the bytes limit. Call inside tx(). */
+/** Adds a version and makes it the head, prunes past the owner's version limit, checks the bytes limit. Call inside a transaction. */
 function addVersionTx(v: NewVersion): { row: VersionRow; pruned: string[] } {
   const owner = ownerRow(v.fileId);
   if (!owner) fail(404, "Drawing not found", "not_found");
@@ -457,9 +457,8 @@ export function registerFiles(app: Hono): void {
     requireRole(fileId, user.id, CAN_EDIT, "Only the owner or an editor can restore a version");
     const src = get<VersionRow>(`${VERSION_SQL} WHERE v.id = ? AND v.file_id = ?`, c.req.param("vid"), fileId);
     if (!src) fail(404, "Version not found", "not_found");
-    // The room reloads for everyone; the restored version starts after the reset.
-    const seq = getHub().reset(fileId);
-    const saved = tx(() =>
+    // Commit the version and log reset together; only then may the room reload.
+    const saved = getHub().reset(fileId, (seq) =>
       addVersionTx({ fileId, authorId: user.id, blob: src.blob, size: src.size, sha256: src.sha256, label: null, collabSeq: seq }),
     );
     await releaseBlobs(saved.pruned);

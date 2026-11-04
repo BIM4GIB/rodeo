@@ -400,14 +400,16 @@ async function main(): Promise<void> {
   assert.equal((await b2.take("comment-deleted")).id, "c1");
 
   // a reset reloads everyone; they hello again on the new head and carry on
-  const after = h.hub.reset("f1");
+  const after = h.hub.reset("f1", (seq) => {
+    head.versionId = "v3";
+    head.collabSeq = seq;
+    return seq;
+  });
   assert.equal(after, N + 1);
   await a2.take("reload");
   await b2.take("reload");
   assert.equal(countOps(db), 0);
   assert.equal(h.hub.canSavePlain("f1"), true);
-  head.versionId = "v3";
-  head.collabSeq = after;
   a2.send({ t: "hello", versionId: "v3" });
   const welcomeR = await a2.take("welcome");
   assert.equal(welcomeR.seq, N + 1);

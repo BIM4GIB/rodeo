@@ -22,6 +22,12 @@ While a drawing has unsaved changes, a copy is kept in the browser every 5 minut
 
 **Limits:** drawings over 150 MB are not copied, since writing one out takes as much memory again.
 
+### Restore a cloud version
+
+**File › Version History** lists the saved versions of a cloud drawing. Choose **Restore** on an older version to make a new current version from it. Once the restore succeeds, everyone in the live session reloads that version.
+
+If the restore is refused because there is no room on the owner's plan, or the server cannot save it, the current version and pending live edits stay intact. Make room or resolve the error before trying again.
+
 ## Tabs
 
 Each drawing opened goes in a tab of its own. Once two are open, a strip of tabs shows over the drawing, and each comes back to the front as it was left (layer, class, selection, view and undo).
