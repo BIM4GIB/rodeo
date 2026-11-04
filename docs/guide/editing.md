@@ -188,6 +188,19 @@ Scale and move objects by typed values. **Modify › Move 3D…** raises or lowe
 
 **Align to Grid** puts each selected object's upper-left corner on the nearest point of the snap grid, in one undo step.
 
+### Align by Increment
+
+**Modify › Align › Align by Increment…** rounds each selected object's position, for example to put lighting devices on 6" marks along a pipe.
+
+1. Select the objects and choose the command.
+2. Tick the axes to align along: **X**, **Y** and **Z**.
+3. Set **Round to the nearest**, or tick **Use snap grid** to put X and Y on the snap grid.
+4. Click **OK**.
+
+Each object moves by its insertion point, or its centre if it has none. **Shift+click** sets what a Shift-click on the command does: align at once with the last settings, or show the dialog.
+
+**Limits:** Z goes by the middle of the object in 3D, not a symbol's insertion height; objects with nothing in 3D keep their height.
+
 ### Align/Distribute…
 
 **Modify › Align › Align/Distribute…** aligns or distributes across and up the window at once, by edges, centres, insertion points or equal gaps. A selected locus or the object right-clicked stays put.

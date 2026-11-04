@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:05:00Z",
+    "align-by-increment",
+    "Align by Increment",
+    `Modify > Align > Align by Increment… rounds the selected objects' positions.
+- Put lighting devices on 6" marks, or anything on the snap grid.
+- Align X, Y and Z by insertion point or centre, in one undo step.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:04:00Z",
     "render-bitmap",
     "Render Bitmap",

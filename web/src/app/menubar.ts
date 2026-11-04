@@ -211,6 +211,7 @@ import { titleBlockManager } from "./titleBlockManager.ts";
 import { canCreateRecordFormat, editRecordFormatRows, newRecordFormat } from "./recordFormatEditor.ts";
 import { alignDistributeDialog, alignDistributeRows } from "./alignDistribute.ts";
 import { alignDistribute3dDialog } from "./alignDistribute3d.ts";
+import { alignByIncrementCommand } from "./alignIncrement.ts";
 import { showHome } from "./welcome.ts";
 import { canExportDatabase, exportDatabaseDialog } from "./exportDatabase.ts";
 import { canCentroid, canEngineeringProperties, centroidDialog, engineeringPropertiesDialog } from "./engineeringProperties.ts";
@@ -907,6 +908,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             align("Bottom", "bottom"),
             "-",
             { label: "Align to Grid", enabled: hasSelection, run: () => alignToGrid(scene, view) },
+            { label: "Align by Increment…", enabled: hasSelection, run: () => void alignByIncrementCommand(scene, view.scale) },
           ],
         },
         {
