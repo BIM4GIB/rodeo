@@ -1,5 +1,5 @@
 // npx tsx src/app/customScripts.check.ts
-import { allOf, criterionText, modificationScript, PLUGIN_TYPE, quoted, selectionScript, typeCriterion } from "./customScripts.ts";
+import { allOf, criterionText, modificationScript, PLUGIN_TYPE, quoted, selectionScript, selectorOfTool, toolAttributeScript, toolOfSelector, typeCriterion } from "./customScripts.ts";
 
 let failed = 0;
 const ok = (cond: boolean, what: string): void => {
@@ -52,6 +52,16 @@ for (const line of [
 const mvs = modificationScript("vectorscript", "(T=RECT)", changes);
 for (const line of ["PROCEDURE Modify(h: HANDLE);", "\tSetFillFore(h, 65535, 0, 32896);", "\tSetClass(h, 'Walls');", "\tSelectObj((T=RECT));", "\tForEachObjectInLayer(Modify, 2, 0, 0);", "RUN(CustomModification);"])
   ok(mvs.includes(line), `vectorscript modification: ${line}`);
+
+// Custom Tool/Attribute
+ok(selectorOfTool("line") === -201 && selectorOfTool("select") === -240 && selectorOfTool("stagedeck") === null, "tool numbers");
+ok(toolOfSelector(-203) === "rect" && toolOfSelector(-243) === "zoom" && toolOfSelector(-999) === null, "tools by number");
+const tpy = toolAttributeScript("python", { fillPattern: 1, fillFore: [255, 0, 0], opacity: [60, 80], lineMils: 20, textSize: 12, textAlign: { h: 2, v: 3 }, className: "Walls", layerName: "Plan", tool: -201 });
+for (const line of ["vs.FillPat(1)", "vs.FillFore((65535, 0, 0))", "vs.SetDefaultOpacityN(60, 80)", "vs.PenSize(20)", "vs.TextSize(12)", "vs.TextJust(2)", "vs.TextVerticalAlign(3)", "vs.NameClass('Walls')", "vs.Layer('Plan')", "vs.SetTool(-201)"])
+  ok(tpy.includes(line), `python tool script: ${line}`);
+ok(!tpy.includes("PenFore"), "only what was recorded");
+const tvs = toolAttributeScript("vectorscript", { penFore: [0, 0, 255], tool: -200 });
+ok(tvs.includes("\tPenFore(0, 0, 65535);") && tvs.includes("\tSetTool(-200);") && tvs.trim().endsWith("RUN(CustomTool);"), "vectorscript tool script");
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

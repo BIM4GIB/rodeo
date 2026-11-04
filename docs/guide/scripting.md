@@ -53,6 +53,21 @@ Lengths are in the drawing's units (inches for feet and inches), and colours are
 
 Vectorworks keeps script palettes in the drawing; Rodeo keeps them in this browser, the same for every drawing.
 
+### Custom Tool/Attribute
+
+**Tools › Custom Tool/Attribute…** saves a way of drawing as a script. Select one object to record its attributes, or nothing to record what new objects are drawn with, and pick the tool to draw with first.
+
+The **Custom Tools** dialog ticks what's recorded, in four groups, each with **All**:
+
+- **Fill Attributes:** style, foreground and background colour, and opacity.
+- **Pen Attributes:** style, foreground and background colour, and line weight.
+- **Text Attributes:** size and alignment (from a text object, or the Text tool's).
+- **Other Attributes:** class, layer and the active tool.
+
+Choose **Create VectorScript** or **Create Python Script**, then name it. It goes in a script palette. Double-click it there to set all of that again, ready to draw.
+
+Any script that sets attributes, text size, the class, the layer or the tool (with `SetTool`) leaves them set after it runs, as in Vectorworks. `PushAttrs` and `PopAttrs` put attributes back.
+
 ## Drawings as scripts
 
 ### Export Script and Import Script

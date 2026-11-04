@@ -2,7 +2,8 @@
 // Immediately, or Create VectorScript or Create Python Script, which write what the dialog chose as a
 // script and keep it in a script palette, where a double-click runs it again (in Rodeo, and in Vectorworks
 // once exported). The criteria become Vectorworks' search criteria, ((L='Layer-1') & (T=RECT) & (C<>'Walls')),
-// and the changes vs calls. Pure, so Node can check the scripts.
+// and the changes vs calls. Custom Tool/Attribute's script sets the document's attributes, class, layer
+// and tool (SetTool, by Vectorworks' tool numbers). Pure, so Node can check the scripts.
 
 export type ScriptMode = "now" | "vectorscript" | "python";
 
@@ -169,4 +170,113 @@ export function modificationScript(language: "python" | "vectorscript", criteria
     "RUN(CustomModification);",
     "",
   ].join("\n");
+}
+
+/**
+ * Vectorworks' SetTool numbers for the tools Rodeo has, by Rodeo's tool id (the Vectorworks function
+ * reference, Appendix E: SetTool - CallTool Selectors).
+ */
+const TOOL_SELECTORS: Readonly<Record<string, number>> = {
+  text: -200,
+  line: -201,
+  arc: -202,
+  rect: -203,
+  polyline: -204,
+  oval: -205,
+  fillet: -206,
+  polygon: -207,
+  wall: -208,
+  symbol: -209,
+  dimension: -210,
+  reshape: -214,
+  rotate: -215,
+  doubleline: -216,
+  roundrect: -217,
+  dlpolygon: -218,
+  chamfer: -219,
+  freehand: -220,
+  locus: -221,
+  mirror: -222,
+  regpoly: -225,
+  clip: -226,
+  quarterarc: -227,
+  centermark: -228,
+  select: -240,
+  pan: -241,
+  zoom: -242,
+  translateview: -300,
+  walkthrough: -302,
+  flyover: -303,
+  slab: -311,
+  alignplane: -312,
+  poly3d: -313,
+  locus3d: -316,
+  light: -317,
+  sphere: -319,
+  hemisphere: -320,
+  cone: -321,
+  walljoin: -322,
+  renderbitmap: -324,
+  connect: -327,
+  chamferedge: -342,
+  filletedge: -343,
+  loftsurface: -344,
+  extract: -346,
+  shellsolid: -347,
+  moveby: -352,
+};
+
+/** Vectorworks' SetTool number for Rodeo's tool `id`, or null when it has none. */
+export function selectorOfTool(id: string): number | null {
+  return TOOL_SELECTORS[id] ?? null;
+}
+
+/** Rodeo's tool for Vectorworks' SetTool number `n` (Zoom Out as Zoom), or null when Rodeo has none. */
+export function toolOfSelector(n: number): string | null {
+  if (n === -243) return "zoom";
+  return Object.entries(TOOL_SELECTORS).find(([, v]) => v === n)?.[0] ?? null;
+}
+
+/** What Custom Tool/Attribute's script sets: each only when recorded. Colours red, green and blue, 0 to 255. */
+export interface ToolAttributes {
+  readonly fillPattern?: number;
+  readonly fillFore?: readonly [number, number, number];
+  readonly fillBack?: readonly [number, number, number];
+  /** fill and pen, 0 to 100 */
+  readonly opacity?: readonly [number, number];
+  readonly lineStyle?: number;
+  readonly penFore?: readonly [number, number, number];
+  readonly penBack?: readonly [number, number, number];
+  readonly lineMils?: number;
+  /** points */
+  readonly textSize?: number;
+  /** Vectorworks' justification (1 left, 2 centre, 3 right) and vertical alignment (1 top to 5 bottom) */
+  readonly textAlign?: { readonly h: number; readonly v: number };
+  readonly className?: string;
+  readonly layerName?: string;
+  /** a SetTool number */
+  readonly tool?: number;
+}
+
+/** Custom Tool/Attribute's script: the attributes, class, layer and tool recorded, set for what is drawn next. */
+export function toolAttributeScript(language: "python" | "vectorscript", a: ToolAttributes): string {
+  const python = language === "python";
+  const colour = (rgb: readonly number[]): string => (python ? `(${wide(rgb).join(", ")})` : wide(rgb).join(", "));
+  const text = (s: string): string => `'${s}'`;
+  const lines: string[] = [];
+  if (a.fillPattern !== undefined) lines.push(`FillPat(${a.fillPattern})`);
+  if (a.fillFore) lines.push(`FillFore(${colour(a.fillFore)})`);
+  if (a.fillBack) lines.push(`FillBack(${colour(a.fillBack)})`);
+  if (a.opacity) lines.push(`SetDefaultOpacityN(${a.opacity.map(Math.round).join(", ")})`);
+  if (a.lineStyle !== undefined) lines.push(`PenPat(${a.lineStyle})`);
+  if (a.penFore) lines.push(`PenFore(${colour(a.penFore)})`);
+  if (a.penBack) lines.push(`PenBack(${colour(a.penBack)})`);
+  if (a.lineMils !== undefined) lines.push(`PenSize(${Math.round(a.lineMils)})`);
+  if (a.textSize !== undefined) lines.push(`TextSize(${Math.round(a.textSize * 100) / 100})`);
+  if (a.textAlign) lines.push(`TextJust(${a.textAlign.h})`, `TextVerticalAlign(${a.textAlign.v})`);
+  if (a.className !== undefined) lines.push(`NameClass(${text(a.className)})`);
+  if (a.layerName !== undefined) lines.push(`Layer(${text(a.layerName)})`);
+  if (a.tool !== undefined) lines.push(`SetTool(${a.tool})`);
+  if (python) return ["import vs", "", "# Custom Tool/Attribute: sets what is drawn next with", ...lines.map((l) => `vs.${l}`), ""].join("\n");
+  return ["PROCEDURE CustomTool;", "{ sets what is drawn next with }", "BEGIN", ...lines.map((l) => `\t${l};`), "END;", "RUN(CustomTool);", ""].join("\n");
 }

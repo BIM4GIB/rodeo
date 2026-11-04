@@ -117,6 +117,11 @@ class _State(object):
         self.text_pts = None
         self.text_h = 1
         self.text_v = 1
+        # the document's attributes, text settings and tool as the script leaves them, for after the run:
+        # whether FillPat and the rest were called, the text settings set (pts, h, v), the SetTool tool
+        self.attrs_set = False
+        self.text_set = {}
+        self.tool = None
         self.sel_changed = False
         self.layer_changed = False
         self.class_changed = False
@@ -156,6 +161,9 @@ def _result():
         "drawing": s.kids.get(s.pio, []) if s.pio else None,
         "ui": s.ui if s.plugin else None,
         "reset": s.reset,
+        "attrs": s.attrs if s.attrs_set and not s.plugin else None,
+        "text": s.text_set if s.text_set and not s.plugin else None,
+        "tool": s.tool,
     })
 
 
@@ -604,16 +612,19 @@ def TextOrigin(*args):
 
 def TextSize(size):
     _S.text_pts = float(size) if float(size) > 0 else 12.0
+    _S.text_set["pts"] = _S.text_pts
 
 
 def TextJust(justify):
     j = int(justify)
     _S.text_h = j if j in (1, 2, 3) else 1
+    _S.text_set["h"] = _S.text_h
 
 
 def TextVerticalAlign(align):
     a = int(align)
     _S.text_v = a if 1 <= a <= 5 else 1
+    _S.text_set["v"] = _S.text_v
 
 
 def CreateText(text):
@@ -1009,41 +1020,63 @@ def ColorIndexToRGB(index):
     return _rgb16(int(index))
 
 
+def _default(key, v):
+    _S.attrs[key] = v
+    _S.attrs_set = True
+
+
 def FillPat(n):
-    _S.attrs["fillPattern"] = int(n)
+    _default("fillPattern", int(n))
 
 
 def PenPat(n):
-    _S.attrs["lineStyle"] = int(n)
+    _default("lineStyle", int(n))
 
 
 def PenSize(mils):
-    _S.attrs["lineWeight"] = int(mils)
+    _default("lineWeight", int(mils))
 
 
 def FillFore(*args):
-    _S.attrs["fillFore"] = _index_of(args)
+    _default("fillFore", _index_of(args))
 
 
 def FillBack(*args):
-    _S.attrs["fillBack"] = _index_of(args)
+    _default("fillBack", _index_of(args))
 
 
 def PenFore(*args):
-    _S.attrs["penFore"] = _index_of(args)
+    _default("penFore", _index_of(args))
 
 
 def PenBack(*args):
-    _S.attrs["penBack"] = _index_of(args)
+    _default("penBack", _index_of(args))
+
+
+def SetDefaultOpacityN(fillOpacity, penOpacity):
+    _default("fillOpacity", max(0, min(100, int(fillOpacity))))
+    _default("penOpacity", max(0, min(100, int(penOpacity))))
+
+
+def SetDefaultOpacity(opacity):
+    SetDefaultOpacityN(opacity, opacity)
+
+
+def Opacity(opacity):
+    SetDefaultOpacityN(opacity, opacity)
+
+
+def SetTool(theTool):
+    _S.tool = int(theTool)
 
 
 def PushAttrs():
-    _S.attr_stack.append((dict(_S.attrs), _S.text_pts, _S.text_h, _S.text_v))
+    _S.attr_stack.append((dict(_S.attrs), _S.text_pts, _S.text_h, _S.text_v, dict(_S.text_set)))
 
 
 def PopAttrs():
     if _S.attr_stack:
-        _S.attrs, _S.text_pts, _S.text_h, _S.text_v = _S.attr_stack.pop()
+        _S.attrs, _S.text_pts, _S.text_h, _S.text_v, _S.text_set = _S.attr_stack.pop()
 
 
 def _set_attrs(h, attrs):

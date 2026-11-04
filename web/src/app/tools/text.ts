@@ -109,29 +109,32 @@ export class TextEditor {
   }
 }
 
+/**
+ * What new text is placed with: its justification and how high it stands on paper, mm, whatever the
+ * layer's scale. The Text tool's modes and Create Similar Object set them, and a script's TextJust,
+ * TextVerticalAlign and TextSize (Custom Tool/Attribute's).
+ */
+export const textDefaults: { align: TextAlign; paperHeight: number } = { align: { h: 1, v: 1 }, paperHeight: 2.5 };
+
 export class TextTool extends BaseTool {
   readonly id = "text";
   readonly cursor = "text";
-
-  private align: TextAlign = { h: 1, v: 1 };
-  /** how high new text stands on paper, mm, whatever the layer's scale */
-  private paperHeight = 2.5;
 
   modes(): ToolModes[] {
     return [
       {
         label: "Justification",
         options: H_ALIGN.map((a) => ({ id: `h${a.value}`, label: a.label, key: a.value })),
-        active: `h${this.align.h}`,
+        active: `h${textDefaults.align.h}`,
       },
-      { label: "Vertical alignment", options: V_ALIGN.map((a) => ({ id: `v${a.value}`, label: a.label })), active: `v${this.align.v}` },
+      { label: "Vertical alignment", options: V_ALIGN.map((a) => ({ id: `v${a.value}`, label: a.label })), active: `v${textDefaults.align.v}` },
     ];
   }
 
   setMode(id: string): void {
     const n = Number(id.slice(1));
-    if (id.startsWith("h")) this.align = { ...this.align, h: n };
-    else if (id.startsWith("v")) this.align = { ...this.align, v: n };
+    if (id.startsWith("h")) textDefaults.align = { ...textDefaults.align, h: n };
+    else if (id.startsWith("v")) textDefaults.align = { ...textDefaults.align, v: n };
   }
 
   key(e: KeyboardEvent): boolean {
@@ -145,9 +148,9 @@ export class TextTool extends BaseTool {
   takeFrom(obj: ObjectInfo): boolean {
     const s = obj.shape;
     if (s?.kind !== "text") return false;
-    this.align = { h: s.hAlign ?? this.align.h, v: s.vAlign ?? this.align.v };
+    textDefaults.align = { h: s.hAlign ?? textDefaults.align.h, v: s.vAlign ?? textDefaults.align.v };
     const scale = this.env.scene.layer(obj.layerId)?.scale;
-    if (s.textSize && scale) this.paperHeight = s.textSize / scale;
+    if (s.textSize && scale) textDefaults.paperHeight = s.textSize / scale;
     return true;
   }
 
@@ -160,9 +163,9 @@ export class TextTool extends BaseTool {
     const layer = layerId ? this.env.scene.layer(layerId) : undefined;
     if (!layer) return;
     // text height is set on paper (2.5 mm until Create Similar Object takes another's), so in model units it is that x scale
-    const height = this.paperHeight * layer.scale;
+    const height = textDefaults.paperHeight * layer.scale;
     const at = p.pos;
-    const align = this.align;
+    const align = textDefaults.align;
     this.env.text.open({
       at,
       align,

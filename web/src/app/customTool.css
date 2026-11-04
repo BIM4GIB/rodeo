@@ -1,0 +1,70 @@
+/* Tools > Custom Tool/Attribute's Custom Tools dialog (customTool.ts): its four groups, each with All. */
+
+.menu-dialog.ct-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.ct-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0 10px;
+}
+
+.ct-group {
+  margin: 0;
+  padding: 4px 10px 8px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.ct-group legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+.ct-group .menu-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+/* the script language reads in full */
+.ct-dialog .menu-dialog-field select {
+  width: auto;
+  min-width: 190px;
+}
+
+.ct-all {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.ct-dialog .ct-value {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ct-colour {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ct-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--divider);
+}
+
+@media (max-width: 520px) {
+  .ct-groups {
+    grid-template-columns: 1fr;
+  }
+}

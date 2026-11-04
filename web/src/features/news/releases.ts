@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:13:00Z",
+    "custom-tool-attribute",
+    "Custom Tool/Attribute",
+    `Tools > Custom Tool/Attribute saves a way of drawing as a script.
+- It records an object's fill, pen, opacity and line weight, text size and alignment, class, layer and the tool you're using.
+- Double-click the script in its palette to set them all again, ready to draw.
+- Scripts that set attributes or call SetTool now leave them set after they run, as in Vectorworks.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:12:00Z",
     "custom-modification-scripts",
     "Custom Modification and selection scripts",

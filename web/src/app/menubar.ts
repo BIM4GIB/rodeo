@@ -1062,6 +1062,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Custom Selection…", enabled: hasLayer, run: () => void customSelectionDialog() },
         { label: "Find and Modify…", enabled: hasLayer, run: () => void findModifyDialog() },
         { label: "Custom Modification…", enabled: hasLayer, run: () => void findModifyDialog(true) },
+        { label: "Custom Tool/Attribute…", enabled: hasLayer, run: () => void import("./customTool.ts").then((m) => m.customToolDialog()) },
         { label: "Class and Layer Mapping…", enabled: hasDoc, run: () => void import("./classLayerMapping.ts").then((m) => m.classLayerMappingDialog()) },
         "-",
         {

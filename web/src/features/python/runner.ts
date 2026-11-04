@@ -10,12 +10,14 @@
 // came with it; an object plug-in's script draws into its object (one in the drawing, or one placed
 // as the run is applied), replacing what it held, in the same undo step.
 
-import { fieldKind, type Affine, type Arrange, type ByClassGroup, type EditSession, type FieldKind, type NewShape, type PluginFieldSpec, type Pt, type RecordValue, type Visibility } from "../../core/index.ts";
+import { fieldKind, type Attributes, type Affine, type Arrange, type ByClassGroup, type EditSession, type FieldKind, type NewShape, type PluginFieldSpec, type Pt, type RecordValue, type Visibility } from "../../core/index.ts";
 import { setActiveClass, setActiveLayer, setSelection } from "../../app/commands.ts";
 import { h } from "../../app/dom.ts";
 import { appContext, registerOverlay } from "../../app/ext.ts";
 import { showDialog } from "../../app/menubar.ts";
-import { store } from "../../app/state.ts";
+import { toolOfSelector } from "../../app/customScripts.ts";
+import { store, type ToolId } from "../../app/state.ts";
+import { textDefaults } from "../../app/tools/text.ts";
 import { toast } from "../../app/toast.ts";
 import { millimetresPerUnit, parseLength } from "../../app/units.ts";
 import { showAlert } from "../plugins/ui.ts";
@@ -30,6 +32,8 @@ const PLUGIN_DIR = "/rodeo/plugin";
 
 /** The text tool's size on paper, mm, which new text takes until vs.TextSize sets one. */
 const TEXT_PAPER_MM = 2.5;
+/** a point, mm: TextSize gives points */
+const MM_PER_POINT = 25.4 / 72;
 
 /** Runs the script in the worker: the vs module set up over the snapshot, the script's own globals fresh. */
 const RUN_PY = `
@@ -331,6 +335,12 @@ interface Result {
   readonly ui?: PluginUi | null;
   /** whether it asked for its object to be drawn again (ResetObject) */
   readonly reset?: boolean;
+  /** the attributes it set for new objects (FillPat, PenFore, SetDefaultOpacity...); not a plug-in's */
+  readonly attrs?: Partial<Attributes> | null;
+  /** the text settings it set: TextSize in points, TextJust, TextVerticalAlign; not a plug-in's */
+  readonly text?: { readonly pts?: number; readonly h?: number; readonly v?: number } | null;
+  /** the tool it chose with SetTool, by Vectorworks' number */
+  readonly tool?: number | null;
   readonly error: ScriptError | null;
 }
 
@@ -761,6 +771,27 @@ function pluginAround(s: EditSession, run: PluginRun, drawing: readonly string[]
   };
 }
 
+/**
+ * What a script leaves set for what is drawn next, as Vectorworks keeps it: the attributes new objects
+ * take, the Text tool's size and justification, and the tool chosen with SetTool.
+ */
+function applyDefaults(result: Result): void {
+  if (result.attrs && Object.keys(result.attrs).length) {
+    store.drawAttrs = { ...store.drawAttrs, ...result.attrs };
+    store.emit("attrs");
+  }
+  const text = result.text;
+  if (text) {
+    if (text.pts) textDefaults.paperHeight = text.pts * MM_PER_POINT;
+    textDefaults.align = { h: text.h ?? textDefaults.align.h, v: text.v ?? textDefaults.align.v };
+  }
+  if (result.tool != null) {
+    const id = toolOfSelector(result.tool);
+    if (id) appContext()?.setTool(id as ToolId);
+    else toast(`The script chose Vectorworks tool ${result.tool}, which Rodeo doesn't have.`, "info");
+  }
+}
+
 /** Runs `code` (from `file`) on the open drawing; a plug-in's script with `plugin`. */
 export async function runScript(code: string, file: string, events: RunEvents, plugin?: PluginRun): Promise<RunOutcome> {
   if (running) return { error: { name: "Busy", message: "A script is running already.", line: null }, steps: 0 };
@@ -816,6 +847,7 @@ export async function runScript(code: string, file: string, events: RunEvents, p
   } else if (steps.length > 0) {
     setSelection([...store.selection].filter((id) => s.doc.object(id)));
   }
+  applyDefaults(result);
   for (const text of result.alerts ?? []) await showAlert("Script", text);
   return { error: null, steps: steps.length, object, ui: result.ui ?? null };
 }
