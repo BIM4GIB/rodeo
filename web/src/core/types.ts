@@ -1414,6 +1414,8 @@ export interface EditSession {
   followOn<T>(fn: () => T): T;
   onChange(listener: (e: ChangeEvent) => void): () => void;
   markSaved(): void;
+  /** A recovered copy has no saved state until explicitly saved. */
+  markUnsaved(): void;
   /** Called with each change to the record list once it is made (edits, undo, redo); not for applyRemote. */
   onStep(listener: (op: SpliceOp) => void): () => void;
   /**

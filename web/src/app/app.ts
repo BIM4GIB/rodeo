@@ -395,6 +395,7 @@ export class App {
   private untitledCount = 0;
   /** the open drawings, in tab order */
   private readonly drawings: OpenDrawing[] = [];
+  private autosave: ReturnType<typeof installAutosave> | null = null;
   /** the drawing the window shows, one of `drawings` */
   private shown: OpenDrawing | null = null;
   /** draws the tab strip again */
@@ -1134,7 +1135,7 @@ export class App {
       else void this.openFile(file, handle);
     });
     void loadRecent();
-    installAutosave({ openDocument: async (bytes, name) => void (await this.openDocument(bytes, name, null)) });
+    this.autosave = installAutosave({ openDocument: async (bytes, name) => (await this.openDocument(bytes, name, null)) === "open" ? store.session : null });
     window.addEventListener("beforeunload", (e) => {
       if (store.session?.dirty || this.drawings.some((d) => d.session.dirty)) {
         e.preventDefault();
@@ -2164,8 +2165,15 @@ export class App {
       view: null,
     };
     const at = replacing ? this.drawings.indexOf(replacing) : -1;
-    if (at >= 0) this.drawings[at] = d;
+    if (at >= 0) {
+      this.autosave?.forget(this.drawings[at].session);
+      this.drawings[at] = d;
+    }
     else this.drawings.push(d);
+    this.autosave?.track(session, () => ({
+      name: store.session === session ? store.fileName : d.name,
+      size: store.session === session ? store.fileSize : d.fileSize,
+    }));
     this.present(d);
   }
 
@@ -2271,6 +2279,7 @@ export class App {
     const i = this.drawings.indexOf(d);
     if (i < 0) return;
     this.drawings.splice(i, 1);
+    this.autosave?.forget(d.session);
     if (d !== this.shown) {
       this.redrawTabs();
       return;
