@@ -17,47 +17,66 @@ interface Job {
 const MAX_WORKERS = 8;
 
 let workers: Worker[] | null = null;
-/** set when a worker could not start: decode on this thread from then on */
+/** set when a worker could not start or stopped: work on this thread from then on */
 let broken = false;
 const jobs = new Map<number, Job>();
 let nextId = 0;
 
-function start(): Worker[] {
+function start(): Worker[] | null {
+  if (broken || typeof Worker === "undefined") return null;
+  if (workers) return workers;
   const count = Math.min(MAX_WORKERS, Math.max(1, (navigator.hardwareConcurrency || 4) - 1));
-  return Array.from({ length: count }, () => {
-    const w = new Worker(new URL("./inflate.worker.ts", import.meta.url), { type: "module" });
-    w.onmessage = ({ data }: MessageEvent<InflateReply>) => {
-      const job = jobs.get(data.id);
-      jobs.delete(data.id);
-      if (!job) return;
-      if ("error" in data) job.reject(new Error(data.error));
-      else job.resolve(data.bytes);
-    };
-    w.onerror = (e) => {
-      // a worker that cannot load fails every job; they are decoded here instead
-      e.preventDefault();
-      broken = true;
-      for (const job of jobs.values()) job.reject(new WorkerFailed());
-      jobs.clear();
-      for (const other of workers ?? []) other.terminate();
-      workers = null;
-    };
-    return w;
-  });
+  const pool: Worker[] = [];
+  try {
+    for (let i = 0; i < count; i++) {
+      const w = new Worker(new URL("./inflate.worker.ts", import.meta.url), { type: "module" });
+      pool.push(w);
+      w.onmessage = ({ data }: MessageEvent<InflateReply>) => {
+        const job = jobs.get(data.id);
+        jobs.delete(data.id);
+        if (!job) return;
+        if ("error" in data) job.reject(new Error(data.error));
+        else job.resolve(data.bytes);
+      };
+      w.onerror = (e) => {
+        e.preventDefault();
+        stop(pool);
+      };
+    }
+    return (workers = pool);
+  } catch {
+    // Construction may fail partway through the pool; no inputs have been transferred yet.
+    stop(pool);
+    return null;
+  }
 }
 
-class WorkerFailed extends Error {}
+function stop(pool: readonly Worker[]): void {
+  broken = true;
+  for (const job of jobs.values()) job.reject(new WorkerFailed());
+  jobs.clear();
+  for (const w of pool) w.terminate();
+  workers = null;
+}
+
+class WorkerFailed extends Error {
+  constructor() {
+    super("A drawing worker stopped. Try opening or saving again.");
+  }
+}
 
 /** readContainerStream's inflate and how far ahead to read for it: the workers, or this thread when there are none. */
 export function inflater(): { inflate: Inflate; ahead: number } {
-  if (broken || typeof Worker === "undefined") return { inflate: async (chunks, first, at) => inflateChunks(chunks, first, at), ahead: 1 };
-  workers ??= start();
-  const count = workers.length;
+  const pool = start();
+  if (!pool) return { inflate: async (chunks, first, at) => inflateChunks(chunks, first, at), ahead: 1 };
+  const count = pool.length;
   const inflate: Inflate = async (chunks, first, at) => {
+    const length = chunks.byteLength;
     try {
       return await post({ chunks: own(chunks), first, at });
     } catch (err) {
-      if (err instanceof WorkerFailed) return inflateChunks(chunks, first, at);
+      // A whole buffer was given away; retry only when the original input is still intact.
+      if (err instanceof WorkerFailed && chunks.byteLength === length) return inflateChunks(chunks, first, at);
       throw err;
     }
   };
@@ -67,14 +86,15 @@ export function inflater(): { inflate: Inflate; ahead: number } {
 
 /** writeVwx's deflate and how many runs to compress at once: the workers, or this thread when there are none. */
 export function deflater(): { deflate: Deflate; ahead: number } {
-  if (broken || typeof Worker === "undefined") return { deflate: async (raw) => deflateChunks(raw), ahead: 1 };
-  workers ??= start();
-  const count = workers.length;
+  const pool = start();
+  if (!pool) return { deflate: async (raw) => deflateChunks(raw), ahead: 1 };
+  const count = pool.length;
   const deflate: Deflate = async (raw) => {
+    const length = raw.byteLength;
     try {
       return await post({ raw: own(raw) });
     } catch (err) {
-      if (err instanceof WorkerFailed) return deflateChunks(raw);
+      if (err instanceof WorkerFailed && raw.byteLength === length) return deflateChunks(raw);
       throw err;
     }
   };
@@ -97,6 +117,11 @@ function post(work: Work): Promise<Uint8Array> {
   return new Promise<Uint8Array>((resolve, reject) => {
     jobs.set(id, { resolve, reject });
     const request: InflateRequest = { id, ...work };
-    pool[id % pool.length].postMessage(request, [bytes.buffer as ArrayBuffer]);
+    try {
+      pool[id % pool.length].postMessage(request, [bytes.buffer as ArrayBuffer]);
+    } catch (err) {
+      jobs.delete(id);
+      reject(err);
+    }
   });
 }

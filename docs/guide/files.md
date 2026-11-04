@@ -8,6 +8,8 @@ This page covers opening and saving drawings, autosave, working with several dra
 
 Open a `.vwx` file with **Open** or by dropping it on the window. **Open** also opens DWG files and Revit and Archicad projects as new drawings, as described in [Importing, exporting and printing](import-export.md). **Save** writes back to the same file where the browser allows it (Chrome/Edge File System Access API); otherwise it downloads a copy.
 
+If opening or saving stops with a drawing-worker error, try the command again. When this happens during a save, the previous file stays unchanged and your edits stay unsaved; keep the drawing open until a save succeeds.
+
 **File › Open Recent** lists the drawings opened or saved that way (the browser keeps their file handles, not the drawings). **File › Revert** reopens the saved file.
 
 ### Save a Copy As… and Save All

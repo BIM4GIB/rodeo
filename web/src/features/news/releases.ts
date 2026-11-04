@@ -22,6 +22,14 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-04T12:20:00Z",
+    "worker-save-integrity",
+    "Safer opening and saving",
+    `A drawing-worker failure now stops an affected open or save instead of silently returning empty drawing data.
+- A failed save keeps your previous file intact. Retry opening or saving to continue without workers.`,
+    "announce",
+  ),
+  release(
     "2026-11-04T12:19:00Z",
     "script-symbol-calls",
     "Script calls for symbols",
