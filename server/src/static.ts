@@ -124,7 +124,7 @@ export function registerStatic(app: Hono): void {
 
     const isIndex = target === join(root, "index.html");
     const isAdmin = target === join(root, "admin.html");
-    const rel = target.startsWith(ARCHIVE + sep) ? `/assets${target.slice(ARCHIVE.length)}` : target.slice(root.length);
+    const rel = (target.startsWith(ARCHIVE + sep) ? `/assets${target.slice(ARCHIVE.length)}` : target.slice(root.length)).split(sep).join("/");
     c.header("Content-Type", TYPES[extname(target).toLowerCase()] ?? "application/octet-stream");
     c.header("Content-Length", String(size));
     c.header("X-Content-Type-Options", "nosniff");
