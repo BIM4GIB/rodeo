@@ -22,7 +22,7 @@ import { deflateSync } from "node:zlib";
 import { buildScene, create, type Matrix3x3 } from "openskp";
 import { blankDrawing } from "../core/blank.ts";
 import { openVwx, type MeshNode } from "../core/index.ts";
-import type { MeshFile, MeshPart, MeshTree, MeshTreeNode } from "./mesh.ts";
+import { MAX_FACES, type MeshFile, type MeshPart, type MeshTree, type MeshTreeNode } from "./mesh.ts";
 import { parseSkp } from "./skp.ts";
 
 let failures = 0;
@@ -480,6 +480,26 @@ function png(w: number, h: number, alpha: boolean): Uint8Array {
   const right = face.length === 12 && uv.length === 8 && [0, 1, 2, 3].every((k) => near(uv[2 * k], face[3 * k] / 48, 1e-6) && near(uv[2 * k + 1], face[3 * k + 2] / 24, 1e-6));
   check(right, `its corners at the picture's corners (${uv.map((v) => v.toFixed(3))})`);
   check(!Object.keys(file.skipped).length, `nothing left out (${JSON.stringify(file.skipped)})`);
+}
+
+{
+  // more guide points than MAX_FACES and a face: the file comes in, the points past the cap left out and counted
+  const t = create();
+  t.addGroup((d) => d.addFace([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]]), { name: "Plate" });
+  for (let i = 0; i < MAX_FACES + 10; i++) t.addConstructionPoint([i, 0, 0]);
+  let file: MeshFile | null = null;
+  try {
+    file = parseSkp(t.toBytes());
+  } catch (err) {
+    check(false, `more loose points than the face cap still come in (${(err as Error).message})`);
+  }
+  if (file) {
+    const points = file.tree!.top.points?.length ?? 0;
+    check(
+      points === MAX_FACES && file.skipped["guide point"] === 10 && file.tree!.top.groups[0]?.parts[0]?.faces.length === 1,
+      `more loose points than the face cap come in, ${MAX_FACES.toLocaleString("en")} kept and the rest counted (${points}, ${JSON.stringify(file.skipped)})`,
+    );
+  }
 }
 
 for (const [bytes, what] of [

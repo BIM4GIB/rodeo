@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-05T12:50:00Z",
+    "sketchup-many-edges",
+    "Detailed SketchUp models come in",
+    `SketchUp models with many loose edges now open instead of being turned away.
+- Loose edges and guide points no longer count against the face limit, so a detailed model under 250,000 faces comes in whole.
+- If a model has more than 250,000 loose edges and guide points, the extra ones are left out and counted in the import message, and the rest of the model still comes in.`,
+    "furniture",
+  ),
+  release(
     "2026-11-05T12:45:00Z",
     "editing-together",
     "Editing together without undone changes",
