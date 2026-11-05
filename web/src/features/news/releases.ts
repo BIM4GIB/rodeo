@@ -61,7 +61,7 @@ export const RELEASES: readonly Release[] = [
 - Window › Connect an Agent… makes a token and shows the line to paste into your agent.
 - The agent reads, looks at, edits, builds, renders and exports with the Agents panel's tools, on its own AI account: no Rodeo credit.
 - A pill in the top bar says what it is doing, with Stop and Resume, and keeps the files it made.
-- npx -y @rodeobuild/cli mcp runs Rodeo for agents on files on your computer, no browser needed.`,
+- npx -y @rodeo.build/cli mcp runs Rodeo for agents on files on your computer, no browser needed.`,
     "agent",
   ),
   release(
@@ -72,7 +72,7 @@ export const RELEASES: readonly Release[] = [
 - Drop Revit, DWG, DXF, SketchUp, IFC, Rhino, Archicad, Vectorworks and other files on rodeo.build/convert and download IFC, PDF, DXF, glTF, OBJ, STL, SketchUp, STEP and more. Nothing is uploaded.
 - A preview shows what came in, in 3D or in plan, with its units, layers, objects and size.
 - Open in Rodeo takes a converted file into the editor. File › Convert Files… opens the converter.
-- npx @rodeobuild/cli convert model.rvt model.ifc converts on your own computer, a folder at a time with --to and --out.`,
+- npx @rodeo.build/cli convert model.rvt model.ifc converts on your own computer, a folder at a time with --to and --out.`,
     "announce",
   ),
   release(

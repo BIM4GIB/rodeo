@@ -1,5 +1,5 @@
 {
-  "name": "@rodeobuild/cli",
+  "name": "@rodeo.build/cli",
   "version": "0.1.0",
   "description": "Convert CAD and 3D files on the command line: Revit, DWG, DXF, SketchUp, IFC, Rhino, Archicad, Vectorworks to IFC, PDF, DXF, glTF, OBJ, STL, STEP and more. Nothing is uploaded.",
   "license": "AGPL-3.0-only",

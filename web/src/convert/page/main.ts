@@ -433,7 +433,7 @@ class Row {
   private command(): string {
     const id = chosen === "png" ? "pdf" : chosen;
     const ext = formatById(id)?.writeExtensions[0] ?? id;
-    return `npx @rodeobuild/cli convert "${this.name}" "${baseOf(this.name)}.${ext}"`;
+    return `npx @rodeo.build/cli convert "${this.name}" "${baseOf(this.name)}.${ext}"`;
   }
 
   /** Converts the file to a .vwx and takes it into the editor, which opens in a new tab. */

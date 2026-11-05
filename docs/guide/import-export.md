@@ -398,6 +398,6 @@ OBJ, STL, PLY and 3DS files don't say their units: choose them, and whether Y is
 
 ### The rodeo command
 
-`npx @rodeobuild/cli convert model.rvt model.ifc` converts on your own computer with Node 22 or later; the output's extension picks the format. `rodeo convert "plans/*.dwg" --to pdf --out pdfs` converts many files into a folder, `rodeo info drawing.dwg` lists its layers, object counts, extent and units, and `rodeo formats` lists what it reads and writes. `--json` prints results for scripts.
+`npx @rodeo.build/cli convert model.rvt model.ifc` converts on your own computer with Node 22 or later; the output's extension picks the format. `rodeo convert "plans/*.dwg" --to pdf --out pdfs` converts many files into a folder, `rodeo info drawing.dwg` lists its layers, object counts, extent and units, and `rodeo formats` lists what it reads and writes. `--json` prints results for scripts.
 
 **Limits:** Rodeo doesn't write DWG: write DXF, which AutoCAD opens. A DWG's or DXF's layers become classes, and its line types draw solid. A PDF converts one page (`--page` chooses it on the command line). Models' textures are left out; their colours stay. A drawing converted to .vwx is built on Rodeo's blank drawing, which Vectorworks hasn't been confirmed to open. Very large Revit models can run out of browser memory: the command line has more room.

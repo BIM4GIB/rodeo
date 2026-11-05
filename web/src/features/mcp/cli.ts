@@ -18,7 +18,7 @@ export interface CliIo {
 const USAGE = [
   "Usage: rodeo mcp [--cwd <dir>]",
   "Runs Rodeo as an MCP server on stdin/stdout for Claude Code, Claude Desktop, Cursor and other agents.",
-  "Claude Code: claude mcp add rodeo-files -- npx -y @rodeobuild/cli mcp",
+  "Claude Code: claude mcp add rodeo-files -- npx -y @rodeo.build/cli mcp",
 ].join("\n");
 
 /**

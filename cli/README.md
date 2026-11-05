@@ -5,8 +5,8 @@ Convert CAD and 3D files on your own computer: Revit, DWG, DXF, SketchUp, IFC, R
 Needs Node 22 or later.
 
 ```sh
-npx @rodeobuild/cli convert model.rvt model.ifc
-npm i -g @rodeobuild/cli     # then: rodeo convert model.rvt model.ifc
+npx @rodeo.build/cli convert model.rvt model.ifc
+npm i -g @rodeo.build/cli     # then: rodeo convert model.rvt model.ifc
 ```
 
 ## Usage

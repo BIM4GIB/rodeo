@@ -39,7 +39,7 @@ export interface CliIo {
 }
 
 /** The npm package the command is published as. */
-export const PACKAGE = "@rodeobuild/cli";
+export const PACKAGE = "@rodeo.build/cli";
 
 /** What runs a command: it gets the arguments after the command's name and gives the exit code. */
 type Command = (args: string[], io: CliIo) => Promise<number>;
