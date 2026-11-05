@@ -2,20 +2,26 @@
 // server, and how changes from others are fitted in. No DOM or sockets, so the
 // simulation in check.ts can run many replicas against a fake server.
 //
-// Local changes apply at once and are sent one at a time. Someone else's change
-// that arrives while ours are unconfirmed was ordered before them by the server:
-// it is rewritten past ours (theirs first on ties) and ours past it. A change of
-// ours that touches the same records is turned back here, and the server refuses
-// it there, so every replica ends with the same bytes.
+// Local changes apply at once and are sent one at a time, each as the runs of
+// records it changed (a class added at the top of the file and an object drawn
+// at its end are two small runs, not one span over the whole drawing). Someone
+// else's change that arrives while ours are unconfirmed was ordered before them
+// by the server: it is rewritten past ours (theirs first on ties) and ours past
+// it, run by run. A change of ours with a run that touches the same records as
+// one of theirs is turned back here, and the server refuses it there, so every
+// replica ends with the same bytes.
 
-import type { EditSession, HeaderPatch, SpliceOp } from "../../core/index.ts";
-import { transformSplice, type Splice } from "../../core/splice.ts";
+import type { EditSession, HeaderPatch, SpliceOp, SpliceRun } from "../../core/index.ts";
+import { changedRuns, invertRuns, transformRuns, type Run, type Splice } from "../../core/splice.ts";
 
 /** A change of this replica's that the server hasn't confirmed. */
 interface Local {
   readonly id: number;
-  /** its span where it now stands (rewritten as others' changes arrive) */
-  splice: Splice;
+  /** its runs where they now stand (rewritten as others' changes arrive), in order */
+  runs: Splice[];
+  /** each run's records: those it put in, and those it took out */
+  readonly add: readonly (readonly Uint8Array[])[];
+  readonly removed: readonly (readonly Uint8Array[])[];
   readonly op: SpliceOp;
   /** turned back here because someone else's change came first; the server will refuse it */
   doomed: boolean;
@@ -23,9 +29,8 @@ interface Local {
 
 /** A change as the server orders it: records already decoded. */
 export interface Incoming {
-  readonly start: number;
-  readonly del: number;
-  readonly add: Uint8Array[];
+  /** in order (core/splice.ts): each at the positions the ones before it left */
+  readonly runs: readonly Run<Uint8Array>[];
   readonly kind: SpliceOp["kind"];
   readonly ids: readonly string[];
   readonly header?: HeaderPatch;
@@ -35,9 +40,7 @@ export interface Outgoing {
   readonly id: number;
   /** the last server change this replica held when it made the change */
   readonly base: number;
-  readonly start: number;
-  readonly del: number;
-  readonly add: readonly Uint8Array[];
+  readonly runs: readonly Run<Uint8Array>[];
   readonly kind: SpliceOp["kind"];
   readonly ids: readonly string[];
   readonly header?: { readonly at: number; readonly bytes: Uint8Array };
@@ -51,6 +54,16 @@ export interface ReplicaHooks {
   /** a change of ours was made and queued (call flush to send it) */
   queued(): void;
 }
+
+/** A change of runs for EditSession.applyRemote. */
+function spliceOp(runs: readonly Run<Uint8Array>[], kind: SpliceOp["kind"], ids: readonly string[], header?: HeaderPatch): SpliceOp {
+  const [first, ...more] = runs;
+  const op: SpliceOp = { start: first.start, del: first.del, add: first.add, kind, ids: [...ids], header };
+  if (more.length) op.more = more as SpliceRun[];
+  return op;
+}
+
+const counts = (r: Run<unknown>): Splice => ({ start: r.start, del: r.del, add: r.add.length });
 
 export class Replica {
   /** the last server change this copy holds */
@@ -82,7 +95,17 @@ export class Replica {
   }
 
   private local(op: SpliceOp): void {
-    this.queue.push({ id: this.nextId++, splice: { start: op.start, del: op.del, add: op.add.length }, op, doomed: false });
+    // the session reports a step as one span from its first changed record to its last: cut to the runs it changed
+    const removed = op.removed ?? [];
+    const runs: readonly Run<Uint8Array>[] = (op.removed && changedRuns(op.start, removed, op.add)) || [op];
+    // what each run took out: its records where it stands before any of them applied
+    let net = 0;
+    const taken = runs.map((r) => {
+      const from = r.start - net - op.start;
+      net += r.add.length - r.del;
+      return removed.slice(from, from + r.del);
+    });
+    this.queue.push({ id: this.nextId++, runs: runs.map(counts), add: runs.map((r) => r.add), removed: taken, op, doomed: false });
   }
 
   /** Sends the next change if none is in flight; `connected` false keeps them queued. */
@@ -90,9 +113,14 @@ export class Replica {
     if (this.pending || !this.queue.length || !connected) return;
     const next = this.queue.shift()!;
     this.pending = next;
-    const { op, splice } = next;
+    const { op } = next;
     const header = op.header && { at: op.header.at, bytes: op.header.bytes };
-    this.hooks.send({ id: next.id, base: this.applied, start: splice.start, del: splice.del, add: op.add, kind: op.kind, ids: op.ids, header });
+    this.hooks.send({ id: next.id, base: this.applied, runs: this.runsOf(next), kind: op.kind, ids: op.ids, header });
+  }
+
+  /** A change's runs where they now stand, with their records. */
+  private runsOf(l: Local): Run<Uint8Array>[] {
+    return l.runs.map((r, i) => ({ start: r.start, del: r.del, add: l.add[i] }));
   }
 
   /** The server accepted our change in flight as `seq`; false when the copies have come apart (reload). */
@@ -132,12 +160,12 @@ export class Replica {
     if (seq <= this.applied) return;
     const locals = this.unconfirmed();
     // theirs is rewritten past each of ours in turn, and each of ours past theirs as it stood there
-    let r: Splice = { start: op.start, del: op.del, add: op.add.length };
-    const rebased: Splice[] = [];
+    let r: Splice[] = op.runs.map(counts);
+    const rebased: Splice[][] = [];
     let clash = -1;
     for (let i = 0; i < locals.length; i++) {
-      const theirs = transformSplice(r, locals[i].splice, true);
-      const ours = transformSplice(locals[i].splice, r, false);
+      const theirs = transformRuns(r, locals[i].runs, true);
+      const ours = transformRuns(locals[i].runs, r, false);
       // two header changes clash wherever they fall, as the server has it
       if (!theirs || !ours || (op.header && locals[i].op.header)) {
         clash = i;
@@ -156,9 +184,10 @@ export class Replica {
       this.remote(seq, op);
       return;
     }
-    locals.forEach((l, i) => (l.splice = rebased[i]));
+    locals.forEach((l, i) => (l.runs = rebased[i]));
     this.applied = seq;
-    this.session.applyRemote({ start: r.start, del: op.del, add: op.add, kind: op.kind, ids: [...op.ids], header: op.header });
+    const runs = op.runs.map((x, i) => ({ start: r[i].start, del: x.del, add: x.add }));
+    this.session.applyRemote(spliceOp(runs, op.kind, op.ids, op.header));
   }
 
   /** Changes of ours not yet confirmed nor already turned back, oldest first. */
@@ -176,7 +205,7 @@ export class Replica {
       if (l.doomed) continue;
       const h = l.op.header;
       const header = h?.before && { at: h.at, bytes: h.before };
-      this.session.applyRemote({ start: l.splice.start, del: l.splice.add, add: l.op.removed ?? [], kind: l.op.kind, ids: l.op.ids, header });
+      this.session.applyRemote(spliceOp(invertRuns(this.runsOf(l), l.removed), l.op.kind, l.op.ids, header));
     }
   }
 }

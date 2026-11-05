@@ -438,11 +438,24 @@ export interface ApiError {
 // rewrites a change made against an older seq past the ones since (core/splice.ts),
 // or refuses it when they touch the same records. Records travel as base64.
 
-/** One change to the record list (core SpliceOp, records base64). */
-export interface WireOp {
+/**
+ * The version of the change messages. A client says it in hello; the server turns away one
+ * older than its own (closing with 4003 "outdated"), whose copy would come apart from everyone's.
+ * 2: a change can have several runs (WireOp.more).
+ */
+export const COLLAB_PROTOCOL = 2;
+
+/** `del` records from `start` replaced by `add` (records base64). */
+export interface WireRun {
   readonly start: number;
   readonly del: number;
   readonly add: readonly string[];
+}
+
+/** One change to the record list (core SpliceOp, records base64): its first run, then each of `more` in turn. */
+export interface WireOp extends WireRun {
+  /** further runs in order (core/splice.ts inOrder), each at the positions the ones before it left */
+  readonly more?: readonly WireRun[];
   readonly kind: "objects" | "layers" | "classes" | "all";
   readonly ids: readonly string[];
   /**
@@ -491,7 +504,7 @@ export const MAX_CHECKOUT_LAYERS = 1000;
 
 export type ClientMessage =
   /** first message: the version the client loaded (from GET /api/files/:id/content, header X-Version-Id) */
-  | { readonly t: "hello"; readonly versionId: string }
+  | { readonly t: "hello"; readonly versionId: string; readonly proto: number }
   | { readonly t: "op"; readonly id: number; readonly base: number; readonly op: WireOp }
   | { readonly t: "presence"; readonly p: Presence }
   /** the client saved a version holding every change up to seq (PUT content with X-Collab-Seq) */

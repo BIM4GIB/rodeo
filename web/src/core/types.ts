@@ -589,20 +589,31 @@ export interface DocumentInfo {
 
 export type ChangeKind = "objects" | "layers" | "classes" | "all";
 
-/**
- * One change to the document's record list, as collaboration sends it: `del`
- * records from `start` replaced by `add`. `removed` holds the records taken
- * out, for changes this session made (not sent: the receiver has them).
- */
-export interface SpliceOp {
+/** `del` records from `start` of the document's record list replaced by `add`. */
+export interface SpliceRun {
   start: number;
   del: number;
-  add: Uint8Array[];
-  removed?: Uint8Array[];
+  add: readonly Uint8Array[];
+}
+
+/**
+ * One change to the document's record list, as collaboration sends it: `del`
+ * records from `start` replaced by `add`, then each of `more` in turn. `removed`
+ * holds the records taken out, for changes this session made (not sent: the
+ * receiver has them); a session reports its own changes as one run.
+ */
+export interface SpliceOp extends SpliceRun {
+  removed?: readonly Uint8Array[];
   kind: ChangeKind;
   ids: string[];
   /** a change to the file header too (document settings such as units), made with the records */
   header?: HeaderPatch;
+  /**
+   * further runs, each at the positions the runs before it left and at or after the records the
+   * one before it put in (core/splice.ts: in order). A change made far apart (a class at the top of
+   * the file and an object at its end) goes as the runs it changed, not one span over everything.
+   */
+  more?: SpliceRun[];
 }
 
 /**
@@ -1433,8 +1444,9 @@ export interface EditSession {
    */
   setLayerGuard(guard: ((layerIds: readonly string[]) => string | null) | null): void;
   /**
-   * Applies a change made elsewhere (a collaborator's). Undo keeps turning back this session's own
-   * steps that it doesn't touch; a step it touches, and those before it, can no longer be undone.
+   * Applies a change made elsewhere (a collaborator's), all its runs at once. Undo keeps turning
+   * back this session's own steps that it doesn't touch; a step it touches, and those before it,
+   * can no longer be undone.
    */
   applyRemote(op: SpliceOp): void;
 

@@ -6,8 +6,10 @@
 // after the last saved version) lives in memory and in collab_ops, and the
 // room's counters in collab_rooms, so a restart loses nothing. The server puts
 // the changes in one order: a change made against an older seq is rewritten
-// past the ones since (core/splice.ts), or refused when they touch the same
-// records.
+// past the ones since (core/splice.ts), run by run, or refused when a run of it
+// touches the records of a run of one of them. A client older than the
+// protocol (COLLAB_PROTOCOL) is turned away: it would apply a change of
+// several runs as its first run alone.
 //
 // Project Sharing: members check layers out for their editing alone. The
 // checkouts live in collab_checkouts, outlive the room and the holder's
@@ -21,17 +23,18 @@ import type { IncomingMessage, Server } from "node:http";
 import type { DatabaseSync } from "node:sqlite";
 import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
-import { transformSplice } from "../../web/src/core/splice.ts";
+import { inOrder, transformRuns, type Splice } from "../../web/src/core/splice.ts";
 import {
   BIG_DRAWING,
   CAN_EDIT,
+  COLLAB_PROTOCOL,
   MAX_CHECKOUT_LAYERS,
   PEER_COLORS,
   SAVE_BIG_EVERY_MS,
   SAVE_EVERY_MS,
   SAVE_EVERY_OPS,
 } from "../../web/src/platform/protocol.ts";
-import type { Checkout, Comment, Peer, Presence, Role, ServerMessage, WireOp } from "../../web/src/platform/protocol.ts";
+import type { Checkout, Comment, Peer, Presence, Role, ServerMessage, WireOp, WireRun } from "../../web/src/platform/protocol.ts";
 
 export interface CollabUser {
   readonly id: string;
@@ -100,6 +103,8 @@ interface Client {
 interface LoggedOp {
   readonly seq: number;
   readonly op: WireOp;
+  /** its runs' spans, for rewriting later changes past it */
+  readonly runs: readonly Splice[];
   /** when the change was made (ms) */
   readonly at: number;
 }
@@ -134,17 +139,43 @@ function isIndex(v: unknown): v is number {
   return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 }
 
-function parseOp(v: unknown): WireOp | null {
+function parseRun(v: unknown): WireRun | null {
   if (!isRecord(v)) return null;
-  const { start, del, add, kind, ids, header } = v;
+  const { start, del, add } = v;
   if (!isIndex(start) || !isIndex(del)) return null;
   if (!Array.isArray(add) || !add.every((s) => typeof s === "string")) return null;
+  return { start, del, add: add as string[] };
+}
+
+function parseOp(v: unknown): WireOp | null {
+  const first = parseRun(v);
+  if (!first || !isRecord(v)) return null;
+  const { kind, ids, header, more } = v;
   if (typeof kind !== "string" || !KINDS.includes(kind)) return null;
   if (!Array.isArray(ids) || !ids.every((s) => typeof s === "string")) return null;
-  const op: WireOp = { start, del, add: [...add], kind: kind as WireOp["kind"], ids: [...ids] };
+  let op: WireOp = { ...first, kind: kind as WireOp["kind"], ids: [...ids] };
+  if (more !== undefined) {
+    if (!Array.isArray(more) || more.length === 0) return null;
+    const runs = more.map(parseRun);
+    if (!runs.every((r) => r !== null)) return null;
+    op = { ...op, more: runs };
+    if (!inOrder(spansOf(op))) return null;
+  }
   if (header === undefined) return op;
   if (!isRecord(header) || !isIndex(header.at) || typeof header.bytes !== "string" || header.bytes.length > MAX_HEADER_PATCH) return null;
   return { ...op, header: { at: header.at, bytes: header.bytes } };
+}
+
+/** A change's runs as spans (record counts), in order. */
+function spansOf(op: WireOp): Splice[] {
+  const span = (r: WireRun): Splice => ({ start: r.start, del: r.del, add: r.add.length });
+  return op.more ? [span(op), ...op.more.map(span)] : [span(op)];
+}
+
+/** The change with its runs moved to `spans` (the same runs, rewritten past others). */
+function withSpans(op: WireOp, spans: readonly Splice[]): WireOp {
+  const out: WireOp = { ...op, start: spans[0].start };
+  return op.more ? { ...out, more: op.more.map((r, i) => ({ ...r, start: spans[i + 1].start })) } : out;
 }
 
 /** The layer ids of a checkout or release message, or null when malformed. */
@@ -241,7 +272,10 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
     if (!h) return null;
     // the database keeps no per-change time: the oldest unsaved time stands for all of them
     const first = h.first_unsaved_at ?? Date.now();
-    const ops = (selectOps.all(fileId) as OpRow[]).map((r) => ({ seq: r.seq, op: JSON.parse(r.op) as WireOp, at: first }));
+    const ops = (selectOps.all(fileId) as OpRow[]).map((r) => {
+      const op = JSON.parse(r.op) as WireOp;
+      return { seq: r.seq, op, runs: spansOf(op), at: first };
+    });
     return {
       fileId,
       lastSeq: h.last_seq,
@@ -296,7 +330,7 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
     }
     switch (msg.t) {
       case "hello":
-        return onHello(c, msg.versionId);
+        return onHello(c, msg.versionId, msg.proto);
       case "op":
         return onOp(c, msg);
       case "presence":
@@ -315,12 +349,18 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
     }
   }
 
-  function onHello(c: Client, versionId: unknown): void {
+  function onHello(c: Client, versionId: unknown, proto: unknown): void {
     if (typeof versionId !== "string") {
       sendMsg(c.ws, { t: "error", error: "hello needs a versionId" });
       return;
     }
     detach(c);
+    // an editor loaded before an update can't apply today's changes; 4003 stops its retries (its page must be reloaded)
+    if (typeof proto !== "number" || proto < COLLAB_PROTOCOL) {
+      sendMsg(c.ws, { t: "error", error: "Rodeo was updated: reload the page to keep editing with others" });
+      c.ws.close(4003, "outdated");
+      return;
+    }
     const head = deps.head(c.fileId);
     if (!head || head.versionId !== versionId) {
       sendMsg(c.ws, { t: "reload" });
@@ -375,22 +415,17 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
       return;
     }
     // rewrite the change past each logged change made since base, in order
-    let start = op.start;
+    let runs: Splice[] | null = spansOf(op);
     for (const l of room.ops) {
       if (l.seq <= base) continue;
-      const next = transformSplice(
-        { start, del: op.del, add: op.add.length },
-        { start: l.op.start, del: l.op.del, add: l.op.add.length },
-        false,
-      );
+      runs = transformRuns(runs, l.runs, false);
       // two header changes clash wherever they fall, as the replicas have it
-      if (!next || (op.header && l.op.header)) {
+      if (!runs || (op.header && l.op.header)) {
         sendMsg(c.ws, { t: "reject", id, reason: "conflict" });
         return;
       }
-      start = next.start;
     }
-    const rewritten: WireOp = { ...op, start };
+    const rewritten = withSpans(op, runs);
     const seq = room.lastSeq + 1;
     const at = Date.now();
     const firstUnsavedAt = room.firstUnsavedAt ?? at;
@@ -405,7 +440,7 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
     }
     room.lastSeq = seq;
     room.firstUnsavedAt = firstUnsavedAt;
-    room.ops.push({ seq, op: rewritten, at });
+    room.ops.push({ seq, op: rewritten, runs, at });
     room.lastOpClient = c;
     sendMsg(c.ws, { t: "ack", id, seq });
     broadcast(room, { t: "op", seq, clientId: peer.clientId, op: rewritten }, c);

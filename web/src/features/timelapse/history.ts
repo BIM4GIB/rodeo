@@ -3,6 +3,7 @@
 // the replay and check.ts.
 
 import type { ChangeEvent, ChangeKind, SpliceOp } from "../../core/index.ts";
+import { changedRuns } from "../../core/splice.ts";
 
 /** Records [start, start + del) of a record list replaced by `add`. */
 export interface HistoryRun {
@@ -38,66 +39,6 @@ export function historyOp(op: SpliceOp, t: number): HistoryOp {
   if (!runs?.length) return { t, start: op.start, del: op.del, add: op.add, kind: op.kind, ids: op.ids, header };
   const [first, ...more] = runs;
   return { t, ...first, kind: op.kind, ids: op.ids, header, ...(more.length ? { more } : {}) };
-}
-
-/**
- * The runs that turn `removed` (records from `start` on) into `added`, matching records by identity
- * (the editor keeps an unchanged record's bytes): each run's start is where it applies once the
- * runs before it are in. Null when they would hold no fewer records than the one splice.
- */
-export function changedRuns(start: number, removed: readonly Uint8Array[], added: readonly Uint8Array[]): HistoryRun[] | null {
-  /** where each added record is, built only when the two don't line up again nearby */
-  let at: Map<Uint8Array, number> | null = null;
-  const runs: HistoryRun[] = [];
-  let kept = 0;
-  let i = 0;
-  let j = 0;
-  while (i < removed.length || j < added.length) {
-    if (i < removed.length && j < added.length && removed[i] === added[j]) {
-      i++;
-      j++;
-      continue;
-    }
-    // where the two line up again: within a few records (most changes), else the next removed
-    // record still found ahead in `added`
-    let r = removed.length;
-    let k = added.length;
-    const near = i < removed.length && j < added.length ? lineUp(removed, added, i, j) : null;
-    if (near) [r, k] = near;
-    else if (i < removed.length && j < added.length) {
-      if (!at) {
-        at = new Map();
-        for (let n = added.length - 1; n >= 0; n--) at.set(added[n], n);
-      }
-      for (r = i; r < removed.length; r++) {
-        const found = at.get(removed[r]);
-        if (found !== undefined && found >= j) {
-          k = found;
-          break;
-        }
-      }
-    }
-    runs.push({ start: start + j, del: r - i, add: added.slice(j, k) });
-    kept += k - j;
-    i = r;
-    j = k;
-  }
-  return kept < added.length ? runs : null;
-}
-
-/** how far ahead changedRuns looks for the two lists to line up before it indexes them */
-const LINE_UP = 64;
-
-/** The nearest positions from i in `removed` and j in `added` holding the same record, if within LINE_UP of both. */
-function lineUp(removed: readonly Uint8Array[], added: readonly Uint8Array[], i: number, j: number): [number, number] | null {
-  for (let d = 1; d <= 2 * LINE_UP; d++) {
-    for (let a = Math.max(0, d - LINE_UP); a <= Math.min(d, LINE_UP); a++) {
-      const r = i + a;
-      const k = j + d - a;
-      if (r < removed.length && k < added.length && removed[r] === added[k]) return [r, k];
-    }
-  }
-  return null;
 }
 
 /** Each of the op's runs, in the order they apply. */

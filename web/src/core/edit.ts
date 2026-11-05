@@ -145,7 +145,7 @@ import { OVERALL, TAKES_TEXTURE, holdsParts, isTextureDict, newTextureDict, newU
 import { RESOURCE_TYPES, TEXT_STYLE_TYPE, newGradient, newTextStyle, previewSize, readTextStyle, writeGradient, writeHatch, writePreview, writeTextStyle } from "./resources.ts";
 import { DROP_SHADOW, NEW_SHADOW, SHADOW_BYTES, readDropShadow, writeDropShadow } from "./shadow.ts";
 import { isStory, isStoryList, newStory, readStory, writeStory } from "./stories.ts";
-import { transformSplice, type Splice } from "./splice.ts";
+import { applyRuns, transformRuns, type Splice } from "./splice.ts";
 import { unitsPatch } from "./settings.ts";
 import { HELIODON, HELIODON_INPUTS, heliodonFields, heliodonLight, readHeliodonSun } from "./sun.ts";
 import type {
@@ -186,6 +186,7 @@ import type {
   SimplifyBy,
   SourceDataReport,
   SpliceOp,
+  SpliceRun,
   StoryLevelSpec,
   TextStyle,
   TextStyleDef,
@@ -961,22 +962,23 @@ export class Session implements EditSession {
   }
 
   applyRemote(op: SpliceOp): void {
-    this.doc.datas = spliced(this.doc.datas, op.start, op.del, op.add);
+    const runs: SpliceRun[] = op.more ? [op, ...op.more] : [op];
+    this.doc.datas = applyRuns(this.doc.datas, runs);
     if (op.header) this.doc.patchHeader(op.header.at, op.header.bytes);
     this.doc.rebuild();
     // undo still turns back this session's own steps, rebased past the change; a step it touched,
     // and every step before that, can no longer be undone
-    let r: Splice = { start: op.start, del: op.del, add: op.add.length };
+    let r: Splice[] = runs.map((x) => ({ start: x.start, del: x.del, add: x.add.length }));
     for (let i = this.undoStack.length - 1; i >= 0; i--) {
       const s = this.undoStack[i];
-      const back: Splice = { start: s.start, del: s.added.length, add: s.removed.length };
-      const moved = transformSplice(back, r, false);
-      const before = transformSplice(r, back, true);
+      const back: Splice[] = [{ start: s.start, del: s.added.length, add: s.removed.length }];
+      const moved = transformRuns(back, r, false);
+      const before = transformRuns(r, back, true);
       if (!moved || !before || (op.header && s.header && headersOverlap(op.header, s.header))) {
         this.undoStack.splice(0, i + 1);
         break;
       }
-      s.start = moved.start;
+      s.start = moved[0].start;
       r = before;
     }
     this.redoStack = [];

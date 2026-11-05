@@ -125,7 +125,7 @@ function attachLive(s: CollabSession): () => void {
       emitLive();
     }),
   );
-  off.push(s.onRejected(() => toast("Your change clashed with someone else’s edit and was undone", "error")));
+  off.push(s.onRejected((reason) => toast(reason, "error")));
   off.push(
     s.onAutosave((stopped, plan) => {
       const why = `Autosave has stopped. ${stopped} Your changes are kept until a version can be saved.`;

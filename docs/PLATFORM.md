@@ -333,15 +333,21 @@ reviewers receive changes and presence but cannot send changes). Messages are
 JSON, typed `ClientMessage` / `ServerMessage` in protocol.ts.
 
 - The client loads the head version (`GET content`, noting `X-Version-Id`), then
-  sends `hello` with it. The server answers `welcome` with the changes made since
-  that version (to apply in order) and who is there, or `reload` if the client
-  should fetch the content again.
-- A change is one splice of the record list (`core/splice.ts`). The client sends
-  one at a time (`op` with `base`, the last seq it applied) and waits for `ack`.
-  The server rewrites a change made against an older seq past the ones since, or
-  answers `reject` when they touch the same records; the client then turns its
-  change back. Every client applies the same changes in the same order, so all
-  hold the same bytes.
+  sends `hello` with it and the protocol it speaks (`proto`, `COLLAB_PROTOCOL`).
+  The server answers `welcome` with the changes made since that version (to apply
+  in order) and who is there, or `reload` if the client should fetch the content
+  again. A client older than the server's protocol is closed with 4003
+  "outdated" (it stops retrying; its page must be reloaded), as it would apply a
+  change of several runs wrongly.
+- A change is the runs of the record list it replaced (`core/splice.ts`): its
+  first run, then `more`, each at the positions the runs before it left. An edit
+  that adds a class at the top of the file and draws at its end goes as two
+  small runs, not one span over the whole drawing. The client sends one change at
+  a time (`op` with `base`, the last seq it applied) and waits for `ack`. The
+  server rewrites a change made against an older seq past the ones since, run by
+  run, or answers `reject` when a run of it touches the records of a run of one
+  of them; the client then turns its change back. Every client applies the same
+  changes in the same order, so all hold the same bytes.
 - Changes are kept in the database until a version holds them: the server sends
   `save-request` to one editor every 60 changes or 2 minutes (a drawing over
   100 MB: 15 minutes, however many changes); the editor saves (`PUT content`
