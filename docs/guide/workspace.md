@@ -112,7 +112,13 @@ The chat follows the newest message as it streams. Scroll up to read back and it
 
 Agents model buildings and gardens from parts, and products and machine parts (housings, brackets, lids) as one closed solid each, with their holes, slots and pockets cut, ready to export as STL.
 
-**Limits:** conversations are kept in this browser only.
+Each open drawing has its own chat, so agents can work in several drawings at once. The panel shows the one for the drawing in front. The line under the chat's title names its drawing, and lists the agents at work in your other tabs: click one to bring its drawing to the front. Start an agent in one drawing, switch to another tab and start a second, and both keep going.
+
+An agent behind another tab goes on reading, editing, building, running scripts, looking at the plan and exporting in its own drawing. What needs the window (looking in 3D, rendering, changing the view, running a menu command, importing a file) waits until you bring its drawing to the front; its tab shows an amber pause and a note says so. While an agent is looking in 3D or rendering, its drawing stays in front until it is done (or you stop it). When an agent finishes in a drawing you aren't looking at, a note says so and its tab keeps a spark until you open it. Closing a drawing whose agent is at work asks first, and stops the agent.
+
+The conversations list names the drawing each one was in.
+
+**Limits:** conversations are kept in this browser only. An agent's edits to a live cloud drawing (one shared with others) wait until that drawing is in front, as its changes go out live from there. Voice commands work in the drawing in front when you speak.
 
 ### Connect an Agent
 

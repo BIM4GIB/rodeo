@@ -22,7 +22,7 @@ import { documentBlob, documentBytes, holdOptions, writeToFile } from "./writeOu
 import { floating3d, mountFloatingPanes, redrawFloating, type PlanAt } from "./floatingPanes.ts";
 import { createSymbolDialog, duplicateArrayDialog } from "./arrayDialog.ts";
 import { installAutosave } from "./autosave.ts";
-import { type RecentEntry, loadRecent, openRecentEntry, rememberRecent } from "./recent.ts";
+import { type RecentEntry, loadRecent, openRecentEntry, recentRows, rememberRecent } from "./recent.ts";
 import { note, reportFailure } from "./reports.ts";
 import { askPdfOptions, printPdf } from "./exportDialog.ts";
 import { importDroppedDwg, importDroppedDxf, importDwgFile, importDxfFile, openDwgBytes } from "./dxfImport.ts";
@@ -264,17 +264,22 @@ import type { CameraState, PaneLook, RenderMode, View3D, ViewPreset } from "./vi
 import { mountWelcome, recentSource } from "./welcome.ts";
 import {
   appStarted,
+  closeQuestion,
   documentChanged,
   documentSource,
+  drawingClosed,
   editMade,
   extensionPalettes,
+  extensionTabMarks,
   fileIn,
   leaveRefusal,
   mountExtensionChrome,
   readOnlySession,
   registerOverlay,
+  setTabsRedraw,
   view3dCreated,
   type DocumentSource,
+  type DrawingRef,
 } from "./ext.ts";
 
 /** quiet time after an edit before the 3D model is rebuilt */
@@ -339,6 +344,12 @@ interface OpenDrawing {
   selection: ReadonlySet<string>;
   /** null until it has been in front: it opens fitted */
   view: { cx: number; cy: number; scale: number } | null;
+  /** what features (an agent's run) hold on to it by */
+  readonly ref: DrawingRef;
+  /** draws it while it is behind (an agent looking at it), made when first asked for */
+  behindScene: Scene | null;
+  /** stops hearing of its edits made while it is behind */
+  readonly unlisten: () => void;
 }
 
 /** Tools a command takes up for its clicks: each hands back to the tool used before the command. */
@@ -399,6 +410,7 @@ export class App {
   private shown: OpenDrawing | null = null;
   /** draws the tab strip again */
   private redrawTabs: () => void = () => {};
+  private tabsQueued = false;
 
   constructor() {
     // the 3D view as it was last left, when Preferences > 3D remembers it
@@ -910,8 +922,12 @@ export class App {
       },
       close: (i) => void this.closeDrawing(this.drawings[i] ?? null),
       newDrawing: () => void this.newDrawing(),
+      newFromTemplate: () => void this.newFromTemplate(),
+      open: () => void this.openPicker(),
+      recentRows: () => recentRows((entry) => void this.openRecent(entry)),
     };
     this.redrawTabs = mountDocTabs(byId("stage"), tabActions);
+    setTabsRedraw(() => this.redrawTabs());
     const menuBar = mountMenuBar(byId<HTMLButtonElement>("btn-menu"), {
       scene: this.scene,
       view: this.view,
@@ -1240,6 +1256,8 @@ export class App {
       setTool,
       setToolFrom: (id, obj) => this.controller.setToolFrom(id, obj),
       save: () => this.save(),
+      frontDrawing: () => this.shown?.ref ?? null,
+      drawings: () => this.drawings.map((d) => d.ref),
     });
   }
 
@@ -2164,16 +2182,103 @@ export class App {
       classIndex: null,
       selection: new Set<string>(),
       view: null,
+      ref: this.drawingRef(() => d),
+      behindScene: null,
+      unlisten: session.onChange((e) => this.changedBehind(d, e)),
     };
     const at = replacing ? this.drawings.indexOf(replacing) : -1;
     if (at >= 0) this.drawings[at] = d;
     else this.drawings.push(d);
+    if (at >= 0 && replacing) {
+      replacing.unlisten();
+      drawingClosed(replacing.ref, d.ref);
+    }
     this.present(d);
+  }
+
+  /**
+   * An open drawing as features hold on to it (an agent's run): the window's layer, selection and
+   * view while it is in front, what its tab keeps while it is behind.
+   */
+  private drawingRef(of: () => OpenDrawing): DrawingRef {
+    const front = (): boolean => this.shown === of();
+    const plan = (): View => {
+      const d = of();
+      const v = new View();
+      v.setSize(this.view.width, this.view.height);
+      if (d.view) v.setCenterAndScale(d.view.cx, d.view.cy, d.view.scale);
+      return v;
+    };
+    return {
+      get session() {
+        return of().session;
+      },
+      get source() {
+        return of().source;
+      },
+      name: () => (front() ? store.fileName : of().name),
+      isOpen: () => this.drawings.includes(of()),
+      isShown: front,
+      show: () => this.switchDrawing(of()),
+      activeLayerId: () => (front() ? store.activeLayerId : of().layerId),
+      setActiveLayer: (id) => {
+        if (front()) setActiveLayer(id);
+        else if (of().layerId !== id) {
+          of().layerId = id;
+          of().selection = new Set<string>();
+        }
+      },
+      activeClassIndex: () => (front() ? store.activeClassIndex : of().classIndex),
+      selection: () => (front() ? store.selection : of().selection),
+      setSelection: (ids) => {
+        if (front()) setSelection(ids);
+        else of().selection = new Set(ids);
+      },
+      editGroupId: () => (front() ? store.editGroupId : null),
+      visibleRect: () => (front() ? this.view : plan()).visibleRect(),
+      zoomTo: (box) => {
+        if (front()) {
+          this.view.fit(box);
+          store.emit("view");
+          this.requestDraw();
+          return;
+        }
+        const v = plan();
+        v.fit(box);
+        of().view = { cx: v.cx, cy: v.cy, scale: v.scale };
+      },
+      scene: () => {
+        const d = of();
+        if (front()) return this.scene;
+        if (!d.behindScene) {
+          d.behindScene = new Scene();
+          d.behindScene.setDocument(d.session.doc);
+        }
+        return d.behindScene;
+      },
+    };
+  }
+
+  /**
+   * An edit to a drawing behind the one in front (an agent at work in it): its scene forgets what
+   * changed, its tab's unsaved mark follows, and what keeps up with edits (edit followers) does.
+   */
+  private changedBehind(d: OpenDrawing, e: ChangeEvent): void {
+    if (d === this.shown || !this.drawings.includes(d)) return;
+    d.behindScene?.invalidate(e);
+    editMade(d.session, e, () => this.drawings.includes(d) && d !== this.shown);
+    if (this.tabsQueued) return;
+    this.tabsQueued = true;
+    requestAnimationFrame(() => {
+      this.tabsQueued = false;
+      this.redrawTabs();
+    });
   }
 
   /** Shows `d` in the window: its active layer, class, selection and view as it was left, or fitted when it is new. */
   private present(d: OpenDrawing): void {
     this.shown = d;
+    d.behindScene = null;
     document.body.classList.toggle("read-only", !!d.source?.readOnly);
     this.detachSession?.();
     this.detachSession = d.session.onChange((e) => this.onDocChange(e));
@@ -2269,10 +2374,14 @@ export class App {
         return;
       }
     }
+    const busy = closeQuestion(d.ref);
+    if (busy && !(await confirmDialog("Close drawing", `${busy} Close ${baseName(d.name)} all the same?`, "Close"))) return;
     if (d.session.dirty && !(await confirmDialog("Unsaved changes", `Close ${baseName(d.name)} and discard its unsaved changes?`, "Discard"))) return;
     const i = this.drawings.indexOf(d);
     if (i < 0) return;
     this.drawings.splice(i, 1);
+    d.unlisten();
+    drawingClosed(d.ref, null);
     if (d !== this.shown) {
       this.redrawTabs();
       return;
@@ -2333,6 +2442,7 @@ export class App {
       title: d.source?.label ? `${d.name} · ${d.source.label}` : d.name,
       dirty: d.session.dirty,
       front: d === this.shown,
+      marks: extensionTabMarks(d.ref),
     }));
   }
 

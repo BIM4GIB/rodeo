@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-05T12:40:00Z",
+    "tabs-agents",
+    "Tabs, with an agent in each",
+    `Work on several drawings at once: each opens in a tab, and each tab has an agent of its own.
+- The tab strip now shows as soon as a drawing is open; its + starts a new drawing or opens one.
+- Start an agent in one drawing, switch tabs and start another: both keep working.
+- Each tab shows what its agent is doing: at work, waiting for you to bring the tab to the front, or finished.
+- The Agents panel names the drawing its chat works in, and the agents at work in your other tabs.`,
+    "agent",
+  ),
+  release(
     "2026-11-05T12:32:00Z",
     "agent-big-drawings",
     "Smoother agent sessions on big drawings",

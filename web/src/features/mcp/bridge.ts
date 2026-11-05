@@ -420,7 +420,7 @@ async function loadTools(): Promise<Toolset> {
   const app = appContext();
   if (!app) throw new Error("Rodeo isn't running yet");
   const [tools, prompt, docs] = await Promise.all([import("../agents/tools.ts"), import("../agents/prompt.ts"), import("../agents/apidocs.ts")]);
-  const list = tools.toolsFor(false, app);
+  const list = tools.toolsFor(false);
   const byName = new Map(list.map((t) => [t.spec.function.name, t]));
   const reads = tools.docMembers().filter((n) => docs.methodNames("VwxDocument").includes(n) || n === "info");
   const instructions = [
@@ -551,7 +551,19 @@ async function run(call: CallMessage, signal: AbortSignal, progress: (line: stri
       ? `(The drawing in front is now ${drawing ? `"${drawing}"` : "none"}; your last call worked in ${lastFile ? `"${lastFile}"` : "no drawing"}.)\n`
       : "";
 
-  const ctx: ToolContext = { app: t.app, signal, attachments, progress };
+  // outside agents work in whichever drawing is in front at each call
+  const ctx: ToolContext = {
+    app: t.app,
+    drawing: () => {
+      const d = t.app.frontDrawing();
+      if (!d) throw new Error("No drawing is open. Ask the user to open one (or attach a file to import).");
+      return d;
+    },
+    follow: () => {},
+    signal,
+    attachments,
+    progress,
+  };
   let out: ToolOutput;
   try {
     out = await tool.run(call.args, ctx);

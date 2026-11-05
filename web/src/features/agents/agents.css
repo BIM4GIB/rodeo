@@ -115,6 +115,136 @@
   color: var(--warn);
 }
 
+/* ---- each drawing's chat, the one in front shown ---- */
+
+.ag-host > .ag {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* the top line: the drawing this chat works in, and the agents at work in the other tabs */
+.ag-where {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--text-2);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ag-where-here {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ag-where-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+}
+
+.ag-where-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.ag-where-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ag-where-also {
+  flex: none;
+  margin-left: 6px;
+  color: var(--text-3);
+}
+
+.ag-where-other {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: 120px;
+  height: 20px;
+  padding: 0 6px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ag-where-other:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.ag-where-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.ag-where-mark svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* an agent's mark, on its drawing's tab and in the top line */
+.doc-tab-mark.ag-tab.working,
+.ag-where-other.working .ag-where-mark {
+  color: var(--accent);
+}
+
+.doc-tab-mark.ag-tab.working svg,
+.ag-where-other.working .ag-where-mark svg {
+  animation: ag-spin 0.9s linear infinite;
+}
+
+.doc-tab-mark.ag-tab.waiting,
+.ag-where-other.waiting .ag-where-mark {
+  color: var(--warn);
+}
+
+.doc-tab-mark.ag-tab.done,
+.ag-where-other.done .ag-where-mark {
+  color: var(--accent);
+}
+
+.doc-tab-mark.ag-tab.failed,
+.ag-where-other.failed .ag-where-mark {
+  color: var(--danger);
+}
+
+@keyframes ag-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-tab-mark.ag-tab.working svg,
+  .ag-where-other.working .ag-where-mark svg {
+    animation: none;
+  }
+}
+
+.ag-empty p.ag-empty-note {
+  color: var(--text-3);
+}
+
 .ag-body {
   position: relative;
   flex: 1;

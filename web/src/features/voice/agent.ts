@@ -181,7 +181,11 @@ export async function askAgent(input: AskInput, settings: AgentSettings, signal:
       }
     };
 
-    const end = await engine.runAgent({ app, settings, history: t.messages, attachments: new Map<string, File>(), signal, onEvent });
+    // the run stays in the drawing in front as it was spoken to, whichever tab comes to the front
+    const target = new engine.RunTarget(app.frontDrawing(), app, () => {});
+    const front = app.frontDrawing();
+    if (front) t.drawing = front.name();
+    const end = await engine.runAgent({ app, target, settings, history: t.messages, attachments: new Map<string, File>(), signal, onEvent });
     t.messages.push(...end.added);
     t.updated = Date.now();
     t.cost += cost;

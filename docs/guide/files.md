@@ -44,13 +44,17 @@ Under a link, **Embed and preview** sets how an embed starts: in 2D or 3D, on a 
 
 ## Tabs
 
-Each drawing opened goes in a tab of its own. Once two are open, a strip of tabs shows over the drawing, and each comes back to the front as it was left (layer, class, selection, view and undo).
+Each drawing opened goes in a tab of its own, so you can work on several at once. A strip of tabs shows over the drawing while one is open, and each comes back to the front as it was left (layer, class, selection, view and undo). A dot on a tab means unsaved changes.
 
-- **File › Close** or a tab's × closes one, asking first about unsaved changes.
+- The **+** at the end of the strip starts a new drawing, or opens one (**New Drawing**, **New from Template…**, **Open…**, **Open Recent**).
+- A click brings a tab to the front; a middle-click closes it; <kbd>←</kbd> and <kbd>→</kbd> move between tabs once one has the focus.
+- **File › Close** or a tab's × closes one, asking first about unsaved changes, and about an agent at work in it.
 - **File › Close All** closes them all (Cancel on one stops there).
 - **Window › Drawings** lists them.
 - **Window › Show Document Tabs** hides the strip.
 - **Window › Home Screen** brings the start screen back over the drawing (Back to drawing or <kbd>Esc</kbd> returns).
+
+Each drawing has an agent of its own in the Agents panel, and they work at the same time: see [The Agents panel](workspace.md#the-agents-panel). A tab shows what its agent is doing: a spinner while it works, an amber pause when it is waiting for the tab to come to the front, and a spark when it finished while you were in another tab (red if it stopped with an error).
 
 ## New drawings and templates
 

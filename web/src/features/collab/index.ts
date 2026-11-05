@@ -6,7 +6,7 @@
 // drawing opens as before, with the failure reported once.
 
 import "./collab.css";
-import { on3d, onDocument, onReady, registerLeaveGuard, registerMenu, registerOverlay, registerPalette, registerTopBar } from "../../app/ext.ts";
+import { on3d, onDocument, onReady, registerBehindGuard, registerLeaveGuard, registerMenu, registerOverlay, registerPalette, registerTopBar } from "../../app/ext.ts";
 import type { EditSession } from "../../core/index.ts";
 import { store } from "../../app/state.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
@@ -72,6 +72,9 @@ onDocument((session, source) => {
 
 // another tab can't come to the front while this drawing's changes are on their way: leaving drops them
 registerLeaveGuard(() => (collab()?.settled() === false ? "Your latest changes are still being sent. Try again once they have gone." : null));
+
+// a live drawing is in its session only while in front: an agent's edits to it wait for its tab
+registerBehindGuard((d) => (joined.has(d.session) ? "its changes go out live from the drawing in front" : null));
 
 async function joinLive(gen: number, session: EditSession, fileId: string, versionId: string, collabSeq: number): Promise<void> {
   try {
