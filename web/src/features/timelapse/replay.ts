@@ -6,7 +6,7 @@
 
 import { openVwx, type EditSession, type VwxDocument } from "../../core/index.ts";
 import type { Model } from "../../core/model.ts";
-import type { HistoryOp } from "./history.ts";
+import { applyOp, type HistoryOp } from "./history.ts";
 
 export class Replayer {
   private session: EditSession;
@@ -45,7 +45,7 @@ export class Replayer {
     const model = this.session.doc as Model;
     for (let i = this.applied; i < target; i++) {
       const op = this.ops[i];
-      model.datas.splice(op.start, op.del, ...op.add);
+      applyOp(model.datas, op);
       if (op.header) model.patchHeader(op.header.at, op.header.bytes);
     }
     this.applied = target;

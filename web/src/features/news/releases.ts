@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-05T12:32:00Z",
+    "agent-big-drawings",
+    "Smoother agent sessions on big drawings",
+    `Rodeo stays responsive while an agent works in a large drawing.
+- The timelapse keeps only what each edit changed, so an agent's step no longer freezes the editor for a second or more while it is recorded, and its history takes kilobytes instead of hundreds of megabytes.
+- Replaying the timelapse of a large drawing no longer fails.
+- The agents keep their models light: ivy, leaves and stone get textures instead of hundreds of thousands of triangles, so what they build stays quick to edit.`,
+    "speed",
+  ),
+  release(
     "2026-11-05T12:31:00Z",
     "shaded-textures",
     "Textures show in Shaded",

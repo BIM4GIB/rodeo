@@ -961,7 +961,7 @@ export class Session implements EditSession {
   }
 
   applyRemote(op: SpliceOp): void {
-    this.doc.datas.splice(op.start, op.del, ...op.add);
+    this.doc.datas = spliced(this.doc.datas, op.start, op.del, op.add);
     if (op.header) this.doc.patchHeader(op.header.at, op.header.bytes);
     this.doc.rebuild();
     // undo still turns back this session's own steps, rebased past the change; a step it touched,
