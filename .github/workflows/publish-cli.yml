@@ -1,0 +1,59 @@
+# Publishes the rodeo command (cli/) to npm as @rodeo.build/cli through npm trusted publishing:
+# npm trusts this workflow file in this repository, so no npm token is kept anywhere. To release,
+# bump "version" in cli/package.json, commit it to main, then tag that commit and push the tag:
+#   git tag cli-v0.1.1 && git push origin cli-v0.1.1
+# The package's npm settings name this file (publish-cli.yml), so renaming it stops publishing.
+name: Publish CLI
+
+on:
+  push:
+    tags: ["cli-v*"]
+
+permissions:
+  contents: read
+  id-token: write # npm signs the workflow in with GitHub's OIDC token
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Node 24 comes with an npm new enough for trusted publishing (11.5.1 or later)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: The tag matches the package version
+        run: |
+          want="cli-v$(node -p 'require("./cli/package.json").version')"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME but cli/package.json says $want"
+            exit 1
+          fi
+
+      # the CLI is bundled from web/, with the esbuild web/ already has
+      - run: npm ci --no-audit --no-fund
+        working-directory: web
+
+      - run: node build.mjs
+        working-directory: cli
+
+      - name: The command runs and converts a file
+        working-directory: cli
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          [ "$(node dist/rodeo.mjs --version)" = "$version" ]
+          dir=$(mktemp -d)
+          printf 'v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 2 3 4\nf 3 1 4\n' > "$dir/tetra.obj"
+          node dist/rodeo.mjs convert "$dir/tetra.obj" "$dir/tetra.stl"
+          # binary STL: an 84-byte header and count, then 50 bytes for each of the 4 triangles
+          [ "$(wc -c < "$dir/tetra.stl")" -eq 284 ]
+
+      # prepublishOnly would build again; the build above is the one that was checked
+      - run: npm publish --access public --ignore-scripts
+        working-directory: cli
