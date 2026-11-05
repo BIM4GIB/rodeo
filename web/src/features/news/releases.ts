@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-05T12:31:00Z",
+    "shaded-textures",
+    "Textures show in Shaded",
+    `The 3D view's Shaded mode now draws textures from the start, as renders do.
+- Turn them off in View > Rendering > Shaded Options… if a drawing has too many.
+- Shaded Options are now remembered in your browser, for every drawing.`,
+    "sphere",
+  ),
+  release(
     "2026-11-05T12:30:00Z",
     "agent-sign-in",
     "Connect Claude and ChatGPT by signing in",

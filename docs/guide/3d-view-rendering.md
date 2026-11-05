@@ -112,10 +112,12 @@ While the plan is rotated:
 
 **View › Rendering › Shaded Options…** (also at the foot of the View bar's Render mode pop-up) sets:
 
-- whether Shaded draws textures and colours (off: white faces)
+- whether Shaded draws textures (on at first; off, a textured face shows its fill colour) and colours (off: white faces)
 - whether it draws the edges
 - whether it casts shadows (the Visualization palette's switch), on the objects or on the ground under the model only
 - how sharp the shadows are (Low to Very High shadow maps)
+
+The options are kept in this browser for every drawing. **Textured** is Shaded with textures always on.
 
 ### Line Render Options
 
