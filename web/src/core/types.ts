@@ -1435,6 +1435,8 @@ export interface EditSession {
   markSaved(): void;
   /** Called with each change to the record list once it is made (edits, undo, redo); not for applyRemote. */
   onStep(listener: (op: SpliceOp) => void): () => void;
+  /** The record list as it stands, for collaboration to read what a change replaces. Never change it or its records. */
+  records(): readonly Uint8Array[];
   /**
    * Refuses changes to layers (Project Sharing's checkouts): before a change of this session's
    * (an edit, undo or redo; never applyRemote) takes effect, `guard` is asked with the ids of the
@@ -1449,6 +1451,12 @@ export interface EditSession {
    * can no longer be undone.
    */
   applyRemote(op: SpliceOp): void;
+  /**
+   * Runs `fn`, whose applyRemote calls change the record list at once (records() shows each) but
+   * rebuild the drawing and tell its listeners once, when `fn` returns: collaboration turning back
+   * changes of its own, taking someone else's and making its own again costs one rebuild.
+   */
+  remoteBatch<T>(fn: () => T): T;
 
   // document settings
   /**

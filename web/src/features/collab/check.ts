@@ -6,8 +6,10 @@
 // Before the random run, set pieces: changes all made against the same drawing
 // before any reaches the server, then delivered. An agent's step (a class added
 // at the top of the file and objects drawn in it at the end) against moves
-// anywhere must keep every change; two people adding classes, or two agents'
-// steps, report how many changes were turned back.
+// anywhere must keep every change. So must two people adding classes, or two
+// agents' steps, which meet in the name table: the later is made again on top,
+// each class keeping its own name and objects. Two renaming the same class is a
+// real clash, turned back.
 //
 //   cd web && npx tsx src/features/collab/check.ts [file.vwx] [editors] [steps] [seed]
 
@@ -155,14 +157,21 @@ function agentStep(s: EditSession, name: string, objects = 6): void {
 /**
  * A set piece: each editor makes its changes against the drawing as it opened, before any of them
  * reaches the server; then everything arrives. `undone` is how many changes each editor should
- * have turned back (null: just report it).
+ * have turned back; `classes`, the classes the drawing should end with and how many objects each
+ * holds; `symbols`, symbol definitions it should end with.
  */
-function setPiece(label: string, edits: ((s: EditSession) => void)[], undone: (number | null)[]): void {
+function setPiece(label: string, edits: ((s: EditSession) => void)[], undone: number[], classes: Record<string, number> = {}, symbols: string[] = []): void {
   const w = new World(edits.length);
   edits.forEach((edit, i) => edit(w.editors[i].session));
   w.settle();
   const got = w.editors.map((ed) => ed.undone);
-  const ok = w.converged(label) && undone.every((u, i) => u === null || u === got[i]);
+  const have = new Map(w.server.session.doc.classes().map((c) => [c.name, c.objectCount]));
+  const wrong = Object.entries(classes).filter(([name, n]) => have.get(name) !== n);
+  for (const [name, n] of wrong) console.log(`  ${label}: class ${name} holds ${have.get(name) ?? "nothing (missing)"}, not ${n}`);
+  const defs = new Set(w.server.session.doc.symbolDefs().map((d) => d.name));
+  const missing = symbols.filter((name) => !defs.has(name));
+  for (const name of missing) console.log(`  ${label}: no symbol ${name}`);
+  const ok = w.converged(label) && undone.every((u, i) => u === got[i]) && !wrong.length && !missing.length;
   console.log(`${ok ? "ok  " : "FAIL"} ${label}: ${w.server.accepted} accepted, ${w.server.refused} refused, turned back ${got.join("/")}`);
   if (!ok) failures++;
 }
@@ -187,9 +196,51 @@ setPiece(
   [(s) => s.deleteObjects([middle]), (s) => agentStep(s, "Agent C", 20), (s) => s.moveObjects([first], 3, 3)],
   [0, 0, 0],
 );
-setPiece("two people add classes", [(s) => s.createClass("Mine"), (s) => s.createClass("Yours")], [null, null]);
-setPiece("two agents' steps", [(s) => agentStep(s, "Agent D"), (s) => agentStep(s, "Agent E")], [null, null]);
-setPiece("an agent step × a class added", [(s) => agentStep(s, "Agent F"), (s) => s.createClass("Plain")], [null, null]);
+setPiece("two people add classes", [(s) => s.createClass("Mine"), (s) => s.createClass("Yours")], [0, 0], { Mine: 0, Yours: 0 });
+setPiece("two agents' steps", [(s) => agentStep(s, "Agent D"), (s) => agentStep(s, "Agent E", 4)], [0, 0], { "Agent D": 6, "Agent E": 4 });
+setPiece("an agent step × a class added", [(s) => agentStep(s, "Agent F"), (s) => s.createClass("Plain")], [0, 0], { "Agent F": 6, Plain: 0 });
+setPiece("three agents' steps", [(s) => agentStep(s, "G1", 2), (s) => agentStep(s, "G2", 3), (s) => agentStep(s, "G3", 4)], [0, 0, 0], { G1: 2, G2: 3, G3: 4 });
+setPiece("two classes of one name are one", [(s) => agentStep(s, "Roofs", 2), (s) => agentStep(s, "Roofs", 3)], [0, 0], { Roofs: 5 });
+setPiece(
+  "one class of a name both added, then changed by the second",
+  [
+    (s) => agentStep(s, "Trees", 2),
+    (s) => {
+      agentStep(s, "Trees", 3);
+      s.setClassVisibility(s.doc.classes().find((c) => c.name === "Trees")!.index, "grayed");
+    },
+  ],
+  [0, 1],
+  { Trees: 5 },
+);
+setPiece(
+  "a name both added, a class and a layer's object",
+  [(s) => agentStep(s, "Shared", 1), (s) => s.setObjectName(objectsOf(s).ids[0], "Shared")],
+  [0, 0],
+  { Shared: 1 },
+);
+setPiece(
+  "two steps each, the second on the first's class",
+  [
+    (s) => {
+      agentStep(s, "H1", 2);
+      s.renameClass(s.doc.classes().find((c) => c.name === "H1")!.index, "H1 renamed");
+    },
+    (s) => {
+      agentStep(s, "H2", 3);
+      const { layer } = objectsOf(s);
+      s.addObject(layer, { kind: "rect", x0: 0, y0: 900, x1: 10, y1: 910 }, s.doc.classes().find((c) => c.name === "H2")!.index);
+    },
+  ],
+  [0, 0],
+  { "H1 renamed": 2, H2: 4 },
+);
+const someClass = (s: EditSession): number => s.doc.classes().find((c) => c.name !== "None")!.index;
+setPiece("a rename × a class added", [(s) => s.renameClass(someClass(s), "Renamed"), (s) => s.createClass("Added")], [0, 0], { Renamed: openVwx(bytes).doc.classes().find((c) => c.name !== "None")!.objectCount, Added: 0 });
+setPiece("two renames of one class", [(s) => s.renameClass(someClass(s), "One"), (s) => s.renameClass(someClass(s), "Other")], [0, 1], { One: openVwx(bytes).doc.classes().find((c) => c.name !== "None")!.objectCount });
+setPiece("two people make symbols", [(s) => s.createSymbol([first], "Sym A"), (s) => s.createSymbol([last], "Sym B")], [0, 0], {}, ["Sym A", "Sym B"]);
+setPiece("a symbol × an agent step", [(s) => s.createSymbol([middle], "Sym C"), (s) => agentStep(s, "Agent S")], [0, 0], { "Agent S": 6 }, ["Sym C"]);
+setPiece("two symbols of one name", [(s) => s.createSymbol([first], "Bench"), (s) => s.createSymbol([last], "Bench")], [0, 0], {}, ["Bench", "Bench (2)"]);
 
 // ---- the random run ----
 
@@ -207,8 +258,10 @@ function edit(ed: Editor): void {
     else if (r < 0.8 && s.canUndo()) s.undo();
     else if (r < 0.85 && s.canRedo()) s.redo();
     else if (r < 0.87) s.createClass(`Sim ${ed.n}-${Math.floor(rand() * 1e6)}`);
-    else if (r < 0.89) agentStep(s, `Agent ${ed.n}-${Math.floor(rand() * 1e6)}`, 3);
-    else if (r < 0.95 && objs.length > 1) s.groupObjects([objs[0].id, objs[1].id]);
+    // agents often pick the same names: those make one class
+    else if (r < 0.91) agentStep(s, rand() < 0.5 ? pick(["Trees", "Roofs", "3D"]) : `Agent ${ed.n}-${Math.floor(rand() * 1e6)}`, 3);
+    else if (r < 0.92) s.renameClass(pick(s.doc.classes().filter((c) => c.name !== "None")).index, `Renamed ${ed.n}-${Math.floor(rand() * 1e6)}`);
+    else if (r < 0.96 && objs.length > 1) s.groupObjects([objs[0].id, objs[1].id]);
     else if (o) s.setAttributes([o.id], { penColor: Math.floor(rand() * 200) } as never);
   } catch (err) {
     // some edits don't apply to some objects (a group's attributes...): that's the editor's business, not the sync's

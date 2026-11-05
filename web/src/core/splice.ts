@@ -65,13 +65,29 @@ export function inOrder(runs: readonly Splice[]): boolean {
 }
 
 /** In-order runs with each start where it is in the list before any of them applies. */
-function based(runs: readonly Splice[]): Splice[] {
+export function based(runs: readonly Splice[]): Splice[] {
   let net = 0;
   return runs.map((r) => {
     const b = { start: r.start - net, del: r.del, add: r.add };
     net += r.add - r.del;
     return b;
   });
+}
+
+/** In-order runs given with each start where it is in the list before any of them applies, at the positions the runs before each leave. */
+export function sequenced(runs: readonly Splice[]): Splice[] {
+  let net = 0;
+  return runs.map((r) => {
+    const s = { start: r.start + net, del: r.del, add: r.add };
+    net += r.add - r.del;
+    return s;
+  });
+}
+
+/** Two in-order changes of the same list that touch different records, as one change in order. */
+export function joinRuns(a: readonly Splice[], b: readonly Splice[]): Splice[] {
+  // at one place, an insertion goes before what is taken out there
+  return sequenced([...based(a), ...based(b)].sort((x, y) => x.start - y.start || x.del - y.del));
 }
 
 /**

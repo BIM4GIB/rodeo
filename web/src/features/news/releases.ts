@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-05T12:45:00Z",
+    "editing-together",
+    "Editing together without undone changes",
+    `People and agents editing one cloud drawing at once keep their changes.
+- An agent's step that adds a class and draws no longer clashes with edits elsewhere in the drawing, and on a big drawing it goes out in kilobytes instead of hundreds of megabytes.
+- Two people or agents adding classes, symbols or names at the same moment both keep theirs; a class both add under one name becomes one class.
+- Only two changes to the same thing at once still clash, and the later one is undone with a message.`,
+    "cursors",
+  ),
+  release(
     "2026-11-05T12:40:00Z",
     "tabs-agents",
     "Tabs, with an agent in each",

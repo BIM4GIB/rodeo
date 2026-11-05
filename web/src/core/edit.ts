@@ -823,6 +823,8 @@ export class Session implements EditSession {
   private named: { recs: readonly Rec[]; textures: Map<number, Rec>; formats: Map<string, Rec> } | null = null;
   /** set while batch() runs: commits apply at once and are recorded as one step at the end */
   private batching: { kinds: Set<ChangeKind>; ids: string[] } | null = null;
+  /** changes applyRemote made within remoteBatch, rebuilt and told once it ends */
+  private remoteHeld: { kinds: Set<ChangeKind>; ids: string[]; unnamed: boolean } | null = null;
   private stepListeners = new Set<(op: SpliceOp) => void>();
   private layerGuard: ((layerIds: readonly string[]) => string | null) | null = null;
   /** the plug-in objects a new one can copy, for the record list they were found in */
@@ -957,6 +959,10 @@ export class Session implements EditSession {
     return () => this.stepListeners.delete(listener);
   }
 
+  records(): readonly Uint8Array[] {
+    return this.doc.datas;
+  }
+
   private announce(op: SpliceOp): void {
     for (const l of [...this.stepListeners]) l(op);
   }
@@ -965,7 +971,8 @@ export class Session implements EditSession {
     const runs: SpliceRun[] = op.more ? [op, ...op.more] : [op];
     this.doc.datas = applyRuns(this.doc.datas, runs);
     if (op.header) this.doc.patchHeader(op.header.at, op.header.bytes);
-    this.doc.rebuild();
+    const held = this.remoteHeld;
+    if (!held) this.doc.rebuild();
     // undo still turns back this session's own steps, rebased past the change; a step it touched,
     // and every step before that, can no longer be undone
     let r: Splice[] = runs.map((x) => ({ start: x.start, del: x.del, add: x.add.length }));
@@ -982,8 +989,31 @@ export class Session implements EditSession {
       r = before;
     }
     this.redoStack = [];
+    if (held) {
+      held.kinds.add(op.kind);
+      if (op.kind === "objects" && op.ids.length) for (const id of op.ids) held.ids.push(id);
+      else held.unnamed = true;
+      return;
+    }
     this.reseat();
     this.emit(op.kind, op.ids, "remote");
+  }
+
+  remoteBatch<T>(fn: () => T): T {
+    if (this.remoteHeld) return fn();
+    const held = { kinds: new Set<ChangeKind>(), ids: [] as string[], unnamed: false };
+    this.remoteHeld = held;
+    try {
+      return fn();
+    } finally {
+      this.remoteHeld = null;
+      if (held.kinds.size) {
+        this.doc.rebuild();
+        this.reseat();
+        const objects = held.kinds.size === 1 && held.kinds.has("objects") && !held.unnamed;
+        this.emit(objects ? "objects" : "all", objects ? held.ids : [], "remote");
+      }
+    }
   }
 
   onChange(listener: (e: ChangeEvent) => void): () => void {

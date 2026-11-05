@@ -348,6 +348,14 @@ JSON, typed `ClientMessage` / `ServerMessage` in protocol.ts.
   run, or answers `reject` when a run of it touches the records of a run of one
   of them; the client then turns its change back. Every client applies the same
   changes in the same order, so all hold the same bytes.
+- A change of the name table (type 55: the names of classes, symbols, textures
+  and named objects) goes as a run of its own. When the only records a client's
+  change shares with one ordered before it are the name table, the client makes
+  its change again on top of the other and sends it anew (the server refuses the
+  first as usual): the table is merged entry by entry, a name index both took
+  moves to a fresh one for the later change (its records renumbered), a class
+  both added under one name becomes the earlier one, and another name both used
+  gets " (2)" (`features/collab/rebase.ts`). The server needs nothing for it.
 - Changes are kept in the database until a version holds them: the server sends
   `save-request` to one editor every 60 changes or 2 minutes (a drawing over
   100 MB: 15 minutes, however many changes); the editor saves (`PUT content`

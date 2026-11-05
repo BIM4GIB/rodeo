@@ -9,10 +9,13 @@
 // by the server: it is rewritten past ours (theirs first on ties) and ours past
 // it, run by run. A change of ours with a run that touches the same records as
 // one of theirs is turned back here, and the server refuses it there, so every
-// replica ends with the same bytes.
+// replica ends with the same bytes. Where the two met only in the name table
+// (two people adding classes, two agents' steps), ours is then made again on
+// top of theirs, the table merged entry by entry (rebase.ts), and sent anew.
 
 import type { EditSession, HeaderPatch, SpliceOp, SpliceRun } from "../../core/index.ts";
-import { changedRuns, invertRuns, transformRuns, type Run, type Splice } from "../../core/splice.ts";
+import { based, changedRuns, invertRuns, joinRuns, sequenced, transformRuns, type Run, type Splice } from "../../core/splice.ts";
+import { classAt, hasClass, isNamesRun, isNameTable, isolateNames, mergeNames, namesOf, renumbered, renumberRecords, topName, withNames } from "./rebase.ts";
 
 /** A change of this replica's that the server hasn't confirmed. */
 interface Local {
@@ -105,7 +108,9 @@ export class Replica {
       net += r.add.length - r.del;
       return removed.slice(from, from + r.del);
     });
-    this.queue.push({ id: this.nextId++, runs: runs.map(counts), add: runs.map((r) => r.add), removed: taken, op, doomed: false });
+    // a change of the name table goes as a run of its own, to be merged should someone else's come first
+    const cut = isolateNames(runs, taken);
+    this.queue.push({ id: this.nextId++, runs: cut.runs.map(counts), add: cut.runs.map((r) => r.add), removed: cut.removed, op, doomed: false });
   }
 
   /** Sends the next change if none is in flight; `connected` false keeps them queued. */
@@ -157,7 +162,12 @@ export class Replica {
 
   /** Someone else's change, ordered by the server before every unconfirmed change of ours. */
   remote(seq: number, op: Incoming): void {
-    if (seq <= this.applied) return;
+    this.take(seq, op);
+  }
+
+  /** remote's work: the runs theirs applied as here, or null when this copy held it already. */
+  private take(seq: number, op: Incoming): Splice[] | null {
+    if (seq <= this.applied) return null;
     const locals = this.unconfirmed();
     // theirs is rewritten past each of ours in turn, and each of ours past theirs as it stood there
     let r: Splice[] = op.runs.map(counts);
@@ -175,19 +185,108 @@ export class Replica {
       r = theirs;
     }
     if (clash >= 0) {
-      // ours touch what theirs touched: ours, and everything built on them, go back
       const lost = locals.slice(clash);
-      this.revert(lost);
-      for (const l of lost) l.doomed = true;
-      this.queue = this.queue.filter((l) => !l.doomed);
-      this.hooks.undone("clash");
-      this.remote(seq, op);
-      return;
+      let theirs: Splice[] = [];
+      let kept = 0;
+      // one rebuild of the drawing for all of it: a big drawing takes a while each time
+      this.session.remoteBatch(() => {
+        // ours touch what theirs touched: ours, and everything built on them, go back
+        this.revert(lost);
+        for (const l of lost) l.doomed = true;
+        this.queue = this.queue.filter((l) => !l.doomed);
+        theirs = this.take(seq, op)!;
+        // and are made again on top of theirs, as far as they met it only in the name table
+        kept = this.remake(lost, theirs, op);
+      });
+      if (kept < lost.length) this.hooks.undone("clash");
+      if (kept > 0) this.hooks.queued();
+      return theirs;
     }
     locals.forEach((l, i) => (l.runs = rebased[i]));
     this.applied = seq;
     const runs = op.runs.map((x, i) => ({ start: r[i].start, del: x.del, add: x.add }));
     this.session.applyRemote(spliceOp(runs, op.kind, op.ids, op.header));
+    return r;
+  }
+
+  /**
+   * Makes changes of ours that were turned back for `theirs` (applied here as `applied`) again on
+   * top of it, oldest first, each queued as a new change: their runs moved past theirs with the
+   * name table set aside, the table merged entry by entry (rebase.ts), their records renumbered
+   * where a name index they added was taken meanwhile, and a class theirs added too left out. Stops
+   * at the first that met theirs elsewhere (or changed an entry theirs changed); how many were made
+   * again.
+   */
+  private remake(lost: readonly Local[], applied: readonly Splice[], theirs: Incoming): number {
+    // a change of the table puts one record in for one, moving nothing: theirs is merged, not stepped past
+    let p = applied.filter((s, i) => !(s.del === 1 && s.add === 1 && isNameTable(theirs.runs[i].add[0])));
+    const tables = (l: Local): Map<number, string>[] =>
+      l.runs.flatMap((_, k) => (isNamesRun(l.add[k], l.removed[k]) ? [namesOf(l.add[k][0]), namesOf(l.removed[k][0])] : []));
+    const renumber = new Map<number, number>();
+    let next = 0;
+    const fresh = (): number => {
+      // above every index the drawing or any of these changes' tables uses
+      next ||= topName(this.session.records(), lost.flatMap(tables)) + 1;
+      return next++;
+    };
+    let kept = 0;
+    for (const l of lost) {
+      if (theirs.header && l.op.header) break;
+      const moved = transformRuns(l.runs, p, false);
+      let past = moved && transformRuns(p, l.runs, true);
+      if (!moved || !past) break;
+      const recs = this.session.records();
+      const alike = (i: number, j: number): boolean => classAt(l.add, i) !== null && hasClass(recs, j);
+      let add: Uint8Array[][] = [];
+      let removed: (readonly Uint8Array[])[] = [];
+      /** classes theirs stands for, as [run, place] in l.add */
+      const dropped: [number, number][] = [];
+      let ok = true;
+      for (const [k, at] of based(moved).entries()) {
+        const gone = recs.slice(at.start, at.start + at.del);
+        removed.push(gone);
+        add.push(l.add[k] as Uint8Array[]);
+        if (!ok || !isNamesRun(l.add[k], l.removed[k])) continue;
+        const was = renumbered(namesOf(l.removed[k][0]), renumber);
+        const ours = renumbered(namesOf(l.add[k][0]), renumber);
+        const merged = gone.length === 1 && isNameTable(gone[0]) && mergeNames(was, namesOf(gone[0]), ours, fresh, alike);
+        if (!merged) {
+          ok = false;
+          continue;
+        }
+        for (const [a, b] of merged.renumber) renumber.set(a, b);
+        for (const i of merged.dropped) dropped.push(classAt(l.add, i)!);
+        add[k] = [withNames(gone[0], merged.names)];
+      }
+      // the records of ours that name an index that moved (this change's own included), but a class theirs stands for
+      const out = new Set(dropped.map(([k, n]) => `${k}:${n}`));
+      for (let k = 0; ok && k < add.length; k++) {
+        if (isNamesRun(l.add[k], l.removed[k])) continue;
+        const again = renumberRecords(add[k], renumber);
+        if (!again) ok = false;
+        else add[k] = out.size ? again.filter((_, n) => !out.has(`${k}:${n}`)) : again;
+      }
+      if (!ok) break;
+      // runs left the same size where nothing was left out
+      let runs: Splice[] = moved;
+      if (dropped.length) {
+        const keep = based(moved).map((r, k) => ({ start: r.start, del: r.del, add: add[k].length }));
+        const used = keep.map((r) => r.del > 0 || r.add > 0);
+        runs = sequenced(keep.filter((_, k) => used[k]));
+        add = add.filter((_, k) => used[k]);
+        removed = removed.filter((_, k) => used[k]);
+        // the next change of ours was made with the class still there: to it, it is now taken out
+        const where = dropped.map(([k, n]) => l.runs[k].start + n).sort((x, y) => x - y);
+        past = joinRuns(past, where.map((at, n) => ({ start: at - n, del: 1, add: 0 })));
+      }
+      const made: Local = { id: this.nextId++, runs, add, removed, op: l.op, doomed: false };
+      const h = l.op.header;
+      this.session.applyRemote(spliceOp(this.runsOf(made), l.op.kind, l.op.ids, h && { at: h.at, bytes: h.bytes }));
+      this.queue.push(made);
+      p = past;
+      kept++;
+    }
+    return kept;
   }
 
   /** Changes of ours not yet confirmed nor already turned back, oldest first. */
