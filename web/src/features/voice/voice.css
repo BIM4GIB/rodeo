@@ -1,0 +1,584 @@
+/* Voice commands (features/voice): the bubble by the cursor, the numbered pins on the
+   drawing, the microphone buttons and the Tools > Voice Commands settings dialog. Colours
+   are tokens from tokens.css, so the light and dark themes follow. Every surface is solid:
+   no glass, blur or translucent panels. */
+
+/* ---- the bubble ------------------------------------------------------------ */
+
+.voice-bubble {
+  --voice-halo: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  position: fixed;
+  z-index: 35;
+  box-sizing: border-box;
+  min-width: 240px;
+  /* a phone is narrower than the bubble's 420 px: the bubble fits the screen with an 8 px margin */
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 10px 12px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 13px/1.4 var(--font);
+  user-select: none;
+  animation: voice-in 140ms ease-out;
+}
+
+.voice-bubble[hidden] {
+  display: none;
+}
+
+.voice-bubble.is-leaving {
+  opacity: 0;
+  transition: opacity 160ms ease-in;
+}
+
+.voice-bubble.is-intro {
+  width: 340px;
+}
+
+@keyframes voice-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.voice-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.voice-bubble kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  font: 10px var(--mono);
+}
+
+/* ---- the ring: the microphone, its level halo, the spinner ----------------- */
+
+.voice-ring {
+  flex: none;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--fill-strong);
+  color: var(--text-2);
+}
+
+.voice-ring svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* the halo grows with the voice's level (0 to 1, set on the bubble by VoiceUi.level) */
+.voice-bubble.is-live .voice-ring {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 calc(2px + var(--voice-level, 0) * 7px) var(--voice-halo);
+  transition: box-shadow 60ms linear;
+}
+
+/* no level for a moment (no meter, or the mic refused): the halo breathes instead */
+.voice-bubble.is-live .voice-ring.is-pulsing {
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--voice-halo);
+  }
+  50% {
+    box-shadow: 0 0 0 6px var(--voice-halo);
+  }
+}
+
+/* the agent is working: the ring is a spinner, with a 2 px accent arc */
+.voice-bubble.is-working .voice-ring {
+  border: 2px solid var(--fill-strong);
+  border-top-color: var(--accent);
+  animation: voice-spin 800ms linear infinite;
+}
+
+@keyframes voice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- the transcript -------------------------------------------------------- */
+
+.voice-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.voice-bubble.is-working .voice-text {
+  color: var(--text-2);
+}
+
+/* the words heard, quoted, while the agent works; its status sits in the foot */
+.voice-bubble.is-working .voice-said {
+  color: var(--text);
+}
+
+.voice-empty,
+.voice-word.is-interim {
+  color: var(--text-3);
+}
+
+.voice-word.is-missing {
+  text-decoration: underline dashed var(--warn);
+  text-underline-offset: 3px;
+}
+
+/* "this" and "here" carry the number of the pin they mean */
+.voice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px 0 2px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.voice-chip-n {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-text);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.voice-chip-n svg {
+  width: 9px;
+  height: 9px;
+}
+
+.voice-chip.is-selection,
+.voice-chip.is-previous {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.voice-chip.is-selection .voice-chip-n,
+.voice-chip.is-previous .voice-chip-n {
+  background: var(--surface);
+  color: var(--text-2);
+}
+
+/* ---- the foot: what will happen, and the keys ------------------------------ */
+
+.voice-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.voice-preview.is-agent {
+  color: var(--accent);
+}
+
+.voice-glyph {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.voice-glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.voice-keys {
+  flex: none;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ---- buttons and the hint -------------------------------------------------- */
+
+.voice-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.voice-bubble .btn {
+  height: 26px;
+}
+
+.voice-hint {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ---- the result card ------------------------------------------------------- */
+
+.voice-tone {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.voice-tone svg {
+  width: 14px;
+  height: 14px;
+}
+
+.voice-bubble[data-tone="error"] .voice-tone {
+  background: var(--danger);
+}
+
+.voice-bubble[data-tone="info"] .voice-tone {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.voice-outcome-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.voice-outcome-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.voice-outcome-body {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+/* ---- the first-use card ---------------------------------------------------- */
+
+.voice-intro-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.voice-intro-line {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+/* ---- pins on the drawing --------------------------------------------------- */
+
+/* zero-sized at the point, so the pin's children are placed from the point itself */
+.voice-pin {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 34;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  animation: voice-pin-in 160ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+.voice-pin[hidden] {
+  display: none;
+}
+
+@keyframes voice-pin-in {
+  from {
+    scale: 0.6;
+  }
+  to {
+    scale: 1;
+  }
+}
+
+.voice-pin-stem {
+  position: absolute;
+  left: 0;
+  top: -0.75px;
+  width: 17px;
+  height: 1.5px;
+  background: var(--accent);
+  transform-origin: 0 50%;
+  transform: rotate(-45deg);
+}
+
+.voice-pin-dot {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+
+.voice-pin-n {
+  position: absolute;
+  left: 1px;
+  top: -23px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: 600 12px/1 var(--font);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.voice-pin-label {
+  position: absolute;
+  left: 26px;
+  top: -23px;
+  box-sizing: border-box;
+  height: 22px;
+  max-width: 220px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-pin-detail {
+  color: var(--text-3);
+}
+
+/* ---- the microphone buttons: the top bar's and the touch button ------------ */
+
+.voice-mic {
+  --voice-halo: color-mix(in srgb, var(--accent) 30%, var(--chrome));
+  position: relative;
+}
+
+.voice-mic[hidden],
+.voice-fab[hidden] {
+  display: none;
+}
+
+/* a phone's top bar has no room for it (a cloud drawing's would run off the screen); the touch
+   button and the held key still start voice there */
+@media (max-width: 560px) {
+  .tb-icon.voice-mic {
+    display: none;
+  }
+}
+
+/* the lit button: the selectors below beat styles.css's hover rule for .tb-icon */
+.tb-icon.voice-mic[data-state="listening"],
+.tb-icon.voice-mic[data-state="listening"]:hover {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 calc(1px + var(--voice-level, 0) * 3px) var(--voice-halo);
+  transition: box-shadow 60ms linear;
+}
+
+.voice-mic[data-state="unsupported"],
+.voice-fab[data-state="unsupported"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* a spinning arc around the button while the agent works */
+.voice-mic[data-state="working"]::after,
+.voice-fab[data-state="working"]::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: var(--accent);
+  animation: voice-spin 800ms linear infinite;
+  pointer-events: none;
+}
+
+/* the round button over a touch drawing; index.ts places it at the lower right of #stage */
+.voice-fab {
+  --voice-halo: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  /* above the mode and snap bars along the drawing's foot */
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.voice-fab svg {
+  width: 24px;
+  height: 24px;
+}
+
+.voice-fab[data-state="listening"] {
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 0 0 calc(2px + var(--voice-level, 0) * 6px) var(--voice-halo), var(--shadow);
+  transition: box-shadow 60ms linear;
+}
+
+/* ---- Tools > Voice Commands: the settings dialog (settings.ts) ------------- */
+
+/* the shared dialog (menubar.css) with room for the device box and the examples */
+.menu-dialog.voice-settings {
+  width: min(400px, calc(100vw - 32px));
+}
+
+.voice-settings .menu-dialog-select {
+  width: 230px;
+  max-width: 100%;
+}
+
+.voice-settings > p.menu-dialog-label {
+  margin: 14px 0 6px;
+}
+
+/* a note under a control: the language and the browser's support */
+.voice-set-note {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+/* the on-device recognition box, shown only where the browser can say */
+.voice-set-device {
+  margin: 4px 0 10px;
+  padding: 8px 10px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.voice-set-device[hidden] {
+  display: none;
+}
+
+.voice-set-device .menu-dialog-check {
+  margin: 0 0 6px;
+}
+
+.voice-set-device .voice-set-note {
+  margin: 0 0 6px;
+}
+
+.voice-set-device .btn {
+  margin-top: 2px;
+}
+
+/* what happens to the voice: one line per fact, under the controls */
+.voice-set-privacy {
+  margin: 4px 0 12px;
+}
+
+.voice-set-privacy .voice-set-note {
+  margin-bottom: 4px;
+}
+
+/* the example phrases, one to a row */
+.voice-set-examples {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voice-set-examples li {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+/* ---- reduced motion: no fades, slides, scaling, pulsing or spinning -------- */
+
+/* a spinner keeps its static arc; the ring and the bubble simply appear and disappear */
+@media (prefers-reduced-motion: reduce) {
+  .voice-bubble,
+  .voice-pin {
+    animation: none;
+  }
+
+  .voice-bubble.is-leaving {
+    transition: none;
+  }
+
+  .voice-bubble.is-live .voice-ring.is-pulsing,
+  .voice-bubble.is-working .voice-ring,
+  .voice-mic[data-state="working"]::after,
+  .voice-fab[data-state="working"]::after {
+    animation: none;
+  }
+}

@@ -13,6 +13,7 @@ const ENTRY_LABEL: Record<string, string> = {
   invite: "An invite",
   embed: "An embedded drawing",
   app: "The installed app",
+  convert: "The converter",
 };
 
 const DEVICE_LABEL: Record<string, string> = { desktop: "Computer", tablet: "Tablet", phone: "Phone" };

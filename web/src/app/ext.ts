@@ -9,6 +9,7 @@ import type { Palettes, PaletteSpec } from "./dock.ts";
 import type { Row } from "./menu.ts";
 import type { Scene } from "./scene.ts";
 import type { SiteModifier } from "./siteModelShapes.ts";
+import type { Snapper } from "./snap.ts";
 import type { ToolId } from "./state.ts";
 import type { Painter, ToolController } from "./tools.ts";
 import type { View } from "./view.ts";
@@ -49,6 +50,8 @@ export interface AppContext {
   readonly view: View;
   readonly palettes: Palettes;
   readonly controller: ToolController;
+  /** the snapping the tools use (pins and picks snap the same way) */
+  readonly snap: Snapper;
   /** the 2D drawing's canvas */
   readonly canvas: HTMLCanvasElement;
   requestDraw(): void;
@@ -58,6 +61,8 @@ export interface AppContext {
    * asking about its unsaved changes.
    */
   openDocument(data: Uint8Array | Blob, name: string, options?: OpenOptions): Promise<void>;
+  /** Opens or imports a file as dropping it on the window does: any format Rodeo reads, by its name's extension. */
+  openFile(file: File): Promise<void>;
   /** The open drawing as .vwx bytes, or null with none open. */
   documentBytes(): Promise<Uint8Array | null>;
   fit(): void;
@@ -252,6 +257,13 @@ export function registerRecentFiles(watch: (show: ShowRecent) => void): void {
 /** Adds an element to the top bar, at the start of its left or right end. */
 export function registerTopBar(build: () => HTMLElement, side: "left" | "right" = "right"): void {
   topBar.push({ build, side });
+}
+
+const fileBadges: (() => HTMLElement)[] = [];
+
+/** Adds a small element beside the open drawing's name in the top bar (a branch's name); the feature shows and hides it. */
+export function registerFileBadge(build: () => HTMLElement): void {
+  fileBadges.push(build);
 }
 
 /** Called once the editor is running, with what features can reach of it. */
@@ -472,6 +484,8 @@ export function mountExtensionChrome(
     const host = side === "left" ? topbarLeft : topbarRight;
     host.prepend(build());
   }
+  const info = topbarLeft.querySelector(".file-info");
+  for (const build of fileBadges) info?.append(build());
 }
 
 export function appStarted(context: AppContext): void {

@@ -68,6 +68,7 @@ function accountRows(): Row[] {
       : { label: "Free plan", enabled: () => false },
     "-",
     { label: "Account…", run: openAccountDialog },
+    { label: "Connect an Agent…", run: () => void import("../mcp/index.ts").then((m) => m.openAgentsDialog()) },
   ];
   if (cfg.billing) {
     rows.push(supporter ? { label: "Manage Plan…", run: () => void managePlan() } : { label: "Get Rodeo Plus…", run: openSupporterDialog });

@@ -114,6 +114,59 @@ Agents model buildings and gardens from parts, and products and machine parts (h
 
 **Limits:** conversations are kept in this browser only.
 
+### Connect an Agent
+
+**Window › Connect an Agent…** (also in your account menu) lets Claude, ChatGPT, Claude Code, Cursor or another AI agent work in your open drawing while you watch. The agent uses its own AI account, so it takes none of your Rodeo credit.
+
+**Sign in from your agent.** Give the agent Rodeo's address, `https://rodeo.build/mcp`, and it sends you to Rodeo to sign in:
+
+- **Claude** (claude.ai and the Claude desktop and phone apps): Settings › Connectors › Add custom connector, paste the address and press Connect. Once added, it works in all of them. On a Team or Enterprise plan, an owner adds it first.
+- **Claude Code**: run `claude mcp add --transport http --scope user rodeo https://rodeo.build/mcp`, then type `/mcp`, choose rodeo and sign in.
+- **Cursor**: add `{"mcpServers":{"rodeo":{"url":"https://rodeo.build/mcp"}}}` to `~/.cursor/mcp.json` and sign in when Cursor asks.
+- **ChatGPT**: with developer mode on, create a connector with the address and choose OAuth.
+
+Rodeo's page shows which app is asking, where it will send you back, and what it will be able to do. An app Rodeo can't check is marked **not verified by Rodeo**. An app on your own computer, such as Claude Code, is marked too: allow it only if you just started connecting it. Press **Allow** and you're back in the app.
+
+**Or make a token**, for agents that take a header instead: name it, press **Create Token**, and paste the line the dialog shows into your agent.
+
+The agent works in the drawing in front of the Rodeo tab you used last, with the Agents panel's tools: it reads the drawing, looks at the plan and the model, edits, builds in 3D, renders, exports and runs scripts. Each edit is one undo step. Files it exports are downloaded in your browser; full-size renders wait in the agent menu. It can give Rodeo a small file to import.
+
+While an agent works, a pill in the top bar names it and says what it is doing; click it for its recent calls and files. **Stop** halts the call in progress and refuses the agent's calls until you press **Resume**.
+
+The dialog lists the apps you connected and your tokens, with when each was last used and by which app. **Remove** one and it loses access at once. Rodeo keeps only fingerprints of tokens, so it can't show one again: make a new one if you lose it. A connected app unused for 60 days is disconnected by itself.
+
+**Limits:** an agent's calls need a Rodeo tab open and signed in, and Rodeo draws only while its tab is on screen, so keep it visible. If you sign in with an emailed link while connecting, open the link in the same browser; on a phone, signing in with Google, Microsoft or GitHub is simplest. Agents can't open files on your computer from Rodeo: they give it files of up to 4 MB.
+
+## Voice commands
+
+### Talking to Rodeo
+
+Hold <kbd>Space</kbd> still for a moment and a bubble opens by the pointer: say what to do and let go. Rodeo's agent does it: "rotate this 90", "move this door here", "make that wall 200 thicker", "what's on this layer?". The card that follows shows its answer, what the command cost, **Undo**, and **Continue in Agents**, which opens the conversation in the Agents panel; <kbd>⌘Z</kbd> undoes the agent's changes in one step. A follow-up within ten minutes carries on the same conversation. Pressing Space and dragging straight away still pans.
+
+Voice commands need you signed in, and use AI credit as the Agents panel does; without enough credit, holding the key offers a top-up before anything is recorded. The first time, Rodeo says where your speech goes. **Turn on voice** asks to use the microphone, and **Not now** turns voice off; **Tools › Voice Commands…** turns it on again.
+
+### Pointing while you speak
+
+While you hold the key, a click drops a numbered pin, snapped as the tools snap, labelled with what is under it. "This" and "that" mean the objects under the pins (or the selection), "here" and "there" the places, in the order you clicked: "move this door here", "copy these three times along here, 1200 apart". The bubble marks each pointing word with its pin, and the agent is told what each one points at. A drag still pans (in 3D it orbits). <kbd>Backspace</kbd> takes the last pin away, <kbd>Enter</kbd> sends, <kbd>Esc</kbd> cancels.
+
+### What the agent gets
+
+Your words, the selected objects (their names, classes and layers), the pins and what is under them, and what the view shows. It works as the Agents panel does, on its fast model unless the settings choose the panel's.
+
+### Firefox and Brave
+
+Firefox has no speech recognition of its own, and Brave's often doesn't answer. There Rodeo's server turns your speech into text: the browser records while you hold the key, and when you let go the bubble says "Turning speech into text…" before the agent starts (<kbd>Esc</kbd> stops it). It uses a little AI credit, shown on the card. When Firefox asks for the microphone, tick **Remember this decision**, or it asks each time. In other browsers, **Speech to text** in the settings can choose Rodeo's server too.
+
+### Touch and mouse
+
+The microphone button in the top bar (and, on touch screens, the round one at the drawing's lower right) starts listening; tap the drawing to drop pins and tap the microphone again to send, or press and hold it while you speak.
+
+### Voice settings
+
+**Tools › Voice Commands…** turns voice on or off and sets the key to hold (Space, the right Option or Alt key, or only the microphone button), the language, the speech to text (automatic, the browser's, or Rodeo's server), the agent's model (fast, or the Agents panel's) and, in Chrome where it can, speech recognised on this computer so no audio leaves it.
+
+**Limits:** every command goes to the agent, so it takes a few seconds and needs a sign-in and AI credit. Chrome sends speech to Google, Edge to Microsoft and Safari to Apple unless it is recognised on the computer; Rodeo gets only the words. With Rodeo's speech to text the words show only after you let go, a command is at most 30 seconds, and the recording is passed to the speech model once and not kept. A pause before a pan opens the microphone briefly; nothing is sent when nothing is said.
+
 ## Navigating: zoom, pan and undo
 
 ### Zoom

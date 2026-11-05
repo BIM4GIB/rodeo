@@ -15,12 +15,21 @@ import { attachCollab, type CollabDeps } from "./collab.ts";
 import { registerComments } from "./comments.ts";
 import { config } from "./config.ts";
 import { registerCredit } from "./credit.ts";
+import { registerConvert } from "./convert.ts";
 import { database, get, openDatabase } from "./db.ts";
+import { registerEmbed } from "./embed.ts";
 import { registerFeedback } from "./feedback.ts";
 import { accessOf, registerFiles, saveRefusal } from "./files.ts";
+import { registerGallery } from "./gallery.ts";
+import { registerGalleryModeration } from "./galleryModeration.ts";
+import { registerGalleryPublish } from "./galleryPublish.ts";
+import { startHousekeeping } from "./housekeeping.ts";
 import { apiNotFound, cors, csrf, noStore, onError, redirectHosts, requestLog } from "./http.ts";
 import { setHub } from "./hub.ts";
-import { startHousekeeping } from "./housekeeping.ts";
+import { registerBranches } from "./lineage.ts";
+import { attachMcp, registerMcp } from "./mcp/index.ts";
+import { registerOAuth } from "./oauth/index.ts";
+import { registerMerges } from "./merges.ts";
 import { registerRender } from "./render.ts";
 import { registerReports } from "./reports.ts";
 import { registerSettings } from "./settings.ts";
@@ -28,6 +37,7 @@ import { registerSharing } from "./sharing.ts";
 import { archiveAssets, registerStatic } from "./static.ts";
 import { registerUploads } from "./uploads.ts";
 import { registerVisits } from "./visits.ts";
+import { registerVoice } from "./voice.ts";
 
 openDatabase();
 // Temp files are left behind only by a crash mid-upload.
@@ -45,16 +55,26 @@ registerAuth(app);
 registerUploads(app);
 registerFiles(app);
 registerSharing(app);
+registerEmbed(app);
+registerGallery(app);
+registerGalleryPublish(app);
+registerGalleryModeration(app);
 registerComments(app);
+registerBranches(app);
+registerMerges(app);
 registerBilling(app);
 registerSettings(app);
 registerFeedback(app);
 registerAi(app);
+registerVoice(app);
 registerCredit(app);
 registerRender(app);
 registerReports(app);
 registerVisits(app);
 registerAdmin(app);
+registerMcp(app);
+registerOAuth(app);
+registerConvert(app);
 app.all("/api/*", apiNotFound);
 registerStatic(app);
 
@@ -76,6 +96,7 @@ const deps: CollabDeps = {
   saveRefusal,
 };
 setHub(attachCollab(server, deps));
+attachMcp(server, { userFromRequest });
 startHousekeeping();
 archiveAssets().catch((e: unknown) => console.error("[assets] could not keep this build's assets:", e));
 

@@ -216,6 +216,8 @@ export interface ServerConfig {
   readonly credit?: AiCreditTerms | null;
   /** cloud renders (null: not set up on this server) */
   readonly render?: RenderTerms | null;
+  /** voice commands' speech to text on the server (null or missing: none) */
+  readonly voice?: VoiceTerms | null;
   /** the largest drawing or render job the server takes, in bytes */
   readonly maxUploadBytes?: number;
 }
@@ -228,6 +230,28 @@ export interface RenderTerms {
   readonly plusPerMinute: number | null;
   /** the longest a job may run, minutes */
   readonly maxMinutes: number;
+}
+/** Voice commands' speech to text on the server, for browsers with none of their own. */
+export interface VoiceTerms {
+  /** POST /api/voice/transcribe turns recordings into text here */
+  readonly transcribe: boolean;
+  /** who turns the speech into text, for the privacy text ("Google, through OpenRouter"); null without it */
+  readonly by: string | null;
+}
+/** POST /api/voice/transcribe: a recording as 16 kHz mono 16-bit WAV in base64, its language (BCP 47, or "") and the drawing's names. */
+export interface VoiceTranscribeRequest {
+  readonly audio: string;
+  readonly lang: string;
+  readonly hints: readonly string[];
+}
+/** What a request was charged and the credit left, in the credit's currency (null: free, or not known yet). */
+export interface VoiceCharge {
+  readonly charged: number | null;
+  readonly balance: number | null;
+}
+/** Its answer: the words heard ("" for none). */
+export interface VoiceTranscript extends VoiceCharge {
+  readonly text: string;
 }
 
 /** POST /api/render/jobs: what the job is, in its X-Render-Job header (JSON); the body is the gzipped pack. */
@@ -515,7 +539,7 @@ export type ServerMessage =
 // ---- the admin page (server/src/admin.ts, web/src/admin) ----
 
 /** How a visit to the editor began: the editor itself, a share link, an invite, an embed, or the installed app. */
-export type VisitEntry = "editor" | "share" | "invite" | "embed" | "app";
+export type VisitEntry = "editor" | "share" | "invite" | "embed" | "app" | "convert";
 
 /** A label and how many: a row of a breakdown (referrers, countries...). */
 export interface Tally {

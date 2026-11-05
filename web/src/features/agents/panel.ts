@@ -84,6 +84,18 @@ interface Sink {
   readonly now?: HTMLElement;
 }
 
+/** Shows a saved conversation in the panel, once the panel is built (Voice's "Continue in Agents"). */
+let showSaved: ((t: Thread) => Promise<void>) | null = null;
+
+/** Opens the saved conversation `id` in the Agents panel; false when the panel isn't built or the conversation is gone. */
+export async function openAgentsThread(id: string): Promise<boolean> {
+  const t = (await listThreads()).find((x) => x.id === id);
+  if (!t || !showSaved) return false;
+  appContext()?.palettes.show("agents");
+  await showSaved(t);
+  return true;
+}
+
 export function agentsPanel(): HTMLElement {
   let thread: Thread = newThread();
   let running: AbortController | null = null;
@@ -798,6 +810,7 @@ export function agentsPanel(): HTMLElement {
 
   refreshModel();
   showEmpty();
+  showSaved = showThread;
   return root;
 }
 

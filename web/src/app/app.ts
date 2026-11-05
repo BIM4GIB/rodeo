@@ -1217,9 +1217,11 @@ export class App {
       view: this.view,
       palettes,
       controller: this.controller,
+      snap: this.snap,
       canvas: this.canvas,
       requestDraw: () => this.requestDraw(),
       openDocument: async (bytes, name, options) => void (await this.openDocument(bytes, name, null, options?.replace ?? false, options?.source ?? null)),
+      openFile: (file) => this.openFile(file, Promise.resolve(null)),
       documentBytes: async () => (store.session ? documentBytes(store.session) : null),
       fit: () => this.fit(),
       show3d: async () => {

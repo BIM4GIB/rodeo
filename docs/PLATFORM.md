@@ -57,7 +57,7 @@ host with no server.
 | `SUPPORTER_MONTHLY_LABEL`, `SUPPORTER_YEARLY_LABEL` | prices as shown, default `£2/month`, `£15/year` |
 | `DRIVE_GOOGLE_CLIENT_ID`, `DRIVE_GOOGLE_API_KEY`, `DRIVE_GOOGLE_APP_ID` | opening and saving in Google Drive from the browser (Picker; scope `drive.file`) |
 | `DRIVE_MICROSOFT_CLIENT_ID` | opening and saving in OneDrive from the browser (SPA app registration, redirect `PUBLIC_URL/`, scope `Files.ReadWrite`) |
-| `FREE_FILES`, `FREE_BYTES`, `FREE_VERSIONS`, `FREE_SHARE_LINKS` | free plan limits (defaults 5, 250 MB, 10, false) |
+| `FREE_FILES`, `FREE_BYTES`, `FREE_VERSIONS`, `FREE_SHARE_LINKS` | free plan limits (defaults 5, 250 MB, 10, true) |
 | `SUPPORTER_FILES`, `SUPPORTER_BYTES`, `SUPPORTER_VERSIONS` | Rodeo Plus limits (defaults 0 = no limit, 20 GB, 0 = all) |
 | `MAX_UPLOAD_BYTES` | largest drawing or cloud render job accepted (default 1 GB). The editor sends anything over 8 MB in parts, since Cloudflare takes at most 100 MB a request |
 | `FUNDING_GOAL`, `FUNDING_RAISED`, `FUNDING_CURRENCY` | the starting funding bar (monthly goal and amount raised, currency default `GBP`); an admin can change it in the editor |
@@ -77,6 +77,11 @@ host with no server.
 | `AI_MARKUP`, `AI_MARKUP_PLUS` | what a request costs a user against what the provider charged: defaults `1.3` (30% more) and `1.15` for Rodeo Plus. It covers Stripe's fee, OpenRouter's fee on buying its credit, and exchange |
 | `AI_TOPUPS` | the top-up amounts offered, comma-separated, default `5,10,20` |
 | `AI_HOLD` | the credit a request needs to start, held while it runs, default `0.25` |
+| `VOICE_TRANSCRIBE` | `on` (default): voice commands in browsers with no speech recognition of their own (Firefox, and Brave when its service fails) send the recording to `POST /api/voice/transcribe`, which has an audio model at `AI_BASE_URL` write it down, charged to AI credit; `off`: those browsers can't use voice. Needs `AI_API_KEY` (Anthropic's models don't take audio) |
+| `VOICE_MODEL` | the speech-to-text model, default `google/gemini-3.1-flash-lite` (`openai/whisper-large-v3-turbo` with `VOICE_API=transcriptions`) |
+| `VOICE_API` | `chat` (default): an audio-capable chat model, given a prompt and the drawing's class and layer names; `transcriptions`: OpenRouter's speech-to-text endpoint, cheaper and quicker, without the names |
+| `VOICE_EFFORT` | the chat model's reasoning effort, default `none`; `off` sends none (for a model that rejects it) |
+| `VOICE_REQUESTS_PER_HOUR`, `VOICE_REQUESTS_PER_DAY` | recordings per user (defaults 120 and 600), and at most 20 a minute |
 | `RENDER_URL`, `RENDER_SECRET` | cloud renders: the GPU worker's endpoint (`modal deploy cloudrender/worker.py` prints it) and the secret it checks (the Modal secret `rodeo-render`). Without both, Render Image offers only this computer. Credit (`AI_*` above) is on with them even without an AI key |
 | `RENDER_GPU` | the GPU a job runs on, as Modal names it, default `L40S` |
 | `RENDER_USD_PER_HOUR` | what an hour of it costs at Modal with the worker's CPU and memory, default from the GPU (L40S about $2.11) |
@@ -173,6 +178,46 @@ An upload is used once, and dropped when unused for an hour.
 | `DELETE /shares/:token` | revokes it |
 | `GET /s/:token` | `SharedFile` (public) |
 | `GET /s/:token/content` | bytes of the head version (public) |
+| `GET /s/:token/poster` | the link's still preview, else the drawing's thumbnail, else a redirect to the icon (public) |
+| `GET /s/:token/turntable` | the link's turning GIF, else a redirect to the poster (public) |
+| `GET /shares/:token/preview` | `SharePreview` (owner or editor) |
+| `PUT /shares/:token/poster?width&height` PNG or JPEG ≤ 1 MB | 204 (owner or editor) |
+| `PUT /shares/:token/turntable?width&height` GIF ≤ 4 MB | 204 (owner or editor) |
+| `GET /oembed?url=&maxwidth=&maxheight=` | oEmbed JSON for a share or embed address (public) |
+
+### Embeds
+
+Options, all optional, in this canonical order (`OPTION_KEYS`). Unknown or invalid values are ignored (the default applies).
+
+| key | values | default | meaning |
+| --- | --- | --- | --- |
+| `view` | `2d`, `3d` | as the drawing opens | start in the 2D drawing or the 3D view. `3d` falls back to 2D when WebGL is missing or the drawing has no 3D model |
+| `layer` | a layer id, a design layer's name, a sheet's number or a sheet's title | as saved | the active layer or sheet. `sheet=` is accepted as an alias when `layer` is absent |
+| `at` | `x,y,span` (document units; span = width shown, > 0) | fitted | the 2D view's centre and width |
+| `cam` | `px,py,pz,tx,ty,tz` (document units) | fitted | the 3D camera's position and the point it looks at |
+| `preset` | `top bottom front back left right iso leftIso rightRearIso leftRearIso lowerRightIso lowerLeftIso lowerRightRearIso lowerLeftRearIso` | `iso` | the 3D standard view when there is no `cam` |
+| `render` | `shaded textured hidden dashed wireframe sketch` | the visitor's 3D render mode | the 3D render mode |
+| `rotate` | `1` (also `true` or present with no value) | off | turn slowly in 3D until touched |
+| `theme` | `auto`, `light`, `dark` | `auto` | the controls' look (`auto` follows the visitor's system) |
+| `ui` | `full`, `min`, `none` | `full` | `full`: name, layer picker, 2D/3D, Fit, Turn, Full Screen, Open in Rodeo. `min`: Open in Rodeo and Full Screen. `none`: a small Rodeo mark only |
+
+Every message is a plain object with `rodeo: 1` and a `type`.
+
+Viewer → host (`window.parent.postMessage(msg, "*")`, only when framed; the data is the share's public data):
+
+- `{ rodeo: 1, type: "ready", name, owner /* string or null */, view: "2d" | "3d", layers: [{ id, name, kind }] }`
+- `{ rodeo: 1, type: "view", view: "2d" | "3d" }` whenever 2D/3D changes
+- `{ rodeo: 1, type: "selection", objects: [{ id, name, type, layer, className }] }` (at most 50; clicks select in 3D)
+- `{ rodeo: 1, type: "error", message }`
+
+Host → viewer (accepted only when `event.source === window.parent`):
+
+- `{ rodeo: 1, type: "setView", view: "2d" | "3d", preset?: <preset> }`
+- `{ rodeo: 1, type: "fit" }`
+- `{ rodeo: 1, type: "rotate", on: boolean }`
+- `{ rodeo: 1, type: "layer", layer: "<id, name, sheet number or title>" }`
+
+Nothing a host sends can change the drawing, sign in, or navigate.
 
 ### Crit mode
 
@@ -221,6 +266,17 @@ To change the worker, build the editor and deploy it: `cd web && npm run build &
 modal deploy cloudrender/worker.py`. The worker bakes in `web/dist`, so render changes reach
 cloud renders only when it is deployed again. To try a job without the server:
 `modal run cloudrender/worker.py --pack job.pack.gz`.
+
+### Voice commands
+
+The editor turns speech into text in the browser where it can (Chrome, Edge, Safari) and sends
+only the words to the agent (`/ai/chat`). Where it can't, it records while the voice key is held
+and sends the recording here, which passes it once to the speech model and keeps nothing.
+`GET /config` says whether it can: `voice: { transcribe, by }`.
+
+| | |
+| --- | --- |
+| `POST /voice/transcribe` `VoiceTranscribeRequest` | signed in; 16 kHz mono 16-bit WAV in base64, up to 30 s; `VoiceTranscript` `{ text, charged, balance }`, charged in the credit's currency with the model `voice <model>` in the ledger. 400 `bad_audio`, 402 `credit`, 403 `forbidden`/`plan` (`AI_ACCESS`), 413 `too_long`, 429 `rate_limited`, 503 `not_configured` or `provider_down` |
 
 ### Feedback
 

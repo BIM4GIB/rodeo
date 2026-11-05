@@ -6,7 +6,7 @@ import { store } from "../../app/state.ts";
 import { methodNames } from "./apidocs.ts";
 import { docMembers, editMethods } from "./tools.ts";
 
-const COMMON = `
+export const COMMON = `
 ## The drawing
 - Rodeo opens, edits and saves Vectorworks (.vwx) drawings in the browser. It has design layers (the model, each with a scale, an elevation and maybe a story) and sheet layers (pages with viewports onto design layers), classes (which set visibility and looks across layers), symbols, resources, cameras, lights, walls, slabs and plug-in objects (doors, windows and more).
 - Lengths are world millimetres whatever the document's display units. The plan's x runs right and y up; in 3D z is up. Angles are degrees, counter-clockwise.

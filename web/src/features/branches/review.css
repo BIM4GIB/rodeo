@@ -1,0 +1,370 @@
+/* Merge requests, the merge dialogs and blame: the palettes' rows, chips and discussion, and the
+   conflict picker. Solid surfaces from tokens.css only: no glass, blur or translucent panels. */
+
+/* ---- the Merge Requests palette ---- */
+
+.br-reqs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.br-reqs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.br-req-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.br-req-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.br-req-row:hover {
+  background: var(--fill-hover);
+}
+
+.br-req-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.br-req-title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.br-req-meta {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A request's state, as a solid chip */
+.br-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.br-state-open {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.br-state-merged {
+  background: var(--br-added);
+  color: #ffffff;
+}
+
+.br-state-closed {
+  background: var(--fill-strong);
+  color: var(--text-soft);
+}
+
+/* ---- a request's detail ---- */
+
+.br-crit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.br-crit .br-note {
+  margin: 0;
+}
+
+.br-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.br-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.br-detail-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.br-detail-body {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.br-section {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.br-approval {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.br-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.br-link {
+  align-self: flex-start;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: default;
+}
+
+.br-link:hover {
+  background: var(--fill-hover);
+}
+
+.br-back {
+  padding-left: 0;
+  font-size: 12px;
+}
+
+/* ---- the discussion: the branch's general comments ---- */
+
+.br-thread-list,
+.br-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.br-replies {
+  margin-top: 6px;
+  padding-left: 12px;
+}
+
+.br-comment-root {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.br-comment {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.br-comment-head {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.br-comment-body {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.br-reply {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.br-reply .btn {
+  flex: none;
+}
+
+.br-body {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.br-reply .br-body {
+  flex: 1;
+}
+
+/* ---- the merge dialogs ---- */
+
+.menu-dialog.br-merge-dialog {
+  width: min(560px, 100%);
+}
+
+.br-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.br-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.br-conflict-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.br-conflict-what {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.br-conflict-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.br-conflict-pick label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.br-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* ---- blame ---- */
+
+.br-blame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+.br-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.br-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.br-author:hover {
+  background: var(--fill-hover);
+}
+
+.br-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.br-author-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.br-blame-info {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}

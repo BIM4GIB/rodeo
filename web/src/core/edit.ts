@@ -1087,6 +1087,23 @@ export class Session implements EditSession {
     return out;
   }
 
+  get undoDepth(): number {
+    return this.undoStack.length;
+  }
+
+  joinSince(depth: number): void {
+    if (this.batching || depth < 0 || this.undoStack.length - depth < 2) return;
+    const steps = this.undoStack.slice(depth);
+    if (steps.some((s) => s.header)) return;
+    // the records as they were before the first of the steps: each turned back, newest first
+    let before: Uint8Array[] = this.doc.datas;
+    for (let i = steps.length - 1; i >= 0; i--) before = spliced(before, steps[i].start, steps[i].added.length, steps[i].removed);
+    // peers and step listeners already have each step; only this session's undo changes, as in followOn
+    this.undoStack.splice(depth);
+    const kind = steps.every((s) => s.kind === steps[0].kind) ? steps[0].kind : "all";
+    this.record(before, this.doc.datas, kind, steps.flatMap((s) => s.ids));
+  }
+
   // ---- document settings ---------------------------------------------------------
 
   setUnits(name: string): void {

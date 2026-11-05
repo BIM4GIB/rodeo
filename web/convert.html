@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- the page's links and assets are written relative to the root, also on /convert/<from>-to-<to> -->
+    <base href="/" />
+    <!-- convert:head -->
+    <title>Convert CAD files online, free and private | Rodeo</title>
+    <meta name="description" content="Convert Revit, DWG, SketchUp, IFC, Rhino, Archicad and Vectorworks files to IFC, PDF, DXF, glTF, OBJ, STL and more, free in your browser. Nothing is uploaded." />
+    <!-- /convert:head -->
+    <meta name="theme-color" content="#1d1d1d" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- the editor's theme, before the first paint -->
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("openvwx.theme") || "dark";
+      } catch {
+        document.documentElement.dataset.theme = "dark";
+      }
+    </script>
+    <link rel="stylesheet" href="./src/convert/page/page.css" />
+  </head>
+  <body>
+    <main class="cv">
+      <header class="cv-top">
+        <a class="cv-brand" href="/"><img src="/icon.svg" alt="" width="24" height="24" />Rodeo</a>
+        <a class="cv-top-link" href="/">Open the editor</a>
+      </header>
+      <section class="cv-hero">
+        <!-- convert:intro -->
+        <h1>Convert CAD and 3D files</h1>
+        <p class="cv-lede">Drop Revit, AutoCAD, SketchUp, Rhino, Archicad, IFC or Vectorworks files here and download IFC, PDF, DXF, glTF, OBJ, STL, SketchUp and more. Rodeo converts them in your browser, so your files never leave your computer.</p>
+        <!-- /convert:intro -->
+        <div id="cv-app"></div>
+        <noscript><p class="cv-note">The converter needs JavaScript: it runs in your browser so your files stay on your computer.</p></noscript>
+      </section>
+      <section class="cv-section" aria-labelledby="cv-links-h">
+        <h2 id="cv-links-h">Popular conversions</h2>
+        <!-- convert:links -->
+        <!-- /convert:links -->
+      </section>
+      <section class="cv-section">
+        <h2>What Rodeo reads and writes</h2>
+        <!-- convert:formats -->
+        <!-- /convert:formats -->
+      </section>
+      <section class="cv-section cv-faq">
+        <h2>Questions</h2>
+        <details>
+          <summary>Are my files uploaded?</summary>
+          <p>No. The converter runs in your browser: your files are read and written on your computer and never sent anywhere.</p>
+        </details>
+        <details>
+          <summary>Is it free?</summary>
+          <p>Yes, with no sign-up and no limits beyond your computer's memory. Rodeo is open source.</p>
+        </details>
+        <details>
+          <summary>Can I convert to DWG?</summary>
+          <p>Not yet: Rodeo doesn't write DWG. Convert to DXF, which AutoCAD and every DWG app open.</p>
+        </details>
+        <details>
+          <summary>How big can a file be?</summary>
+          <p>As big as your browser's memory allows. Very large Revit models do better with the command line, which has more room.</p>
+        </details>
+        <details>
+          <summary>Can I convert many files, or script it?</summary>
+          <p>Yes: <code class="cv-cli">npx @rodeobuild/cli convert "plans/*.dwg" --to pdf --out pdfs</code> converts a folder at a time on your computer, and --json prints results for scripts.</p>
+        </details>
+      </section>
+      <footer class="cv-foot">
+        <p>On the command line: <code class="cv-cli">npx @rodeobuild/cli convert model.rvt model.ifc</code></p>
+        <p>Rodeo is free and open source (AGPL-3.0): <a href="https://github.com/rodeobuild/rodeo">github.com/rodeobuild/rodeo</a>.</p>
+        <p class="cv-note">Revit and AutoCAD are trademarks of Autodesk, Inc.; SketchUp of Trimble Inc.; Rhino of Robert McNeel &amp; Associates; Archicad of Graphisoft SE; Vectorworks of Vectorworks, Inc. Rodeo is not affiliated with any of them.</p>
+      </footer>
+    </main>
+    <script type="module" src="./src/convert/page/main.ts"></script>
+  </body>
+</html>

@@ -206,6 +206,8 @@ async function runTool(opts: RunOptions, l: Loop, byName: ReadonlyMap<string, To
       if (opts.signal.aborted) out = { text: "Stopped by the user.", error: true };
       else out = { text: `Error: ${errorMessage(err)}`, error: true };
     }
+    // a tool Stop cuts short can still return (a killed script's worker answers), so it says it stopped
+    if (opts.signal.aborted) out = { text: "Stopped by the user.", error: true };
   }
   onEvent({ kind: "result", sub: l.sub, id: call.id, ok: !out.error, text: out.text, images: out.images ?? [], files: out.files ?? [] });
   return out;

@@ -19,7 +19,7 @@ import { readJson } from "./http.ts";
 import { saveSetting, setting } from "./settings.ts";
 import { cleanLine, DAY, HOUR, inMs, MINUTE, newToken, nowIso, sha256Hex } from "./util.ts";
 
-const ENTRIES: readonly VisitEntry[] = ["editor", "share", "invite", "embed", "app"];
+const ENTRIES: readonly VisitEntry[] = ["editor", "share", "invite", "embed", "app", "convert"];
 const DEVICES = ["phone", "tablet", "desktop"] as const;
 /** how the check after a file comes in went: shown, shown for a file that failed, then the answer */
 const CHECK_ANSWERS: readonly string[] = ["asked", "failed", "ok", "report", "closed"];

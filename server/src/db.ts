@@ -293,7 +293,224 @@ ALTER TABLE feedback ADD COLUMN file_size INTEGER;
 ALTER TABLE feedback ADD COLUMN file_received INTEGER NOT NULL DEFAULT 0;
 `;
 
-const MIGRATIONS: readonly string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8];
+// Branches, the gallery, link previews and agents (lineage.ts, merges.ts, gallery*.ts, embed.ts,
+// mcp/store.ts).
+//
+// Where a drawing came from (a gallery fork or a branch shares its source version's blob), a branch's
+// name and the drawing it and Main last agreed on (base_blob: the common ancestor a merge needs, kept
+// here because Main's old versions are pruned); merge requests and approvals. A merge request's
+// discussion is the branch drawing's comments.
+//
+// The gallery: drawings their owners published, one row per drawing ever (unpublishing keeps it),
+// each pinning one version that is kept from pruning while it is there and shown through its own
+// share link (shares, allow_download on); the tags; where each fork came from, with the title,
+// credit and licence it was taken under, kept for its credit after the original goes; and reports.
+//
+// Link previews: each share link's preview pictures, a still (poster, PNG or JPEG, for Open Graph,
+// oEmbed and Markdown) and a turning GIF (turntable), kept as blobs. No foreign key to shares:
+// embed.ts sweeps the rows of revoked or deleted links and deletes their blobs itself, since
+// blobs.ts's reference count does not look here.
+//
+// Agents (MCP): personal access tokens an outside agent (Claude Code, Cursor...) sends to /mcp; only
+// the token's SHA-256 is kept, and prefix is its first characters, shown to tell tokens apart. And the
+// tools and instructions a user's Rodeo tab last offered agents, so an agent that connects while no
+// tab is open still sees them.
+const SCHEMA_V9 = `
+ALTER TABLE files ADD COLUMN parent_file_id TEXT REFERENCES files(id) ON DELETE SET NULL;
+ALTER TABLE files ADD COLUMN parent_version_id TEXT;
+ALTER TABLE files ADD COLUMN lineage TEXT;
+ALTER TABLE files ADD COLUMN branch_name TEXT;
+ALTER TABLE files ADD COLUMN base_blob TEXT;
+ALTER TABLE files ADD COLUMN created_by TEXT REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX files_parent ON files(parent_file_id, lineage);
+CREATE INDEX files_base_blob ON files(base_blob);
+
+CREATE TABLE merge_requests (
+  id TEXT PRIMARY KEY,
+  source_file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  target_file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'open',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  merged_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  merged_at TEXT,
+  merged_version_id TEXT,
+  source_version_id TEXT
+);
+CREATE UNIQUE INDEX merge_requests_open ON merge_requests(source_file_id) WHERE state = 'open';
+CREATE INDEX merge_requests_target ON merge_requests(target_file_id, state, updated_at);
+
+CREATE TABLE merge_approvals (
+  request_id TEXT NOT NULL REFERENCES merge_requests(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source_version_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (request_id, user_id)
+);
+
+CREATE TABLE gallery_entries (
+  id TEXT PRIMARY KEY,
+  file_id TEXT NOT NULL UNIQUE REFERENCES files(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  version_id TEXT REFERENCES versions(id) ON DELETE SET NULL,
+  share_token TEXT,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  licence TEXT NOT NULL,
+  credit_name TEXT NOT NULL,
+  official INTEGER NOT NULL DEFAULT 0,
+  featured_at TEXT,
+  size INTEGER NOT NULL DEFAULT 0,
+  cover_blob TEXT,
+  cover_type TEXT,
+  published_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  unpublished_at TEXT,
+  hidden_at TEXT,
+  hidden_reason TEXT
+);
+CREATE INDEX gallery_entries_owner ON gallery_entries(owner_id);
+CREATE INDEX gallery_entries_published ON gallery_entries(published_at);
+CREATE INDEX gallery_entries_version ON gallery_entries(version_id);
+CREATE UNIQUE INDEX gallery_entries_share ON gallery_entries(share_token) WHERE share_token IS NOT NULL;
+
+CREATE TABLE gallery_tags (
+  entry_id TEXT NOT NULL REFERENCES gallery_entries(id) ON DELETE CASCADE,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (entry_id, tag)
+);
+CREATE INDEX gallery_tags_tag ON gallery_tags(tag);
+
+CREATE TABLE gallery_forks (
+  file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+  entry_id TEXT REFERENCES gallery_entries(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  credit_name TEXT NOT NULL,
+  licence TEXT NOT NULL,
+  forked_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  forked_at TEXT NOT NULL
+);
+CREATE INDEX gallery_forks_entry ON gallery_forks(entry_id);
+CREATE INDEX gallery_forks_by ON gallery_forks(forked_by);
+
+CREATE TABLE gallery_reports (
+  id TEXT PRIMARY KEY,
+  entry_id TEXT NOT NULL REFERENCES gallery_entries(id) ON DELETE CASCADE,
+  reporter_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  email TEXT,
+  reason TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE INDEX gallery_reports_entry ON gallery_reports(entry_id, resolved_at);
+CREATE INDEX gallery_reports_reporter ON gallery_reports(reporter_id);
+CREATE UNIQUE INDEX gallery_reports_once ON gallery_reports(entry_id, reporter_id) WHERE reporter_id IS NOT NULL AND resolved_at IS NULL;
+
+CREATE TABLE share_media (
+  token TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  blob TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  size INTEGER NOT NULL,
+  version_id TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (token, kind)
+);
+
+CREATE TABLE IF NOT EXISTS mcp_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  prefix TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  last_client TEXT
+);
+CREATE INDEX IF NOT EXISTS mcp_tokens_user ON mcp_tokens(user_id);
+
+CREATE TABLE IF NOT EXISTS mcp_tools (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  tools_json TEXT NOT NULL,
+  instructions TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
+// OAuth sign-in for agents: apps that registered themselves, the apps people allowed, codes and
+// tokens (hashes only). The same SQL as OAUTH_SCHEMA in server/src/oauth/shared.ts: keep the two the same.
+const SCHEMA_V10 = `
+-- OAuth sign-in for agents (server/src/oauth). Apps that registered themselves at /oauth/register
+-- (dynamic client registration). Apps named by a metadata document's address (claude.ai, ChatGPT)
+-- aren't stored: Rodeo fetches their document.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  client_uri TEXT,
+  redirect_uris_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS oauth_clients_created ON oauth_clients(created_at);
+
+-- An app a person allowed: one row per Allow whose code was redeemed. Deleting it deletes its tokens.
+CREATE TABLE IF NOT EXISTS oauth_grants (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  last_client TEXT
+);
+CREATE INDEX IF NOT EXISTS oauth_grants_user ON oauth_grants(user_id);
+CREATE INDEX IF NOT EXISTS oauth_grants_client ON oauth_grants(client_id);
+
+-- Authorization codes, by SHA-256: single use, five minutes, bound to the app, the redirect address,
+-- the PKCE challenge and the resource. grant_id is set when the code is redeemed, so a second
+-- redemption can remove what the first one made.
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  challenge TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  grant_id TEXT REFERENCES oauth_grants(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS oauth_codes_created ON oauth_codes(created_at);
+
+-- Access and refresh tokens, by SHA-256 only. A used refresh token keeps the hash of the one that
+-- replaced it (next_hash), so a second use can be told from a retry.
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  hash TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('access', 'refresh')),
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  next_hash TEXT
+);
+CREATE INDEX IF NOT EXISTS oauth_tokens_grant ON oauth_tokens(grant_id);
+CREATE INDEX IF NOT EXISTS oauth_tokens_expires ON oauth_tokens(expires_at);
+`;
+
+const MIGRATIONS: readonly string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10];
 
 let conn: DatabaseSync | null = null;
 const statements = new Map<string, StatementSync>();

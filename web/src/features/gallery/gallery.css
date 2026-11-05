@@ -1,0 +1,284 @@
+/* The gallery in the editor: the Publish to Gallery dialog, the Share dialog's Gallery row, and the
+   top bar's chip on a drawing forked from the gallery. The dialog shell is menubar.css's and the
+   colours are the tokens in styles.css, so both themes follow. Panels are solid: no glass, no blur. */
+
+/* ---- the publish dialog ----------------------------------------------- */
+
+.menu-dialog.gallery-dialog {
+  width: min(560px, 100%);
+}
+
+.gallery-dialog .menu-dialog-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  margin: 0;
+}
+
+.gallery-dialog .menu-dialog-check {
+  margin: 0;
+}
+
+.gallery-form,
+.gallery-tags-block,
+.gallery-licence-block,
+.gallery-cover,
+.gallery-admin {
+  display: grid;
+  gap: 10px;
+}
+
+.gallery-dialog .menu-dialog-heading {
+  margin: 0;
+}
+
+.gallery-dialog .gallery-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.gallery-dialog textarea.gallery-input {
+  height: auto;
+  min-height: 84px;
+  padding: 7px 9px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.gallery-dialog .gallery-input:disabled {
+  color: var(--text-2);
+}
+
+.gallery-dialog .gallery-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-active);
+}
+
+/* the tags: the typed list, then the suggestions as chips that show which are on */
+.gallery-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gallery-tag-chip {
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.gallery-tag-chip:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.gallery-tag-chip.on {
+  background: var(--select);
+  color: var(--text);
+}
+
+/* the licences: one card each, the radio, the name, its link, and what it allows beneath */
+.gallery-licences {
+  display: grid;
+  gap: 6px;
+}
+
+.gallery-licence {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.gallery-licence.off {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gallery-licence > input {
+  grid-row: 1 / span 2;
+  margin: 3px 0 0;
+}
+
+.gallery-licence-name {
+  grid-column: 2;
+  grid-row: 1;
+  font-weight: 600;
+}
+
+.gallery-licence-link {
+  grid-column: 3;
+  grid-row: 1;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.gallery-licence-summary {
+  grid-column: 2 / span 2;
+  grid-row: 2;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+/* the warning a first publish opens with: a solid card with a warning edge */
+.gallery-warning {
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.gallery-warning-head {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.gallery-warning-text {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+/* the cover: the view it is taken from, and the preview at the card's size */
+.gallery-cover-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.gallery-cover-preview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1200 / 630;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.gallery-cover-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* a published drawing: its status line, and a version the gallery does not show yet */
+.gallery-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gallery-version {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--fill);
+}
+
+.gallery-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.gallery-error:empty {
+  display: none;
+}
+
+.gallery-danger {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.gallery-done {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---- the Share dialog's Gallery row ----------------------------------- */
+
+.gallery-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gallery-share-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ---- the top bar's chip on a fork ------------------------------------- */
+
+.gallery-forked {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  background: var(--fill-strong);
+  color: var(--text-soft);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gallery-forked:not([href]) {
+  cursor: default;
+}
+
+.gallery-forked:hover {
+  color: var(--text);
+}
+
+.gallery-forked svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.gallery-forked-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .gallery-forked {
+    display: none;
+  }
+}

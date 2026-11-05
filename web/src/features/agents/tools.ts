@@ -173,7 +173,7 @@ const RENDER_MODES: readonly RenderMode[] = ["shaded", "textured", "wireframe", 
 // ---- the API the agents may call -------------------------------------------------
 
 /** edits that aren't drawing changes: listeners, collaboration and saving bookkeeping */
-const NOT_EDITS = new Set(["onChange", "onStep", "markSaved", "setLayerGuard", "applyRemote", "batch"]);
+const NOT_EDITS = new Set(["onChange", "onStep", "markSaved", "setLayerGuard", "applyRemote", "batch", "joinSince"]);
 
 /** Every edit an agent may make. */
 export function editMethods(): string[] {

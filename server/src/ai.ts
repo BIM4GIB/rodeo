@@ -263,7 +263,7 @@ function metered(body: ReadableStream<Uint8Array>, end: (seen: Seen) => Promise<
 }
 
 /** What OpenRouter charged for a generation, in dollars, once its record is there; null when it never is. */
-async function lookupCost(ai: AiConfig, id: string): Promise<number | null> {
+export async function lookupCost(ai: Pick<AiConfig, "baseUrl" | "apiKey">, id: string): Promise<number | null> {
   for (const wait of LOOKUP_WAITS) {
     await new Promise((resolve) => setTimeout(resolve, wait));
     try {

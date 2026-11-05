@@ -8,6 +8,7 @@ import { isAdmin, requireUser } from "./auth.ts";
 import { config, type Provider } from "./config.ts";
 import { creditTerms } from "./credit.ts";
 import { renderTerms } from "./render.ts";
+import { voiceTerms } from "./voice.ts";
 import { get, run } from "./db.ts";
 import { readJson, readJsonAny } from "./http.ts";
 import { cleanBody, cleanLine, fail, newId, nowIso } from "./util.ts";
@@ -156,6 +157,7 @@ export function registerSettings(app: Hono): void {
       ai: config.ai ? { planner: config.ai.planner, worker: config.ai.worker, models: config.ai.models, credit: creditTerms() } : null,
       credit: creditTerms(),
       render: renderTerms(),
+      voice: voiceTerms(),
       maxUploadBytes: config.maxUploadBytes,
     };
     return c.json(body);

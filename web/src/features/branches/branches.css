@@ -1,0 +1,239 @@
+/* Branches: the chip beside a cloud drawing's name, and the Compare palette. Solid surfaces from
+   tokens.css only: no glass, blur or translucent panels. */
+
+:root {
+  --br-added: #2f9e5b;
+  --br-changed: #d98a00;
+  --br-removed: #e5484d;
+}
+
+.br-kind-added {
+  --br-kind: var(--br-added);
+}
+
+.br-kind-changed {
+  --br-kind: var(--br-changed);
+}
+
+.br-kind-removed {
+  --br-kind: var(--br-removed);
+}
+
+/* ---- the chip in the top bar ---- */
+
+.br-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 140px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--fill-strong);
+  color: var(--text-soft);
+  font-size: 11px;
+  cursor: default;
+}
+
+.br-chip:hover {
+  background: var(--btn);
+}
+
+.br-chip[hidden] {
+  display: none;
+}
+
+.br-chip-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.br-chip-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.br-chip-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- the Compare palette ---- */
+
+.br-compare {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  font-size: 12px;
+}
+
+.br-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.br-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.br-counts {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.br-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--br-kind) 16%, var(--surface));
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.br-notice {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--warn) 18%, var(--surface));
+  color: var(--text);
+  font-size: 11px;
+}
+
+.br-notice-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.br-check {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
+}
+
+.br-onion {
+  display: grid;
+  flex: none;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.br-onion-end {
+  overflow: hidden;
+  max-width: 120px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.br-slider {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.br-changes {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.br-layer {
+  margin: 8px 0 2px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.br-group summary {
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: default;
+}
+
+.br-group summary:hover {
+  background: var(--fill-hover);
+}
+
+.br-group .br-note {
+  padding: 2px 6px;
+}
+
+.br-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 6px 0 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.br-row:hover {
+  background: var(--fill-hover);
+}
+
+.br-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.br-row-note {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.br-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--br-kind, var(--text-3));
+}
+
+.br-foot {
+  flex: none;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}

@@ -47,7 +47,7 @@ export class ApiError extends Error {
 
 type Body = unknown;
 
-async function request(method: string, path: string, body?: Body, headers: Record<string, string> = {}): Promise<Response> {
+export async function request(method: string, path: string, body?: Body, headers: Record<string, string> = {}): Promise<Response> {
   const h: Record<string, string> = { "X-Requested-With": "openvwx", ...headers };
   let payload: BodyInit | undefined;
   if (body instanceof Uint8Array) {
@@ -110,7 +110,7 @@ function megabytes(n: number): string {
  * Sends a drawing's or a job's bytes for `method path`: in one request when small, else in parts
  * first and then the call itself with X-Upload-Id. Bytes larger than the server takes fail at once.
  */
-async function sendBytes(
+export async function sendBytes(
   method: string,
   path: string,
   bytes: Uint8Array | Blob,
@@ -160,11 +160,11 @@ async function sendPart(at: string, offset: number, part: Blob | Uint8Array, hea
   }
 }
 
-async function json<T>(method: string, path: string, body?: Body, headers?: Record<string, string>): Promise<T> {
+export async function json<T>(method: string, path: string, body?: Body, headers?: Record<string, string>): Promise<T> {
   return (await (await request(method, path, body, headers)).json()) as T;
 }
 
-async function bytesOf(res: Response): Promise<Uint8Array> {
+export async function bytesOf(res: Response): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer());
 }
 

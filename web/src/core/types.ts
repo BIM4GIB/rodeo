@@ -1412,6 +1412,14 @@ export interface EditSession {
    * brings with it, such as a drawing kept up with what it's drawn from. With no step to join it's a batch.
    */
   followOn<T>(fn: () => T): T;
+  /** How many steps undo can turn back now: a mark for joinSince. */
+  readonly undoDepth: number;
+  /**
+   * Joins the steps made since undo was `depth` deep into one, so one undo turns them all back (a voice
+   * command the agent carried out in several edits). Nothing when there are fewer than two, while a
+   * batch runs, or when one of them changed the document's settings.
+   */
+  joinSince(depth: number): void;
   onChange(listener: (e: ChangeEvent) => void): () => void;
   markSaved(): void;
   /** Called with each change to the record list once it is made (edits, undo, redo); not for applyRemote. */

@@ -1577,6 +1577,27 @@ export class View3D {
     return box.isEmpty() ? null : { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] };
   }
 
+  /** The box round each of objects `ids` that is drawn, in one pass over the faces (a box per object, as Compare outlines changes). */
+  boundsEach(ids: ReadonlySet<string>): Map<string, { readonly min: Vec3; readonly max: Vec3 }> {
+    const boxes = new Map<string, THREE.Box3>();
+    const p = new THREE.Vector3();
+    if (ids.size) {
+      for (const g of this.faces) {
+        const pos = g.mesh.geometry.getAttribute("position");
+        for (const run of g.runs) {
+          const id = this.objectIds[run.obj];
+          if (!ids.has(id)) continue;
+          let box = boxes.get(id);
+          if (!box) boxes.set(id, (box = new THREE.Box3()));
+          for (let i = run.start * 3; i < run.end * 3; i++) box.expandByPoint(p.fromBufferAttribute(pos, i));
+        }
+      }
+    }
+    const out = new Map<string, { readonly min: Vec3; readonly max: Vec3 }>();
+    for (const [id, box] of boxes) out.set(id, { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] });
+    return out;
+  }
+
   /** The box round the faces of objects `ids` (empty when none is drawn). */
   private objectsBox(ids: ReadonlySet<string>): THREE.Box3 {
     const box = new THREE.Box3();

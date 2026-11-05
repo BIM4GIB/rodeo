@@ -1,0 +1,950 @@
+/* The gallery page (gallery.html): the editor's tokens and its solid Spline-style panels, laid out for
+   a phone first and widened for a desk. Surfaces are solid: no glass, blur or translucency. The one
+   transparent thing is the dim behind a dialog, as in the editor. Colours come from tokens.css only,
+   so both themes follow it. */
+
+@import "../../../tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  font: 15px/1.5 var(--font);
+  color: var(--text);
+  background: var(--chrome);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- page frame ------------------------------------------------------------------ */
+
+.gal {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.gal-wrap {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+
+.gal-main {
+  flex: 1 0 auto;
+  min-width: 0;
+  padding-top: 28px;
+  padding-bottom: 8px;
+}
+
+.gal-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.gal-head-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.gal-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.gal-brand img {
+  width: 22px;
+  height: 22px;
+}
+
+.gal-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.gal-search input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.gal-search input::placeholder {
+  color: var(--text-3);
+}
+
+.gal-head-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.gal-account {
+  display: flex;
+  align-items: center;
+}
+
+.gal-me {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.gal-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--select);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.gal-me-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gal-foot {
+  margin-top: 48px;
+  border-top: 1px solid var(--chrome-border);
+}
+
+.gal-foot-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-top: 20px;
+  padding-bottom: 28px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.gal-foot-links {
+  display: flex;
+  gap: 16px;
+}
+
+.gal-foot-links a {
+  color: var(--text-2);
+}
+
+/* ---- controls -------------------------------------------------------------------- */
+
+.gal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* a plain hover lays a faint tint over the button's own fill, so it reads in both themes */
+.gal-btn:hover:not(:disabled) {
+  background: linear-gradient(var(--fill-hover), var(--fill-hover)), var(--btn);
+}
+
+.gal-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.gal-btn.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.gal-btn.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+.gal-btn.danger {
+  color: var(--danger);
+}
+
+.gal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.gal-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.gal-icon svg {
+  display: block;
+}
+
+.gal-input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+textarea.gal-input {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.gal-email {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gal-email .gal-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.gal-field {
+  display: grid;
+  gap: 6px;
+}
+
+.gal-field > span {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.gal-fieldset {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.gal-fieldset legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.gal-radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.gal-radio input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.gal-muted {
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.gal-error,
+.gal-modal-body .gal-error {
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.gal-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- messages and the loading line ------------------------------------------------- */
+
+.gal-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 0;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.gal-message {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 420px;
+  margin: 16vh auto 0;
+  padding: 0 16px;
+  text-align: center;
+}
+
+.gal-message h1 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.gal-message p {
+  color: var(--text-2);
+}
+
+.gal-message-mark {
+  width: 44px;
+  height: 44px;
+}
+
+/* ---- the listing ----------------------------------------------------------------- */
+
+.gal-h1 {
+  font-size: clamp(26px, 4vw, 36px);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.gal-lede {
+  max-width: 62ch;
+  margin-top: 10px;
+  color: var(--text-soft);
+  font-size: 16px;
+}
+
+.gal-note {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.gal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 22px;
+}
+
+.gal-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.gal-chip:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.gal-chip.on {
+  border-color: transparent;
+  background: var(--select);
+  color: var(--text);
+}
+
+.gal-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.gal-sort {
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.gal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+}
+
+.gal-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.gal-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.gal-card:hover {
+  border-color: var(--btn-strong);
+}
+
+.gal-cover {
+  position: relative;
+  aspect-ratio: 1200 / 630;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+
+.gal-cover > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gal-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 56px;
+  font-weight: 600;
+}
+
+.gal-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.gal-card-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+}
+
+.gal-card-body h3 {
+  font-size: 15px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.gal-credit,
+.gal-card-meta,
+.gal-forkof {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.gal-credit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gal-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 4px;
+}
+
+.gal-licence {
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.gal-forks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+
+.gal-picked {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.gal-forkof {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- one drawing ----------------------------------------------------------------- */
+
+.gal-page {
+  display: grid;
+  min-width: 0;
+}
+
+.gal-back {
+  display: inline-flex;
+  justify-self: start;
+  margin-top: 4px;
+  margin-bottom: 14px;
+  color: var(--text-2);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.gal-back:hover {
+  color: var(--text);
+}
+
+.gal-entry {
+  display: grid;
+  gap: 22px;
+  align-items: start;
+  min-width: 0;
+}
+
+.gal-viewer {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--viewport);
+}
+
+.gal-viewer > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gal-viewer > .gal-placeholder {
+  position: absolute;
+  inset: 0;
+}
+
+.gal-viewer > iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.gal-look {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-height: 40px;
+  padding: 8px 18px;
+  box-shadow: var(--shadow);
+}
+
+.gal-viewer-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.gal-side {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.gal-title {
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.gal-by {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
+}
+
+.gal-by a {
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.gal-by a:hover {
+  text-decoration: underline;
+}
+
+.gal-licence-line {
+  display: grid;
+  gap: 4px;
+}
+
+.gal-licence-link {
+  justify-self: start;
+  font-weight: 500;
+}
+
+.gal-meta {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.gal-side .gal-actions {
+  margin-top: 2px;
+}
+
+.gal-owner,
+.gal-admin {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.gal-panel-title {
+  font-weight: 600;
+}
+
+.gal-body {
+  display: grid;
+  gap: 22px;
+  max-width: 760px;
+  min-width: 0;
+  margin-top: 30px;
+}
+
+.gal-description {
+  color: var(--text-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gal-forkof-line {
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.gal-remixes {
+  display: grid;
+  gap: 6px;
+}
+
+.gal-remixes h2 {
+  font-size: 16px;
+}
+
+.gal-tree,
+.gal-tree .gal-tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gal-tree .gal-tree {
+  margin: 2px 0 2px 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+.gal-tree li {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.gal-tree li .gal-muted {
+  margin-left: 2px;
+}
+
+.gal-report-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.gal-report-link:hover {
+  color: var(--text-2);
+}
+
+.gal-reports {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gal-report {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.gal-report p {
+  color: var(--text-soft);
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- dialogs ----------------------------------------------------------------------- */
+
+.gal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.gal-modal {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 14px;
+  background: var(--chrome);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.gal-modal:focus {
+  outline: none;
+}
+
+.gal-modal h2 {
+  margin-bottom: 14px;
+  font-size: 18px;
+}
+
+.gal-modal-body {
+  display: grid;
+  gap: 12px;
+}
+
+.gal-modal-body > p {
+  color: var(--text-soft);
+}
+
+.gal-modal-body .gal-credit-line {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.gal-modal-body .gal-foot-row {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.gal-signin {
+  display: grid;
+  gap: 8px;
+}
+
+.gal-signin .gal-btn {
+  width: 100%;
+}
+
+/* ---- phones ------------------------------------------------------------------------ */
+
+@media (max-width: 639px) {
+  .gal-wrap {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  .gal-main {
+    padding-top: 20px;
+  }
+
+  .gal-head-inner {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+  }
+
+  .gal-search {
+    order: 3;
+    flex: 1 0 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .gal-head-end {
+    margin-left: auto;
+  }
+
+  .gal-me-name {
+    display: none;
+  }
+
+  .gal-search input,
+  .gal-input,
+  .gal-sort {
+    font-size: 16px;
+  }
+
+  .gal-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .gal-h1 {
+    font-size: 28px;
+  }
+
+  .gal-title {
+    font-size: 22px;
+  }
+
+  .gal-btn {
+    min-height: 40px;
+  }
+
+  .gal-card-body {
+    padding: 10px 12px 12px;
+  }
+
+  .gal-backdrop {
+    padding: 12px;
+  }
+
+  .gal-modal {
+    padding: 16px;
+  }
+}
+
+@media (min-width: 960px) {
+  .gal-entry {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 32px;
+  }
+}

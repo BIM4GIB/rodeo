@@ -22,6 +22,83 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-05T12:30:00Z",
+    "agent-sign-in",
+    "Connect Claude and ChatGPT by signing in",
+    `Add Rodeo to Claude, Claude Code, Cursor or ChatGPT with its address and sign in: no token to copy.
+- In Claude: Settings › Connectors › Add custom connector with https://rodeo.build/mcp. It works in claude.ai and the desktop and phone apps.
+- In Claude Code: claude mcp add --transport http rodeo https://rodeo.build/mcp, then /mcp to sign in.
+- Rodeo shows which app is asking and where it sends you before you press Allow.
+- Window › Connect an Agent… lists the apps you connected and when each was last used, and Remove ends one at once.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:25:00Z",
+    "branches",
+    "Branches, compare and merge",
+    `Try ideas on a branch of a cloud drawing, see exactly what changed, and merge it back.
+- File › Branches › New Branch… starts a branch instantly; the chip beside the drawing's name switches between Main and its branches.
+- Compare… shows the drawing against Main, a branch, a saved version or a file: added in green, changed in amber, removed as red ghosts, with an onion-skin slider and a list of every change.
+- Merge requests with a description, discussion and approvals; Merge… combines the drawings object by object and asks only about objects changed on both sides.
+- Blame colours every object by who last changed it.`,
+    "cloud",
+  ),
+  release(
+    "2026-11-05T12:24:00Z",
+    "voice-commands",
+    "Voice commands",
+    `Hold Space, say what to do, and click to point while you speak: Rodeo's agent does it.
+- "Move this door here", "make that wall 200 thicker", "what's on this layer?": the agent gets your words, the selection and the pins you dropped, and its changes undo in one step.
+- Works in Chrome, Edge and Safari, and in Firefox and Brave, where Rodeo's server turns your speech into text.
+- Needs you signed in, and uses AI credit as the Agents panel does. Tools › Voice Commands… sets the key, the language and the agent's model; touch screens get a microphone button.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:23:00Z",
+    "connect-an-agent",
+    "Connect your own agent",
+    `Claude Code, Claude Desktop, Cursor and other AI agents can work in your open drawing while you watch.
+- Window › Connect an Agent… makes a token and shows the line to paste into your agent.
+- The agent reads, looks at, edits, builds, renders and exports with the Agents panel's tools, on its own AI account: no Rodeo credit.
+- A pill in the top bar says what it is doing, with Stop and Resume, and keeps the files it made.
+- npx -y @rodeobuild/cli mcp runs Rodeo for agents on files on your computer, no browser needed.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:22:00Z",
+    "converter",
+    "Convert files without opening them",
+    `Rodeo converts CAD and 3D files: in your browser at rodeo.build/convert, or with one command.
+- Drop Revit, DWG, DXF, SketchUp, IFC, Rhino, Archicad, Vectorworks and other files on rodeo.build/convert and download IFC, PDF, DXF, glTF, OBJ, STL, SketchUp, STEP and more. Nothing is uploaded.
+- A preview shows what came in, in 3D or in plan, with its units, layers, objects and size.
+- Open in Rodeo takes a converted file into the editor. File › Convert Files… opens the converter.
+- npx @rodeobuild/cli convert model.rvt model.ifc converts on your own computer, a folder at a time with --to and --out.`,
+    "announce",
+  ),
+  release(
+    "2026-11-05T12:21:00Z",
+    "gallery",
+    "The Rodeo Gallery",
+    `Publish a cloud drawing to the public gallery, and fork anyone's into your own drawings in one click.
+- File › Publish to Gallery… puts a snapshot of the saved version in the gallery, with a title, tags, a cover and a licence (CC BY 4.0 unless you choose another).
+- rodeo.build/gallery lists them by trending, newest or most forked, with search and tags; each has a viewer, Download and Fork.
+- A fork keeps its credit: the top bar shows what it was forked from, and published forks show in the original's remix tree.
+- Unpublish at any time; Report sends a drawing to Rodeo's admins.`,
+    "announce",
+  ),
+  release(
+    "2026-11-05T12:20:00Z",
+    "embed-anywhere",
+    "Embed drawings anywhere",
+    `Share links are free for everyone, show a picture of the drawing wherever they are pasted, and drawings embed in any page.
+- Pasted into Slack, Discord, iMessage, X or LinkedIn, a share link shows the drawing's name and a picture of it.
+- Share… makes a still and a turning picture for each link, and gives the link, the embed code, a web component and Markdown.
+- Embeds start in 2D or 3D, on a layer or sheet or from a view you choose, can turn slowly, and work on phones.
+- Notion, Medium and Ghost can embed a link through oEmbed, and pages can steer an embed with messages.
+- Shared drawings that allow downloads have Edit a Copy, and ?url= opens a public file from GitHub and similar sites.`,
+    "cloud",
+  ),
+  release(
     "2026-11-04T12:19:00Z",
     "script-symbol-calls",
     "Script calls for symbols",

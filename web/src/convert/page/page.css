@@ -1,0 +1,569 @@
+/* The converter page (rodeo.build/convert and its pairs): a landing page that is also the tool. It
+   uses the editor's tokens and solid Spline-style panels: no glass, blur, translucency or gradients.
+   It is laid out for a phone first, and the wider layout adds the preview beside the file list. */
+
+@import "../../tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  margin: 0;
+  -webkit-text-size-adjust: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cv {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+/* the header: the brand, and a way to the editor */
+.cv-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.cv-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cv-brand img {
+  display: block;
+}
+
+.cv-top-link {
+  color: var(--text-2);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.cv-top-link:hover,
+.cv-brand:hover {
+  color: var(--accent);
+}
+
+/* the headline and the lede */
+.cv-hero {
+  margin-top: 40px;
+}
+
+.cv-hero h1 {
+  font-size: 32px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+
+.cv-lede {
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1.55;
+  margin: 0 0 28px;
+  max-width: 62ch;
+}
+
+@media (max-width: 600px) {
+  .cv {
+    padding-top: 16px;
+  }
+
+  .cv-hero {
+    margin-top: 28px;
+  }
+
+  .cv-hero h1 {
+    font-size: 26px;
+  }
+}
+
+/* the drop zone: a solid panel with a dashed edge, lit while files are dragged over the window */
+.cv-drop {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--text-3);
+  border-radius: var(--radius);
+  padding: 32px;
+  transition: border-color 0.15s;
+}
+
+.cv-drop.is-over {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.cv-or {
+  color: var(--text-2);
+  font-size: 14px;
+  margin: 0;
+}
+
+.cv-privacy {
+  color: var(--text-2);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+/* buttons: the editor's solid look, with the accent for the main action */
+.cv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--btn);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cv-btn:hover:not(:disabled) {
+  background: var(--fill-strong);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.cv-btn:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.cv-btn-primary {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.cv-btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  box-shadow: none;
+  filter: brightness(1.08);
+}
+
+.cv-btn-quiet {
+  background: transparent;
+  color: var(--text-2);
+  padding: 0 10px;
+}
+
+.cv-btn-quiet:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--text);
+}
+
+/* the bar: the format menu and Download all */
+.cv-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 20px 0 0;
+}
+
+.cv-label {
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.cv-select {
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.cv-bar .cv-btn {
+  margin-left: auto;
+}
+
+/* the results: the file list, and the preview beside it on a wide screen */
+.cv-results {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.cv-files {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.cv-file {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.cv-file.is-selected {
+  border-color: var(--accent);
+}
+
+.cv-file-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cv-file-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cv-file-size {
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.cv-file-status {
+  color: var(--text-soft);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.cv-file-notes {
+  color: var(--text-3);
+  font-size: 13px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cv-file-opts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.cv-field,
+.cv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cv-file-opts .cv-select {
+  min-height: 32px;
+  font-size: 13px;
+}
+
+.cv-file-error {
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cv-file-error .cv-btn {
+  min-height: 32px;
+  margin-left: 4px;
+}
+
+.cv-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cv-file-actions a.cv-btn {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.cv-busy {
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.cv-cli {
+  background: var(--surface-2);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  padding: 2px 6px;
+}
+
+.cv-note {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* the preview: the 3D model or the plan, then the facts. The stage has an explicit shape (16:10),
+   which the 3D preview fills, so its canvas gets a height to draw into. */
+.cv-preview {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cv-preview-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cv-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.cv-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cv-tab:hover {
+  background: var(--fill);
+  color: var(--text);
+}
+
+.cv-tab.is-on {
+  background: var(--btn);
+  color: var(--text);
+}
+
+.cv-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+
+.cv-stage > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cv-stage > .cv-note {
+  padding: 16px;
+}
+
+.cv-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  font-size: 14px;
+  margin: 0;
+}
+
+.cv-facts dt {
+  color: var(--text-2);
+}
+
+.cv-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 900px) {
+  .cv-results:has(.cv-preview:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* the sections under the tool: popular conversions, the formats table, the questions, the footer */
+.cv-section {
+  margin-top: 48px;
+}
+
+.cv-section h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+.cv-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cv-links a {
+  display: block;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.cv-links a:hover {
+  color: var(--accent);
+}
+
+/* the formats table scrolls inside its frame, never the page, and fills the frame when it fits */
+.cv-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.cv-table tbody tr:last-child > * {
+  border-bottom: none;
+}
+
+.cv-table th,
+.cv-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.cv-table thead th {
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cv-table tbody th {
+  font-weight: 500;
+}
+
+.cv-table td:nth-child(2) {
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.cv-faq details {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 0 0 8px;
+  padding: 0 16px;
+}
+
+.cv-faq summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 14px 0;
+}
+
+.cv-faq details p {
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0 0 14px;
+}
+
+.cv-foot {
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-top: 56px;
+  padding-top: 20px;
+}
+
+.cv-foot p {
+  margin: 0 0 10px;
+}
+
+/* links in the running text (the FAQ and the footer) are underlined; the buttons and cards carry their own */
+.cv-faq a,
+.cv-foot a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--text-3);
+  text-underline-offset: 3px;
+}
+
+.cv-faq a:hover,
+.cv-foot a:hover {
+  color: var(--accent);
+}

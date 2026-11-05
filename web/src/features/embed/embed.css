@@ -1,0 +1,250 @@
+/* What an embed shows: the drawing, its poster while it loads, the viewer's controls and the card
+   for a drawing that can't be shown. The editor's own chrome is hidden by an allow list, so a panel,
+   menu or dialog that a feature adds later stays out of embeds unless it is named here. */
+
+/* the allow list: body.embed (set when the embed page starts) keeps the drawing and this file's parts */
+/* editor dialogs stay, over the poster: a file opened by ?url= may ask how to import it (an OBJ's units) */
+body.embed > :not(.app, .embed-ui, .embed-poster, .embed-error, .toasts, .menu-dialog-backdrop, script, style) { display: none !important; }
+body.embed > .menu-dialog-backdrop { z-index: 70; }
+body.embed .app > :not(.workspace) { display: none !important; }
+body.embed .workspace > :not(.stage) { display: none !important; }
+body.embed .stage > :not(.canvas-wrap) { display: none !important; }
+body.embed .canvas-wrap > :not(#canvas, #text-host, #view3d-host, .loading) { display: none !important; }
+body.embed .stage { inset: 0 !important; padding: 0 !important; }
+body.embed .canvas-wrap { inset: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+
+/* the poster: the same values as the server's first-paint style, for a page that came without them */
+.embed-poster { position: fixed; inset: 0; z-index: 60; background: #e6e7ea; transition: opacity .25s; }
+.embed-poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.embed-poster-name { position: absolute; left: 12px; top: 10px; margin: 0; font: 600 13px system-ui, sans-serif; color: #333; }
+.embed-poster-status { position: absolute; left: 12px; bottom: 12px; margin: 0; font: 12px system-ui, sans-serif; color: #333; }
+.embed-poster-spin {
+  position: absolute; right: 14px; bottom: 14px; width: 16px; height: 16px;
+  border: 2px solid #b8babf; border-top-color: #333; border-radius: 50%;
+  animation: embed-spin .8s linear infinite;
+}
+.embed-poster.gone { opacity: 0; pointer-events: none; }
+@keyframes embed-spin { to { transform: rotate(360deg); } }
+
+/* the controls float over the drawing: the root lets clicks through, and each part takes them back */
+.embed-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  font: 12px var(--font);
+  color: var(--text);
+}
+
+.embed-ui > * {
+  pointer-events: auto;
+}
+
+/* the name and the layer picker, top left */
+.embed-head {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 20px);
+}
+
+.embed-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--pill-border);
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--text);
+  line-height: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.embed-title-name {
+  font-weight: 600;
+}
+
+.embed-title-owner {
+  margin-left: 6px;
+  color: var(--text-soft);
+}
+
+.embed-layer {
+  flex: none;
+  max-width: 50%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--pill-border);
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--text);
+  font: 12px var(--font);
+}
+
+/* the View toolbar, bottom right */
+.embed-tools {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--pill-border);
+  border-radius: 8px;
+  background: var(--pill);
+}
+
+.embed-seg {
+  display: flex;
+  gap: 2px;
+}
+
+.embed-btn,
+.embed-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: 12px var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.embed-btn-icon {
+  padding: 0;
+}
+
+.embed-btn:hover,
+.embed-seg-btn:hover {
+  background: var(--chrome-border);
+}
+
+.embed-btn[aria-pressed="true"],
+.embed-seg-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Open in Rodeo, bottom left: a pill with the logo; the mark is the logo alone */
+.embed-open {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--pill-border);
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--text);
+  font: 12px var(--font);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.embed-open:hover {
+  background: var(--chrome-border);
+}
+
+.embed-open img,
+.embed-mark img {
+  display: block;
+}
+
+.embed-mark {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  line-height: 0;
+  opacity: 0.8;
+}
+
+.embed-btn:focus-visible,
+.embed-seg-btn:focus-visible,
+.embed-layer:focus-visible,
+.embed-open:focus-visible,
+.embed-mark:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* a phone's bottom row is full: the Open pill keeps its logo and loses its words */
+@media (max-width: 480px) {
+  .embed-open-words {
+    display: none;
+  }
+}
+
+/* touch screens get larger targets */
+@media (pointer: coarse) {
+  .embed-title,
+  .embed-layer,
+  .embed-open {
+    height: 40px;
+  }
+
+  .embed-title {
+    line-height: 38px;
+  }
+
+  .embed-btn,
+  .embed-seg-btn {
+    height: 40px;
+    min-width: 40px;
+  }
+}
+
+/* the card in place of a drawing that can't be shown */
+.embed-error {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--viewport);
+  color: var(--text);
+  font: 14px var(--font);
+}
+
+.embed-error-card {
+  max-width: 360px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.embed-error-card p {
+  margin: 0 0 14px;
+  line-height: 1.45;
+}
+
+.embed-error-card .btn {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
