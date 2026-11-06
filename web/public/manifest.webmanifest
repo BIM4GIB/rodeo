@@ -1,7 +1,7 @@
 {
   "name": "Rodeo",
   "short_name": "Rodeo",
-  "description": "Draw, model and share in your browser. Opens Vectorworks files and imports DXF, PDF and images.",
+  "description": "Draw, model, share and embed in your browser. Opens Vectorworks files and imports DXF, PDF and images.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
