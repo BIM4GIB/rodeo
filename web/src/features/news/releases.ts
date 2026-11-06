@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T20:45:00Z",
+    "cloud-save-progress",
+    "Cloud saves show their progress at once",
+    `Saving a large drawing to the cloud shows how far it has got from the start.
+- The bar moves as the drawing goes up. On a slow connection it used to sit empty for the first 8 MB, which could be twenty seconds or more
+- The saving card now covers the divider between view panes, the View and Mode bars and the view cube, which used to show through it`,
+    "cloud",
+  ),
+  release(
     "2026-11-06T20:30:00Z",
     "revit-lights-hoods",
     "Revit pendant lights and range hoods come in",

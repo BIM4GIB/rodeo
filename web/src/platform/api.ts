@@ -68,7 +68,7 @@ export async function request(method: string, path: string, body?: Body, headers
     throw new ApiError("The Rodeo server could not be reached", 0, "network");
   }
   if (!res.ok) {
-    let message = plainStatus(res);
+    let message = plainStatus(res.status, res.statusText);
     let code: string | undefined;
     try {
       const j = (await res.json()) as { error?: string; code?: string };
@@ -83,12 +83,40 @@ export async function request(method: string, path: string, body?: Body, headers
 }
 
 /** What a status means when the answer isn't the server's own JSON. */
-function plainStatus(res: Response): string {
-  if (res.status === 413) return "It is too large for the server to take";
-  if (res.status === 502 || res.status === 503 || res.status === 504 || (res.status >= 520 && res.status <= 527)) {
-    return `The Rodeo server didn't answer (${res.status}). It may be restarting after an update: try again in a minute`;
+function plainStatus(status: number, statusText: string): string {
+  if (status === 413) return "It is too large for the server to take";
+  if (status === 502 || status === 503 || status === 504 || (status >= 520 && status <= 527)) {
+    return `The Rodeo server didn't answer (${status}). It may be restarting after an update: try again in a minute`;
   }
-  return `${res.status} ${res.statusText}`.trim();
+  return `${status} ${statusText}`.trim();
+}
+
+/**
+ * request() and json() for a body whose going out is watched: fetch says nothing until the answer,
+ * so a part on a slow line showed no progress for its whole length. `onSent` hears how many of
+ * the body's bytes have gone. Fails as request() does.
+ */
+function sendWatched<T>(method: string, path: string, body: Blob | Uint8Array, headers: Record<string, string>, onSent: (sent: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, BASE + path);
+    xhr.withCredentials = true;
+    const type = body instanceof Blob && body.type ? body.type : "application/octet-stream";
+    for (const [k, v] of Object.entries({ "X-Requested-With": "openvwx", "Content-Type": type, ...headers })) xhr.setRequestHeader(k, v);
+    xhr.upload.onprogress = (e) => onSent(e.loaded);
+    xhr.onerror = xhr.ontimeout = xhr.onabort = () => reject(new ApiError("The Rodeo server could not be reached", 0, "network"));
+    xhr.onload = () => {
+      let answer: { error?: string; code?: string } | null = null;
+      try {
+        answer = JSON.parse(xhr.responseText) as { error?: string; code?: string };
+      } catch {
+        // not JSON: a proxy in front answered (Cloudflare's own pages are HTML)
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && answer) resolve(answer as T);
+      else reject(new ApiError(answer?.error ?? plainStatus(xhr.status, xhr.statusText), xhr.status, answer?.code));
+    };
+    xhr.send(body as Blob | Uint8Array<ArrayBuffer>);
+  });
 }
 
 /** Upload progress: bytes sent so far, of the whole. */
@@ -134,20 +162,28 @@ export async function sendBytes(
   // the browser's store for Blobs holds (ERR_BLOB_OUT_OF_MEMORY part way through the upload)
   let sent = 0;
   while (sent < size) {
-    sent = await sendPart(`/uploads/${encodeURIComponent(id)}`, sent, bytes instanceof Blob ? bytes.slice(sent, sent + PART) : bytes.subarray(sent, sent + PART));
+    const from = sent;
+    const part = bytes instanceof Blob ? bytes.slice(from, from + PART) : bytes.subarray(from, from + PART);
+    sent = await sendPart(`/uploads/${encodeURIComponent(id)}`, from, part, {}, (n) => onProgress?.(from + n, size));
     onProgress?.(sent, size);
   }
   return request(method, path, undefined, { ...headers, "X-Upload-Id": id });
 }
 
 /**
- * Sends one part at `offset` to `at` (an upload, or a report's file); a part lost on the way is sent
- * again. Resolves with how much has arrived.
+ * Sends one part at `offset` to `at` (an upload, or a report's file), telling `onSent` how much of
+ * it has gone; a part lost on the way is sent again. Resolves with how much has arrived.
  */
-async function sendPart(at: string, offset: number, part: Blob | Uint8Array, headers: Record<string, string> = {}): Promise<number> {
+async function sendPart(
+  at: string,
+  offset: number,
+  part: Blob | Uint8Array,
+  headers: Record<string, string> = {},
+  onSent: (sent: number) => void = () => undefined,
+): Promise<number> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return (await json<{ size: number }>("PUT", `${at}?offset=${offset}`, part, headers)).size;
+      return (await sendWatched<{ size: number }>("PUT", `${at}?offset=${offset}`, part, headers, onSent)).size;
     } catch (err) {
       const again = err instanceof ApiError && (err.status === 0 || err.status >= 500 || err.status === 409);
       if (!again || attempt >= PART_TRIES) throw err;
@@ -384,7 +420,9 @@ export const feedback = {
     onProgress?.(0, size);
     while (done < size) {
       signal?.throwIfAborted();
-      done = await sendPart(at, done, bytes instanceof Blob ? bytes.slice(done, done + PART) : bytes.subarray(done, done + PART), headers);
+      const from = done;
+      const part = bytes instanceof Blob ? bytes.slice(from, from + PART) : bytes.subarray(from, from + PART);
+      done = await sendPart(at, from, part, headers, (n) => onProgress?.(from + n, size));
       onProgress?.(done, size);
     }
   },

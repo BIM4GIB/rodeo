@@ -1,11 +1,13 @@
 /* Loading overlay over the drawing (loading.ts). The backdrop is a wash of what
    it covers: the paper, or the viewport before a drawing is open or with Dark
-   Canvas; the card follows the theme. */
+   Canvas; the card follows the theme. It covers all that sits on the drawing (the view
+   panes' dividers, the View and Mode bars and the view cube, at 4); floating view panes
+   and palettes stay over it. */
 
 .loading {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 5;
   display: grid;
   place-items: center;
   padding: 16px;
