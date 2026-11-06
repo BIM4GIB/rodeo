@@ -12,8 +12,12 @@ model's levels, elements, geometry and parameters with it, in the import's worke
   `rvt-ifc --saved-meshes`), and `familyExtrusions: true` is `rvt-ifc --family-extrusions`. It also
   reads saved graphics on Revit 2015 to 2022 files (upstream: 2023 to 2027), follows an external
   symbol whose `m_GRepId` is absent (Revit 2022 stairs and columns), and offers a family instance
-  drawn as its turned box (RE-87) its saved mesh too.
+  drawn as its turned box (RE-87) its saved mesh too. It treats a flip control (GBiFlipControl) as
+  holding no surface, takes a railing's saved mesh only where it fills its box, tolerates a curved
+  edge whose fixed parameter drifts, and meshes ruled faces between arc, ellipse and Hermite
+  profiles, refusing (keeping the box) one whose edges disagree with its neighbours or which
+  doesn't fill its box.
 - Built with rustc 1.97.1 and wasm-bindgen 0.2.118 (`--target web --out-name rvt`).
-- `rvt_bg.wasm` sha256 `9248913a9268bb4352141a6589873743fec1e81fec6d89d367e868df96365949`.
+- `rvt_bg.wasm` sha256 `9915f6e5a0dbedad00502df6ebf82ed646c654a36050c1b3caf105a9e7183fe5`.
 
 Rebuild with `scripts/rvt-wasm.sh [tag]`. These files are generated: don't edit them.

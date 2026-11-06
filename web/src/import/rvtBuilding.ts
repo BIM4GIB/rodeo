@@ -7,8 +7,9 @@
 // of another shape: curved, tapered, sloped) takes its body from rvt-rs's glTF, which draws each
 // element's as rvt-rs's IFC export does. Rooms become their outline and name in plan. What rvt-rs
 // couldn't decode is drawn as the element's box, see-through, and the notes say how many. An RPC
-// tree (Revit's photo entourage, which keeps no geometry for it) is drawn as a plain trunk and crown
-// filling its box instead, so a site's trees don't hide the building in 3D.
+// tree, person or car (Revit's photo entourage, which keeps no geometry for it) is drawn as a plain
+// trunk and crown, figure or car body filling its box instead, so a site's trees don't hide the
+// building in 3D.
 
 import type { Pt } from "../core/types.ts";
 import type { Body, BuildingModel, BuildingObject, Category, Component, Material, Opening, Property, PropertySets, Rgb, Slab, Wall } from "./building.ts";
@@ -156,7 +157,8 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
   const objects: BuildingObject[] = [];
   const drawing: BuildingModel["drawing"] = [];
   let boxes = 0;
-  let trees = 0;
+  const standIns = { tree: 0, person: 0, vehicle: 0 };
+  const flights = ents.some((e) => e.ifc_type === "IFCSTAIRFLIGHT");
 
   ents.forEach((e, i) => {
     if (e.kind !== "BuildingElement") return;
@@ -237,15 +239,31 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
 
     // an opening is the hole in its host, not a body of its own
     if (e.ifc_type === "IFCOPENINGELEMENT") return;
-    const tree = boxed && RPC_TREE.test(e.name ?? "") ? standInTree(bodies.get(i) ?? []) : null;
-    if (tree) {
+    const kind = boxed ? entourage(e.name ?? "", ex) : null;
+    const stood =
+      kind === "tree"
+        ? standInTree(bodies.get(i) ?? [])
+        : kind && ex && loc
+          ? (kind === "person" ? standInPerson : standInCar)(ex.width_feet * FT, ex.depth_feet * FT, ex.height_feet * FT).map((b) => ({
+              ...b,
+              faces: b.faces.map((f) => {
+                const out: number[] = [];
+                for (let k = 0; k < f.length; k += 3) {
+                  const at = placed(f[k] / FT, f[k + 1] / FT);
+                  out.push(at.x, at.y, z + f[k + 2]);
+                }
+                return out;
+              }),
+            }))
+          : null;
+    if (stood && kind) {
       boxes--;
-      trees++;
+      standIns[kind]++;
     }
-    const own = tree ?? (boxed ? bodies.get(i)?.map((b) => ({ ...b, box: true })) : bodies.get(i));
+    const own = stood ?? (boxed ? bodies.get(i)?.map((b) => ({ ...b, box: true })) : bodies.get(i));
     if (!own?.length) {
-      // curtain walls are drawn by their panels and mullions
-      if (e.ifc_type !== "IFCCURTAINWALL") skip(`${categories[base.category].name.toLowerCase()} without a body`);
+      // curtain walls are drawn by their panels and mullions, and a stair by its flights and landings
+      if (e.ifc_type !== "IFCCURTAINWALL" && !(e.ifc_type === "IFCSTAIR" && flights)) skip(`${categories[base.category].name.toLowerCase()} without a body`);
       return;
     }
 
@@ -316,7 +334,10 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
   }
 
   if (boxes) notes.push(`${boxes.toLocaleString()} element${boxes === 1 ? " is" : "s are"} drawn as ${boxes === 1 ? "its" : "their"} bounding box${boxes === 1 ? "" : "es"}, see-through: Revit's geometry for ${boxes === 1 ? "it" : "them"} isn't decoded yet`);
+  const { tree: trees, person: people, vehicle: vehicles } = standIns;
   if (trees) notes.push(`${trees.toLocaleString()} RPC tree${trees === 1 ? " is" : "s are"} drawn as a plain trunk and crown, their size: Revit keeps no model of ${trees === 1 ? "it" : "them"}`);
+  if (people) notes.push(`${people.toLocaleString()} RPC ${people === 1 ? "person is" : "people are"} drawn as a plain figure, ${people === 1 ? "its" : "their"} size: Revit keeps no model of ${people === 1 ? "it" : "them"}`);
+  if (vehicles) notes.push(`${vehicles.toLocaleString()} RPC vehicle${vehicles === 1 ? " is" : "s are"} drawn as a plain car body, ${vehicles === 1 ? "its" : "their"} size: Revit keeps no model of ${vehicles === 1 ? "it" : "them"}`);
   for (const w of read.diagnostics.warnings ?? []) if (/not read whole|resource limit/i.test(w)) notes.push(w);
 
   return {
@@ -432,8 +453,99 @@ function roomName(e: RvtEntity, sets: RvtPropertySet[] | undefined): string {
   return splitName(e.name ?? "")[1];
 }
 
-/** An RPC tree's name: Revit's photo entourage of trees and plants, which carries no geometry. */
-const RPC_TREE = /\bRPC\b.*\b(tree|plant|shrub|bush|palm|conifer|deciduous|evergreen)/i;
+/** RPC entourage: Revit's photo trees, people and cars, which carry no geometry ("M_RPC" in metric
+ * libraries; rvt-rs names one it has no type for "Entourage-<id>"). */
+const RPC = /(^|[^a-z])RPC\b|^Entourage\b/i;
+const RPC_TREE = /\b(tree|plant|shrub|bush|palm|conifer|deciduous|evergreen)/i;
+const RPC_PERSON = /\b(male|female|man|woman|people|person|child|kid|boy|girl)\b/i;
+const RPC_VEHICLE = /\b(beetle|car|truck|van|bus|suv|sedan|vehicle|jeep|taxi|lorry|pickup)\b/i;
+
+/** What an RPC element stands for, from its name, else its box's shape (feet): a person stands
+ * taller than wide, a vehicle is long and low. */
+export function entourage(name: string, ex: { width_feet: number; depth_feet: number; height_feet: number } | null | undefined): "tree" | "person" | "vehicle" | null {
+  if (!RPC.test(name)) return null;
+  if (RPC_TREE.test(name)) return "tree";
+  if (!ex) return null;
+  if (RPC_PERSON.test(name)) return "person";
+  if (RPC_VEHICLE.test(name)) return "vehicle";
+  const [w, d, h] = [ex.width_feet, ex.depth_feet, ex.height_feet];
+  if (h > 3.5 && h < 8 && Math.max(w, d) < h / 1.5) return "person";
+  if (Math.max(w, d) > 8 && h < Math.max(w, d) / 2) return "vehicle";
+  return null;
+}
+
+/** A prism up z between two heights, its plan a convex ring of (x, y) corners anticlockwise. */
+function prism(ring: readonly (readonly [number, number])[], z0: number, z1: number): number[][] {
+  const n = ring.length;
+  const sides = ring.map(([x, y], k) => {
+    const [u, v] = ring[(k + 1) % n];
+    return [x, y, z0, u, v, z0, u, v, z1, x, y, z1];
+  });
+  return [[...ring].reverse().flatMap(([x, y]) => [x, y, z0]), ring.flatMap(([x, y]) => [x, y, z1]), ...sides];
+}
+
+/** An ellipse's corners about (cx, cy). */
+const ellipse = (cx: number, cy: number, rx: number, ry: number, n = 10): [number, number][] =>
+  Array.from({ length: n }, (_, k) => [cx + rx * Math.cos((2 * Math.PI * k) / n), cy + ry * Math.sin((2 * Math.PI * k) / n)]);
+
+/** An RPC person as a plain figure filling its box (mm, about the box's foot): legs, a body and arms
+ * as prisms, a head as a stack of rings. In the box's own frame, z up from its foot. */
+export function standInPerson(w: number, d: number, h: number): Body[] {
+  const s = Math.min(w, d, h / 2.4) / 2;
+  const leg = h * 0.05;
+  const clothes = [
+    ...prism(ellipse(-leg * 1.2, 0, leg, leg * 1.1, 8), 0, h * 0.48),
+    ...prism(ellipse(leg * 1.2, 0, leg, leg * 1.1, 8), 0, h * 0.48),
+    ...prism(ellipse(0, 0, Math.min(s, h * 0.13), Math.min(s, h * 0.13) * 0.6), h * 0.46, h * 0.82),
+    ...[-1, 1].flatMap((side) => prism(ellipse(side * Math.min(s, h * 0.13) * 1.2, 0, h * 0.035, h * 0.035, 6), h * 0.5, h * 0.8)),
+  ];
+  // the head: a sphere of rings about its middle
+  const r = h * 0.065;
+  const zc = h - r;
+  const RINGS = 4;
+  const rings = Array.from({ length: RINGS + 1 }, (_, j) => {
+    const a = -Math.PI / 2 + (Math.PI * j) / RINGS;
+    return ellipse(0, 0, r * Math.cos(a), r * Math.cos(a), 8).map(([x, y]) => [x, y, zc + r * Math.sin(a)]);
+  });
+  const head: number[][] = [];
+  for (let j = 0; j < RINGS; j++)
+    for (let k = 0; k < 8; k++) {
+      const [a, b, c, e] = [rings[j][k], rings[j][(k + 1) % 8], rings[j + 1][(k + 1) % 8], rings[j + 1][k]];
+      head.push(j === 0 ? [...a, ...c, ...e] : j === RINGS - 1 ? [...a, ...b, ...c] : [...a, ...b, ...c, ...e]);
+    }
+  return [
+    { faces: clothes, color: { r: 0.36, g: 0.42, b: 0.52 } },
+    { faces: head, color: { r: 0.78, g: 0.64, b: 0.52 } },
+  ];
+}
+
+/** An RPC vehicle as a plain car filling its box (mm, about the box's foot), its length along x: a
+ * body and a narrower cabin, each a side profile run across, on four wheels. */
+export function standInCar(l: number, w: number, h: number): Body[] {
+  // a convex side profile (x along the car, z up) run across y from -half to half
+  const across = (profile: readonly (readonly [number, number])[], half: number): number[][] => {
+    const n = profile.length;
+    const sides = profile.map(([x, z], k) => {
+      const [u, v] = profile[(k + 1) % n];
+      return [x, half, z, u, half, v, u, -half, v, x, -half, z];
+    });
+    return [profile.flatMap(([x, z]) => [x, -half, z]), [...profile].reverse().flatMap(([x, z]) => [x, half, z]), ...sides];
+  };
+  const r = Math.min(h * 0.22, l * 0.12);
+  const body = across(
+    [[-l / 2, r * 0.9], [l / 2, r * 0.9], [l / 2, h * 0.45], [l * 0.45, h * 0.58], [-l * 0.45, h * 0.6], [-l / 2, h * 0.5]],
+    w * 0.47,
+  );
+  const cabin = across([[l * 0.25, h * 0.58], [l * 0.05, h], [-l * 0.3, h], [-l * 0.42, h * 0.6]], w * 0.42);
+  // a wheel: a ring in x-z run across y, at each corner
+  const wheel = (cx: number, cy: number): number[][] =>
+    across(ellipse(cx, r, r, r, 12), w * 0.07).map((f) => f.map((c, k) => (k % 3 === 1 ? c + cy : c)));
+  const wheels = [-1, 1].flatMap((sx) => [-1, 1].flatMap((sy) => wheel(sx * l * 0.32, sy * w * 0.4)));
+  return [
+    { faces: [...body, ...cabin], color: { r: 0.55, g: 0.58, b: 0.62 } },
+    { faces: wheels, color: { r: 0.18, g: 0.18, b: 0.2 } },
+  ];
+}
 
 /** A plain tree filling the box round `bodies` (mm, z up): a trunk up the middle and a crown above it; null with no box. */
 function standInTree(bodies: readonly Body[]): Body[] | null {

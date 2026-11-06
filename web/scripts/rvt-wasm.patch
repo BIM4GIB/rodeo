@@ -121,7 +121,7 @@ index 86e48f0..c6c4992 100644
      })
  }
 diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
-index 03d4f31..e7192b7 100644
+index 03d4f31..20b652b 100644
 --- a/src/ifc/saved_meshes.rs
 +++ b/src/ifc/saved_meshes.rs
 @@ -28,8 +28,8 @@
@@ -151,6 +151,109 @@ index 03d4f31..e7192b7 100644
          ) || profile_resolved
          {
              continue;
+@@ -203,8 +204,10 @@ pub fn attach_scoped_with_control(
+                 return Ok(());
+             }
+             let IfcEntity::BuildingElement {
++                ifc_type,
+                 location_feet: Some(origin),
+                 rotation_radians,
++                extrusion,
+                 solid_shape,
+                 property_set: Some(set),
+                 ..
+@@ -232,6 +235,24 @@ pub fn attach_scoped_with_control(
+             if triangles.is_empty() {
+                 return Ok(());
+             }
++            // A body with a curved-profile face must lie in its record box and
++            // fill most of it on each axis; otherwise it is only part of the
++            // element, and the box stays.
++            if element.meshes.curved_extension_faces > 0
++                && !fills_record_box(&vertices, extrusion.as_ref())
++            {
++                return Ok(());
++            }
++            // A railing's saved mesh is taken only where it fills its record box
++            // (RE-303): every vertex within the box and each extent of the box
++            // reached, to within 0.5 ft. A railing whose graphics leave a part
++            // out, with no decoder diagnostic to say so, keeps its box.
++            if ifc_type.as_str() == "IFCRAILING"
++                && !railing_mesh_fills_box(&vertices, extrusion.as_ref())
++            {
++                report.partial += 1;
++                return Ok(());
++            }
+             report.replaced += 1;
+             report.triangles += triangles.len();
+             *solid_shape = Some(SolidShape::TriangulatedFaceSet {
+@@ -250,3 +271,66 @@ pub fn attach_scoped_with_control(
+     )?;
+     Ok(report)
+ }
++
++/// Whether the body's vertices (in the element's frame, the record box
++/// centred on x and y, from z = 0 to its height) lie within the box to 0.5 ft
++/// and span at least 70% of it on every axis.
++fn fills_record_box(
++    vertices: &[[f64; 3]],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    const TOLERANCE: f64 = 0.5;
++    const MIN_FILL: f64 = 0.7;
++    let Some(x) = extrusion else {
++        return false;
++    };
++    let size = [x.width_feet, x.depth_feet, x.height_feet];
++    if !size.iter().all(|s| s.is_finite() && *s > 0.) || vertices.is_empty() {
++        return false;
++    }
++    let lo = [-size[0] / 2., -size[1] / 2., 0.];
++    let hi = [size[0] / 2., size[1] / 2., size[2]];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            if !v[k].is_finite() || v[k] < lo[k] - TOLERANCE || v[k] > hi[k] + TOLERANCE {
++                return false;
++            }
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    (0..3).all(|k| (max[k] - min[k]) >= MIN_FILL * size[k])
++}
++
++/// Whether `vertices`, in the element's frame (origin at its location, the
++/// box's x and y centred on it, its z from 0 up), lie within `extrusion`'s box
++/// and reach each of its faces, to within [`RAILING_BOX_TOLERANCE_FEET`].
++fn railing_mesh_fills_box(
++    vertices: &[[f64; 3]],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    let Some(e) = extrusion else {
++        return false;
++    };
++    let half = [e.width_feet / 2.0, e.depth_feet / 2.0];
++    let tol = RAILING_BOX_TOLERANCE_FEET;
++    let lo = [-half[0], -half[1], 0.0];
++    let hi = [half[0], half[1], e.height_feet];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    (0..3).all(|k| min[k] >= lo[k] - tol && max[k] <= hi[k] + tol)
++        && (0..3).all(|k| min[k] <= lo[k] + tol && max[k] >= hi[k] - tol)
++}
++
++/// How far a railing's saved mesh may stop short of its record box, or reach
++/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
++/// their graphics on every railing measured on the sample projects.
++const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;
 diff --git a/src/research/native_document.rs b/src/research/native_document.rs
 index a369d89..31f8df6 100644
 --- a/src/research/native_document.rs
@@ -165,7 +268,7 @@ index a369d89..31f8df6 100644
              filtered_parameters_only: false,
              record_extras: false,
 diff --git a/src/research/native_graphics_traversal.rs b/src/research/native_graphics_traversal.rs
-index 15db1d8..ad7d5ef 100644
+index 15db1d8..e99be94 100644
 --- a/src/research/native_graphics_traversal.rs
 +++ b/src/research/native_graphics_traversal.rs
 @@ -418,7 +418,12 @@ impl Walker<'_, '_> {
@@ -182,3 +285,712 @@ index 15db1d8..ad7d5ef 100644
                          || info_fields["m_cda"]["m_pDoc"]["pointer_token"].as_u64() != Some(1)
                          || !info_fields["m_cda"]["m_pDoc"]["class_tag"].is_null()
                      {
+@@ -458,6 +463,9 @@ impl Walker<'_, '_> {
+             }
+             "GLine" | "GArc" | "GEllipse" | "GCurve" | "GNurbSpline" | "GPolyLine"
+             | "GPolyline" | "GPoint" => self.result.excluded_non_surface_branches += 1,
++            // A flip control is the handle a view draws for flipping an element
++            // (RE-303): four fields and no pointer, so it carries no surface.
++            "GBiFlipControl" => self.result.excluded_non_surface_branches += 1,
+             other => return Err(format!("unsupported reachable graphics class {other}")),
+         }
+         Ok(())
+diff --git a/src/research/native_parametric_mesh.rs b/src/research/native_parametric_mesh.rs
+index b50dc80..ad3b253 100644
+--- a/src/research/native_parametric_mesh.rs
++++ b/src/research/native_parametric_mesh.rs
+@@ -1,11 +1,84 @@
+ //! Bounded UV-grid meshing for decoded parametric surfaces.
+ 
+ use crate::native_parameters::ObjectGraph;
+-use crate::native_parametric_surface::ParametricSurface;
++use crate::native_parametric_surface::{Curve, ParametricSurface};
+ use crate::native_saved_mesh::FaceMesh;
+ use crate::vector_math::distance;
+ use anyhow::{Context, Result, ensure};
+ 
++/// The chord tolerance, in document feet, that bounds every tessellated curve.
++const CHORD: f64 = 0.001;
++
++/// The largest gap, in document feet, a decoded surface may leave on a shared
++/// edge with its neighbour before the element keeps its record box.
++const SHARED_EDGE_TOLERANCE: f64 = 1e-4;
++
++/// The parameter step over which a curve with curvature-speed `r` (a circle's
++/// radius, see [`Curve::curvature_speed_max`]) deviates from its chords by at
++/// most [`CHORD`]: the angle subtended by one chord of the circle.
++fn chord_angle(r: f64) -> f64 {
++    (4. * (CHORD / (2. * r.max(CHORD))).min(1.).sqrt().asin()).min(std::f64::consts::FRAC_PI_2)
++}
++
++fn length3(p: [f64; 3]) -> f64 {
++    p.iter().map(|x| x * x).sum::<f64>().sqrt()
++}
++
++/// The largest distance from the axis of a revolution, over a profile
++/// parameter range, sampled densely.
++fn profile_radius(profile: &Curve, range: [f64; 2]) -> f64 {
++    (0..=256)
++        .map(|k| {
++            let t = range[0] + (range[1] - range[0]) * k as f64 / 256.;
++            let q = profile.eval(t);
++            q[0].hypot(q[1])
++        })
++        .fold(0., f64::max)
++}
++
++/// The segment count a ruled patch needs in its shared normalized grid.
++/// Two straight profiles keep the twist rule of straight generators. A curved
++/// profile is sampled so its chords stay within [`CHORD`]: a straight profile
++/// adds no chord error, and the other's curvature sets the count.
++fn ruled_segments(profile1: &Curve, profile2: &Curve) -> Result<f64> {
++    if let (
++        Curve::Line {
++            direction: a,
++            range: ra,
++            ..
++        },
++        Curve::Line {
++            direction: b,
++            range: rb,
++            ..
++        },
++    ) = (profile1, profile2)
++    {
++        let da = std::array::from_fn(|k| a[k] * (ra[1] - ra[0]));
++        let db = std::array::from_fn(|k| b[k] * (rb[1] - rb[0]));
++        let mixed = length3(std::array::from_fn(|k| da[k] - db[k]));
++        return Ok((mixed / CHORD)
++            .sqrt()
++            .ceil()
++            .max(length3(da).ceil())
++            .max(length3(db).ceil()));
++    }
++    let mut n = 1.0_f64;
++    for profile in [profile1, profile2] {
++        if matches!(profile, Curve::Line { .. }) {
++            continue;
++        }
++        let range = profile.range();
++        let step = chord_angle(profile.curvature_speed_max());
++        ensure!(
++            step.is_finite() && step > 0.,
++            "degenerate ruled profile chord step"
++        );
++        n = n.max(((range[1] - range[0]) / step).ceil());
++    }
++    Ok(n)
++}
++
+ #[derive(Debug, Clone)]
+ pub struct ParametricMesh {
+     pub vertices: Vec<[f64; 3]>,
+@@ -273,11 +346,8 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+         }
+         ensure!((end - max[axis]).abs() < 1e-7, "incomplete trim perimeter");
+     }
+-    const CHORD: f64 = 0.001;
+-    let length = |p: [f64; 3]| p.iter().map(|x| x * x).sum::<f64>().sqrt();
+-    let angular = |r: f64| {
+-        (4. * (CHORD / (2. * r.max(CHORD))).min(1.).sqrt().asin()).min(std::f64::consts::FRAC_PI_2)
+-    };
++    let length = length3;
++    let angular = chord_angle;
+     let (du, dv) = match &surface {
+         ParametricSurface::SurfRev { profile, .. } => match profile {
+             Curve::Line {
+@@ -293,6 +363,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+                 angular(center[0].hypot(center[1]) + 2. * radius),
+                 angular(*radius),
+             ),
++            // A general profile: the revolution's U step follows its farthest
++            // point from the axis, and the profile's own V step its curvature.
++            Curve::Ellipse { .. } | Curve::Hermite { .. } => (
++                angular(profile_radius(profile, [min[1], max[1]])),
++                angular(profile.curvature_speed_max()),
++            ),
+         },
+         ParametricSurface::ConeSurf { half_angle, .. } => {
+             // The generators are straight: only the angle needs a chord bound.
+@@ -318,30 +394,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+                 }
+                 let s = ParametricSurface::read(g, surface_index)?;
+                 let ParametricSurface::RuledSurf {
+-                    profile1:
+-                        Curve::Line {
+-                            direction: a,
+-                            range: ra,
+-                            ..
+-                        },
+-                    profile2:
+-                        Curve::Line {
+-                            direction: b,
+-                            range: rb,
+-                            ..
+-                        },
+-                    ..
+-                } = s
++                    profile1, profile2, ..
++                } = &s
+                 else {
+-                    anyhow::bail!("nonlinear ruled profiles need a curvature policy")
++                    anyhow::bail!("not a ruled surface")
+                 };
+-                let da = std::array::from_fn(|k| a[k] * (ra[1] - ra[0]));
+-                let db = std::array::from_fn(|k| b[k] * (rb[1] - rb[0]));
+-                let mixed = length(std::array::from_fn(|k| da[k] - db[k]));
+-                n = n
+-                    .max((mixed / CHORD).sqrt().ceil())
+-                    .max(length(da).ceil())
+-                    .max(length(db).ceil());
++                n = n.max(ruled_segments(profile1, profile2)?);
+             }
+             (1. / n, 1. / n)
+         }
+@@ -370,8 +428,171 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+     })
+ }
+ 
++/// Whether a face's surface is one this module adds: a ruled surface with a
++/// curved profile, or a revolution about an ellipse or a Hermite spline.
++fn is_new_path(surface: &ParametricSurface) -> bool {
++    match surface {
++        ParametricSurface::RuledSurf {
++            profile1, profile2, ..
++        } => !(matches!(profile1, Curve::Line { .. }) && matches!(profile2, Curve::Line { .. })),
++        ParametricSurface::SurfRev { profile, .. } => {
++            matches!(profile, Curve::Ellipse { .. } | Curve::Hermite { .. })
++        }
++        ParametricSurface::ConeSurf { .. } => false,
++    }
++}
++
++fn uv_of(v: &serde_json::Value) -> Result<[f64; 2]> {
++    uv_point(v)
++}
++
++/// The 3D point of face `face` at `uv`, for the surfaces the shared-edge
++/// check evaluates (planes, and the parametric surfaces above). `None` leaves
++/// the neighbour unverifiable.
++fn face_point(g: &ObjectGraph, face: usize, uv: [f64; 2]) -> Result<Option<[f64; 3]>> {
++    use crate::native_saved_mesh::pointer;
++    let f = &g.objects[face];
++    let Some(si) = pointer(g, face, &f.fields["m_pSurf"])? else {
++        return Ok(None);
++    };
++    let s = &g.objects[si];
++    let vec3 = |v: &serde_json::Value| -> Result<[f64; 3]> {
++        let a = v.as_array().context("vector")?;
++        ensure!(a.len() == 3, "vector dimension");
++        let r = [
++            a[0].as_f64().context("vector number")?,
++            a[1].as_f64().context("vector number")?,
++            a[2].as_f64().context("vector number")?,
++        ];
++        ensure!(r.iter().all(|x| x.is_finite()), "nonfinite vector");
++        Ok(r)
++    };
++    match s.class_name.as_str() {
++        "Plane" => {
++            let o = vec3(&s.fields["m_origin"])?;
++            let x = vec3(&s.fields["m_xVec"])?;
++            let y = vec3(&s.fields["m_yVec"])?;
++            Ok(Some(std::array::from_fn(|k| {
++                o[k] + uv[0] * x[k] + uv[1] * y[k]
++            })))
++        }
++        "CylSurf" => {
++            let center = vec3(&s.fields["m_center"])?;
++            let radius = s.fields["m_radius"].as_f64().context("cylinder radius")?;
++            ensure!(radius.is_finite() && radius > 0., "invalid cylinder radius");
++            let x = vec3(&s.fields["m_xVec"])?;
++            let y = vec3(&s.fields["m_yVec"])?;
++            let z = vec3(&s.fields["m_zVec"])?;
++            let (sn, cs) = uv[0].sin_cos();
++            Ok(Some(std::array::from_fn(|k| {
++                center[k] + radius * (cs * x[k] + sn * y[k]) + uv[1] * z[k]
++            })))
++        }
++        "RuledSurf" | "SurfRev" | "ConeSurf" => {
++            let surface = ParametricSurface::read(g, si)?;
++            let e = surface.bounds();
++            let u = uv[0].clamp(e[0][0], e[1][0]);
++            let v = uv[1].clamp(e[0][1], e[1][1]);
++            Ok(Some(surface.evaluate(u, v)?))
++        }
++        _ => Ok(None),
++    }
++}
++
++/// The largest distance, over the samples of every edge this face shares
++/// with a neighbour, between this face's surface and the neighbour's at the
++/// same edge sample. Returns `(error, unverifiable edges)`.
++fn shared_edge_error(
++    g: &ObjectGraph,
++    fi: usize,
++    surface: &ParametricSurface,
++) -> Result<(f64, usize)> {
++    use crate::native_saved_mesh::pointer;
++    let mut error = 0_f64;
++    let mut unverifiable = 0;
++    for (ei, edge) in g
++        .objects
++        .iter()
++        .enumerate()
++        .filter(|(_, o)| o.class_name == "Edge")
++    {
++        let Some(faces) = edge.fields.get("m_pFace").and_then(|v| v.as_array()) else {
++            continue;
++        };
++        if faces.len() != 2 {
++            continue;
++        }
++        let resolved = [
++            pointer(g, ei, &faces[0]).ok().flatten(),
++            pointer(g, ei, &faces[1]).ok().flatten(),
++        ];
++        let side = match resolved {
++            [Some(a), Some(b)] if a == fi && b != fi => 0,
++            [Some(a), Some(b)] if b == fi && a != fi => 1,
++            _ => continue,
++        };
++        let other = resolved[1 - side].context("shared edge partner")?;
++        let ends = edge
++            .fields
++            .get("m_firstAndLastEdgePnts")
++            .and_then(|v| v.as_array())
++            .context("edge endpoints")?;
++        let interior = edge
++            .fields
++            .get("m_interiorEdgePnts")
++            .and_then(|v| v.as_array())
++            .context("edge interior samples")?;
++        let mut samples = vec![&ends[0]];
++        samples.extend(interior.iter());
++        samples.push(&ends[1]);
++        let mut edge_unverifiable = false;
++        for sample in samples {
++            let uv_this = uv_of(&sample["uv"][side])?;
++            let uv_other = uv_of(&sample["uv"][1 - side])?;
++            let p = surface.evaluate(
++                uv_this[0].clamp(surface.bounds()[0][0], surface.bounds()[1][0]),
++                uv_this[1].clamp(surface.bounds()[0][1], surface.bounds()[1][1]),
++            )?;
++            let Some(q) = face_point(g, other, uv_other)? else {
++                edge_unverifiable = true;
++                break;
++            };
++            error = error.max(distance(p, q));
++        }
++        if edge_unverifiable {
++            unverifiable += 1;
++        }
++    }
++    Ok((error, unverifiable))
++}
++
++/// Whether face `fi` is decoded by a curved-profile path this module adds
++/// (see [`is_new_path`]); its element is then checked as a whole.
++pub(crate) fn is_new_path_face(g: &ObjectGraph, fi: usize) -> Result<bool> {
++    use crate::native_saved_mesh::pointer;
++    let f = &g.objects[fi];
++    let Some(si) = pointer(g, fi, &f.fields["m_pSurf"])? else {
++        return Ok(false);
++    };
++    if !matches!(g.objects[si].class_name.as_str(), "RuledSurf" | "SurfRev") {
++        return Ok(false);
++    }
++    Ok(is_new_path(&ParametricSurface::read(g, si)?))
++}
++
+ pub fn face(g: &ObjectGraph, fi: usize) -> Result<FaceMesh> {
+     let grid = face_grid(g, fi)?;
++    if is_new_path(&grid.surface) {
++        let (error, unverifiable) = shared_edge_error(g, fi, &grid.surface)?;
++        ensure!(
++            unverifiable == 0,
++            "shared edge with an unverifiable neighbour"
++        );
++        ensure!(
++            error <= SHARED_EDGE_TOLERANCE,
++            "shared edge disagrees with its neighbour"
++        );
++    }
+     let f = &g.objects[fi];
+     let flags = f.fields["m_faceFlags_v9"].as_u64().context("face flags")?;
+     let mesh = tessellate_uv(
+diff --git a/src/research/native_parametric_surface.rs b/src/research/native_parametric_surface.rs
+index b902e19..e85fcc5 100644
+--- a/src/research/native_parametric_surface.rs
++++ b/src/research/native_parametric_surface.rs
+@@ -111,6 +111,25 @@ pub enum Curve {
+         radius: f64,
+         range: [f64; 2],
+     },
++    /// A GEllipse: `center + x x_len cos t + y y_len sin t` over `range`.
++    /// The semi-axes are `m_xLen` and `m_yLen`.
++    Ellipse {
++        center: Point,
++        x: Point,
++        y: Point,
++        x_len: f64,
++        y_len: f64,
++        range: [f64; 2],
++    },
++    /// A cubic Hermite spline through the saved nodes (GHermiteSpline,
++    /// non-periodic). Each node carries its parameter, point and derivative
++    /// with respect to that parameter.
++    Hermite {
++        params: Vec<f64>,
++        points: Vec<Point>,
++        tangents: Vec<Point>,
++        range: [f64; 2],
++    },
+ }
+ 
+ impl Curve {
+@@ -153,10 +172,76 @@ impl Curve {
+                     range: range(&o.fields["m_endParams"], "arc range")?,
+                 })
+             }
++            "GEllipse" => {
++                // The semi-axes are m_xLen and m_yLen along m_xVec and m_yVec.
++                // Shared edges of a ruled face with an ellipse profile agree
++                // with their neighbours to about 1e-15 ft on this reading.
++                let x = p(&o.fields["m_xVec"], "ellipse x basis")?;
++                let y = p(&o.fields["m_yVec"], "ellipse y basis")?;
++                let x_len = o.fields["m_xLen"].as_f64().context("ellipse x length")?;
++                let y_len = o.fields["m_yLen"].as_f64().context("ellipse y length")?;
++                ensure!(
++                    x_len.is_finite()
++                        && y_len.is_finite()
++                        && x_len > 0.
++                        && y_len > 0.
++                        && (len(x) - 1.).abs() <= 1e-6
++                        && (len(y) - 1.).abs() <= 1e-6
++                        && dot(x, y).abs() <= 1e-6,
++                    "invalid ellipse basis"
++                );
++                Ok(Self::Ellipse {
++                    center: p(&o.fields["m_center"], "ellipse center")?,
++                    x,
++                    y,
++                    x_len,
++                    y_len,
++                    range: range(&o.fields["m_endParams"], "ellipse range")?,
++                })
++            }
++            "GHermiteSpline" => {
++                ensure!(
++                    o.fields["m_Periodic"] == false,
++                    "periodic Hermite spline unsupported"
++                );
++                let nodes = o.fields["m_NodeArray"]
++                    .as_array()
++                    .context("Hermite node array")?;
++                ensure!(nodes.len() >= 2, "Hermite spline needs two nodes");
++                let mut params = Vec::with_capacity(nodes.len());
++                let mut points = Vec::with_capacity(nodes.len());
++                let mut tangents = Vec::with_capacity(nodes.len());
++                for node in nodes {
++                    let t = node["m_iParametr"]
++                        .as_f64()
++                        .context("Hermite node parameter")?;
++                    ensure!(t.is_finite(), "nonfinite Hermite parameter");
++                    let tangent = p(&node["m_iTangent"], "Hermite node tangent")?;
++                    ensure!(len(tangent) > 1e-12, "zero Hermite tangent");
++                    params.push(t);
++                    points.push(p(&node["m_iPoint"], "Hermite node point")?);
++                    tangents.push(tangent);
++                }
++                ensure!(
++                    params.windows(2).all(|w| w[1] > w[0]),
++                    "Hermite node parameters are not increasing"
++                );
++                let range = range(&o.fields["m_endParams"], "Hermite range")?;
++                ensure!(
++                    range[0] >= params[0] - 1e-9 && range[1] <= params[params.len() - 1] + 1e-9,
++                    "Hermite range outside its nodes"
++                );
++                Ok(Self::Hermite {
++                    params,
++                    points,
++                    tangents,
++                    range,
++                })
++            }
+             name => bail!("unsupported parametric profile curve {name}"),
+         }
+     }
+-    fn eval(&self, t: f64) -> Point {
++    pub(crate) fn eval(&self, t: f64) -> Point {
+         match self {
+             Self::Line {
+                 origin, direction, ..
+@@ -171,6 +256,36 @@ impl Curve {
+                 *center,
+                 mul(add(mul(*x, t.cos()), mul(*y, t.sin())), *radius),
+             ),
++            Self::Ellipse {
++                center,
++                x,
++                y,
++                x_len,
++                y_len,
++                ..
++            } => add(
++                *center,
++                add(mul(*x, x_len * t.cos()), mul(*y, y_len * t.sin())),
++            ),
++            Self::Hermite {
++                params,
++                points,
++                tangents,
++                ..
++            } => {
++                let (i, h, s) = hermite_segment(params, t);
++                let m0 = mul(tangents[i], h);
++                let m1 = mul(tangents[i + 1], h);
++                let (s2, s3) = (s * s, s * s * s);
++                let h00 = 2. * s3 - 3. * s2 + 1.;
++                let h10 = s3 - 2. * s2 + s;
++                let h01 = -2. * s3 + 3. * s2;
++                let h11 = s3 - s2;
++                add(
++                    add(mul(points[i], h00), mul(m0, h10)),
++                    add(mul(points[i + 1], h01), mul(m1, h11)),
++                )
++            }
+         }
+     }
+     fn derivative(&self, t: f64) -> Point {
+@@ -179,8 +294,95 @@ impl Curve {
+             Self::Arc { x, y, radius, .. } => {
+                 mul(add(mul(*x, -t.sin()), mul(*y, t.cos())), *radius)
+             }
++            Self::Ellipse {
++                x, y, x_len, y_len, ..
++            } => add(mul(*x, -x_len * t.sin()), mul(*y, y_len * t.cos())),
++            Self::Hermite {
++                params,
++                points,
++                tangents,
++                ..
++            } => {
++                let (i, h, s) = hermite_segment(params, t);
++                let m0 = mul(tangents[i], h);
++                let m1 = mul(tangents[i + 1], h);
++                let s2 = s * s;
++                let d00 = 6. * s2 - 6. * s;
++                let d10 = 3. * s2 - 4. * s + 1.;
++                let d01 = -6. * s2 + 6. * s;
++                let d11 = 3. * s2 - 2. * s;
++                // d/dt = (1 / h) d/ds, and the tangent terms carry a factor h.
++                let ds = add(
++                    add(mul(points[i], d00), mul(m0, d10)),
++                    add(mul(points[i + 1], d01), mul(m1, d11)),
++                );
++                mul(ds, 1. / h)
++            }
+         }
+     }
++    /// The parameter range of the curve.
++    pub(crate) fn range(&self) -> [f64; 2] {
++        c_range_of(self)
++    }
++    /// `max |p' x p''| / |p'|` over the range: the curvature times the squared
++    /// speed. For a circle of radius `r` this is `r`, so a chord-error step in
++    /// parameter (`chord_angle`) reduces to the arc's own step.
++    pub(crate) fn curvature_speed_max(&self) -> f64 {
++        match self {
++            Self::Line { .. } => 0.,
++            Self::Arc { radius, .. } => *radius,
++            Self::Ellipse { x_len, y_len, .. } => x_len.max(*y_len),
++            Self::Hermite { params, .. } => {
++                let range = self.range();
++                let mut best = 0_f64;
++                let spans = params.len() - 1;
++                for i in 0..spans {
++                    let a = params[i].max(range[0]);
++                    let b = params[i + 1].min(range[1]);
++                    if b <= a {
++                        continue;
++                    }
++                    for k in 0..=64 {
++                        let t = a + (b - a) * k as f64 / 64.;
++                        let d1 = self.derivative(t);
++                        let speed = len(d1);
++                        if speed <= 1e-12 {
++                            continue;
++                        }
++                        let eps = (b - a) * 1e-6;
++                        let lo = self.derivative((t - eps).max(a));
++                        let hi = self.derivative((t + eps).min(b));
++                        let d2 = mul(sub(hi, lo), 1. / (2. * eps));
++                        let c = cross(d1, d2);
++                        best = best.max(len(c) / speed);
++                    }
++                }
++                best
++            }
++        }
++    }
++}
++
++/// The span `[params[i], params[i + 1]]` holding `t` (clamped to the nodes),
++/// the span length `h` and the normalized position `s` within it.
++fn hermite_segment(params: &[f64], t: f64) -> (usize, f64, f64) {
++    let last = params.len() - 2;
++    let i = params
++        .partition_point(|&x| x <= t)
++        .saturating_sub(1)
++        .min(last);
++    let h = params[i + 1] - params[i];
++    let s = ((t - params[i]) / h).clamp(0., 1.);
++    (i, h, s)
++}
++
++fn c_range_of(c: &Curve) -> [f64; 2] {
++    match c {
++        Curve::Line { range, .. }
++        | Curve::Arc { range, .. }
++        | Curve::Ellipse { range, .. }
++        | Curve::Hermite { range, .. } => *range,
++    }
+ }
+ 
+ #[derive(Debug, Clone)]
+@@ -457,7 +659,5 @@ impl ParametricSurface {
+ }
+ 
+ fn c_range(c: &Curve) -> [f64; 2] {
+-    match c {
+-        Curve::Line { range, .. } | Curve::Arc { range, .. } => *range,
+-    }
++    c_range_of(c)
+ }
+diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
+index 199cbbe..db3cde1 100644
+--- a/src/research/native_saved_mesh.rs
++++ b/src/research/native_saved_mesh.rs
+@@ -278,19 +278,22 @@ fn refined_plane_edge(
+     samples.push(point::<2>(&ends[1]["uv"][other_side])?);
+     let start = samples[0];
+     let end = *samples.last().unwrap();
++    // A curved edge whose UV samples are not one isoparametric interval of the
++    // cylinder (its fixed parameter drifts along it) has no knot grid to refine
++    // the plane's boundary on. Its own samples are then the boundary, checked
++    // below against the plane's points, and the plane's boundary is kept as it is.
+     let axis = if (start[1] - end[1]).abs() < 1e-7 && (start[0] - end[0]).abs() > 1e-7 {
+-        0
++        Some(0)
+     } else if (start[0] - end[0]).abs() < 1e-7 && (start[1] - end[1]).abs() > 1e-7 {
+-        1
++        Some(1)
+     } else {
+-        bail!("shared curved edge is not an isoparametric interval")
++        None
+     };
+-    ensure!(
++    let isoparametric = axis.filter(|&axis| {
+         samples
+             .iter()
+-            .all(|uv| (uv[1 - axis] - start[1 - axis]).abs() < 1e-7),
+-        "shared curved edge changes its fixed parameter"
+-    );
++            .all(|uv| (uv[1 - axis] - start[1 - axis]).abs() < 1e-7)
++    });
+     let plane_index = index
+         .resolve(face, &g.objects[face].fields["m_pSurf"])?
+         .context("plane surface missing")?;
+@@ -336,6 +339,9 @@ fn refined_plane_edge(
+             "shared edge surface samples disagree"
+         );
+     }
++    let Some(axis) = isoparametric else {
++        return Ok(original);
++    };
+     let knots = if axis == 0 { u_values } else { v_values };
+     let lo = start[axis].min(end[axis]);
+     let hi = start[axis].max(end[axis]);
+@@ -1318,6 +1324,11 @@ pub struct GraphicsMeshes {
+     pub excluded_non_surface_branches: usize,
+     #[serde(default)]
+     pub profile_observations: Vec<String>,
++    /// Faces drawn by the curved-profile paths (a ruled surface with a curved
++    /// profile, or a revolution about an ellipse or Hermite spline). Their
++    /// element is accepted only if its open edges form one rim.
++    #[serde(default)]
++    pub curved_extension_faces: usize,
+ }
+ /// Decode selected saved graphics. Positions and normals are in the owning
+ /// document frame; length units remain Revit internal feet.
+@@ -1424,6 +1435,9 @@ fn graphics_impl<'a>(
+                     let fi = index.resolve(oi, ptr)?.context("null geometry face")?;
+                     match face_indexed(g, index, fi)? {
+                         Some(m) => {
++                            if crate::native_parametric_mesh::is_new_path_face(g, fi)? {
++                                out.curved_extension_faces += 1;
++                            }
+                             let normals = if m.normals.len() == m.vertices.len() {
+                                 m.normals.clone()
+                             } else {
+@@ -1555,8 +1569,58 @@ fn graphics_impl<'a>(
+             Err(e) => out.diagnostics.push(format!("object {oi}: {e:#}")),
+         }
+     }
++    // A curved-profile face is drawn only where the element's shell is closed
++    // or ends in one rim: open edges spread over several planes are a seam
++    // whose two sides were sampled differently, and the box is kept instead.
++    if out.curved_extension_faces > 0 && !open_edges_form_one_rim(&out.primitives) {
++        out.primitives.clear();
++        out.diagnostics.push(format!(
++            "curved-profile shell leaves open edges off one rim ({} faces)",
++            out.curved_extension_faces
++        ));
++    }
+     out
+ }
++
++/// Whether the edges used by one triangle only, across all the primitives
++/// (their vertices matched by position), lie within 0.05 ft of one plane
++/// parallel to an axis, or there are none.
++fn open_edges_form_one_rim(primitives: &[Primitive]) -> bool {
++    let key = |p: [f64; 3]| p.map(|c| (c * 1e5).round() as i64);
++    let mut edges: BTreeMap<([i64; 3], [i64; 3]), (usize, [f64; 3])> = BTreeMap::new();
++    for primitive in primitives {
++        for t in &primitive.triangles {
++            for (a, b) in [(0, 1), (1, 2), (2, 0)] {
++                let (Some(&pa), Some(&pb)) = (
++                    primitive.vertices.get(t[a] as usize),
++                    primitive.vertices.get(t[b] as usize),
++                ) else {
++                    continue;
++                };
++                let (ka, kb) = (key(pa), key(pb));
++                let k = if ka <= kb { (ka, kb) } else { (kb, ka) };
++                let mid = std::array::from_fn(|i| (pa[i] + pb[i]) * 0.5);
++                edges.entry(k).or_insert((0, mid)).0 += 1;
++            }
++        }
++    }
++    let open: Vec<[f64; 3]> = edges
++        .values()
++        .filter(|(n, _)| *n == 1)
++        .map(|(_, m)| *m)
++        .collect();
++    if open.is_empty() {
++        return true;
++    }
++    (0..3).any(|axis| {
++        let lo = open.iter().map(|m| m[axis]).fold(f64::INFINITY, f64::min);
++        let hi = open
++            .iter()
++            .map(|m| m[axis])
++            .fold(f64::NEG_INFINITY, f64::max);
++        hi - lo <= 0.05
++    })
++}
+ fn transform(p: &mut Primitive, m: [[f64; 4]; 4]) -> Result<()> {
+     let a = [m[0][0], m[1][0], m[2][0]];
+     let b = [m[0][1], m[1][1], m[2][1]];

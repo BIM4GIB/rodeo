@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T16:00:00Z",
+    "revit-railings-curves",
+    "Revit railings, basins and appliances come in",
+    `More of a Revit model now comes in as Revit drew it, instead of see-through boxes.
+- Railings are drawn from Revit's geometry; one that isn't read whole stays a box rather than coming in short.
+- Basins and appliances with curved fronts and edges come in, such as rounded lavatories, washers, fridges and microwaves.
+- RPC people and cars, which Revit keeps only as photos, are drawn as a plain figure or car body at their size, as RPC trees already were.
+- A stair's own outline is no longer reported as left out: its flights and landings draw it.`,
+    "walls",
+  ),
+  release(
     "2026-11-06T14:00:00Z",
     "revit-older-files",
     "Older Revit files and stairs come in",

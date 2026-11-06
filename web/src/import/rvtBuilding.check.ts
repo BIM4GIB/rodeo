@@ -16,7 +16,7 @@ import * as rvt from "../../vendor/rvt-rs/rvt.js";
 import { revitDrawing } from "../app/revitImport.ts";
 import { openVwx } from "../core/index.ts";
 import type { BuildingModel } from "./building.ts";
-import { revitBuilding } from "./rvtBuilding.ts";
+import { entourage, revitBuilding, standInCar, standInPerson } from "./rvtBuilding.ts";
 import { readWith, type RvtEntity, type RvtModel } from "./rvtModel.ts";
 
 let failures = 0;
@@ -258,6 +258,37 @@ check(near(fields["Area (m²)"] as number, 200 * 0.3048 ** 2, 0.001) && near(fie
 check(fields.IsExternal === true, "with its IFC property set's");
 const table = objects[1][0];
 check(!!table && doc.records(table.id).some((r) => r.fields.some((f) => f.value === "Table")), "the table's records too");
+
+// ---- RPC entourage --------------------------------------------------------------------------------
+
+const box = (w: number, d: number, h: number) => ({ width_feet: w, depth_feet: d, height_feet: h });
+check(
+  entourage("RPC Tree - Deciduous:Red Maple - 30':1", box(25, 25, 30)) === "tree" &&
+    entourage("M_RPC Shrub:Barberry:2", box(3, 3, 3)) === "tree" &&
+    entourage("RPC Female:Cathy:3", box(2.2, 2.2, 5.75)) === "person" &&
+    entourage("M_RPC Beetle:M_RPC Beetle:4", box(13.5, 6, 5)) === "vehicle" &&
+    entourage("Entourage-5", box(13.5, 6, 5)) === "vehicle" &&
+    entourage("Entourage-6", box(2.2, 2.2, 5.75)) === "person" &&
+    entourage("Entourage-7", box(4, 4, 4)) === null &&
+    entourage("Table:Round:8", box(4, 4, 2.5)) === null,
+  "RPC trees, people and cars are told by their names, else their boxes' shape",
+);
+for (const [what, bodies, [w, d, h]] of [
+  ["person", standInPerson(678, 678, 1753), [678, 678, 1753]],
+  ["car", standInCar(4126, 1834, 1510), [4126, 1834, 1510]],
+] as const) {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const b of bodies)
+    for (const f of b.faces)
+      for (let k = 0; k < f.length; k++) {
+        lo[k % 3] = Math.min(lo[k % 3], f[k]);
+        hi[k % 3] = Math.max(hi[k % 3], f[k]);
+      }
+  const inside = lo[0] >= -w / 2 - 1 && hi[0] <= w / 2 + 1 && lo[1] >= -d / 2 - 1 && hi[1] <= d / 2 + 1 && lo[2] >= -1 && hi[2] <= h + 1;
+  const fills = near(lo[2], 0, 1) && near(hi[2], h, 1) && hi[0] - lo[0] > w * 0.5;
+  check(inside && fills && bodies.every((b) => b.faces.every((f) => f.length >= 9 && f.length % 3 === 0)), `an RPC ${what} stands in its box, from its foot to its top (${lo.map(Math.round)} to ${hi.map(Math.round)})`);
+}
 
 // ---- Revit's own projects ----------------------------------------------------------------------------
 
