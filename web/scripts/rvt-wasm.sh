@@ -3,7 +3,8 @@
 # the Revit reader Rodeo's Revit import runs in a worker. Needs rustup's wasm32-unknown-unknown
 # target and wasm-bindgen-cli of the version rvt-rs's Cargo.lock pins (0.2.118 at v0.15.0).
 # rvt-wasm.patch lets the open limits ask for every boxed element's saved mesh (savedMeshes: "all")
-# and for family extrusions (familyExtrusions), which rvt-rs's own binding doesn't offer.
+# and for family extrusions (familyExtrusions), which rvt-rs's own binding doesn't offer, reads saved
+# graphics on Revit 2015 to 2022 too, and draws Revit 2022 stairs and turned family boxes from them.
 #   scripts/rvt-wasm.sh [tag]   (default v0.15.0)
 set -eu
 TAG="${1:-v0.15.0}"

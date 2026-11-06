@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T14:00:00Z",
+    "revit-older-files",
+    "Older Revit files and stairs come in",
+    `Revit projects from Revit 2015 to 2022 now bring in the geometry Revit saved too, so their roofs, floors, columns, footings and furniture are no longer see-through boxes.
+- Stairs in Revit 2022 files are drawn as Revit drew them: on a stair collection, 23 of 29 stairs now come in, where before every one was a box.
+- Family instances turned off the model's axes, such as solar panels, come in as drawn.
+- Floors and ceilings drawn from their sketch are solid instead of see-through.
+- Railings and some curved fittings, such as basins and appliances, are still boxes.`,
+    "walls",
+  ),
+  release(
     "2026-11-06T12:00:00Z",
     "revit-saved-geometry",
     "Much more of a Revit model comes in",

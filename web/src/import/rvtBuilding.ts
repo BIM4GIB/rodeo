@@ -160,7 +160,10 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
 
   ents.forEach((e, i) => {
     if (e.kind !== "BuildingElement") return;
-    const source = e.property_set?.properties.find((p) => p.name === "BodySource")?.value.value;
+    const props = e.property_set?.properties ?? [];
+    const source = props.find((p) => p.name === "BodySource")?.value.value;
+    // a floor or ceiling drawn from its sketch profile keeps the record box's BodySource
+    const profiled = props.some((p) => p.name === "ProfileResolved" && p.value.value === true);
     const loc = e.location_feet;
     const z = (loc?.[2] ?? 0) * FT;
     const base = {
@@ -171,7 +174,7 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
       properties: propertiesOf(e, i),
       ...(e.material_index != null && materials[e.material_index] ? { material: e.material_index } : {}),
     };
-    const boxed = typeof source === "string" && /bbox|box/.test(source);
+    const boxed = typeof source === "string" && /bbox|box/.test(source) && !profiled;
     if (boxed) boxes++;
     const ex = e.extrusion;
     const turn = e.rotation_radians ?? 0;

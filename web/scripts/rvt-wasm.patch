@@ -120,3 +120,65 @@ index 86e48f0..c6c4992 100644
          phase: options.phase.map(PhaseOption::into_request).transpose()?,
      })
  }
+diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
+index 03d4f31..e7192b7 100644
+--- a/src/ifc/saved_meshes.rs
++++ b/src/ifc/saved_meshes.rs
+@@ -28,8 +28,8 @@
+ use super::IfcModel;
+ use super::entities::{BrepTriangle, IfcEntity, PropertyValue, SolidShape};
+ use super::export_content::{
+-    BEAM_BOX_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE, SPACE_OUTLINE_SAVED_MESH,
+-    SPACE_OUTLINE_SOURCE_PROPERTY,
++    BEAM_BOX_BODY_SOURCE, INSTANCE_TURNED_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE,
++    SPACE_OUTLINE_SAVED_MESH, SPACE_OUTLINE_SOURCE_PROPERTY,
+ };
+ use std::collections::{BTreeMap, BTreeSet};
+ 
+@@ -142,11 +142,12 @@ pub fn attach_scoped_with_control(
+         let profile_resolved = set.properties.iter().any(|p| {
+             p.name == "ProfileResolved" && matches!(p.value, PropertyValue::Boolean(true))
+         });
+-        // A beam RE-328 draws as its box along its line is a stand-in for
+-        // its saved mesh, as the record box is.
++        // A beam RE-328 draws as its box along its line, and a family instance
++        // turned off the model's axes (RE-87), are stand-ins for their saved
++        // mesh, as the record box is.
+         if !matches!(
+             text("BodySource"),
+-            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE)
++            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE | INSTANCE_TURNED_BODY_SOURCE)
+         ) || profile_resolved
+         {
+             continue;
+diff --git a/src/research/native_document.rs b/src/research/native_document.rs
+index a369d89..31f8df6 100644
+--- a/src/research/native_document.rs
++++ b/src/research/native_document.rs
+@@ -131,7 +131,7 @@ impl Default for Options {
+             max_graph_values: 100_000,
+             max_graph_objects: 100_000,
+             graph_classes: None,
+-            releases: 2023..=2027,
++            releases: 2015..=2027,
+             definition_filter: None,
+             filtered_parameters_only: false,
+             record_extras: false,
+diff --git a/src/research/native_graphics_traversal.rs b/src/research/native_graphics_traversal.rs
+index 15db1d8..ad7d5ef 100644
+--- a/src/research/native_graphics_traversal.rs
++++ b/src/research/native_graphics_traversal.rs
+@@ -418,7 +418,12 @@ impl Walker<'_, '_> {
+                 let embedded_pointer = &obj.fields["m_oEmbeddedSymbolGRep"];
+                 if embedded_pointer["pointer_token"].as_u64() == Some(0) {
+                     let info_fields = &self.graph.objects[info].fields;
+-                    if info_fields["m_GRepId"].as_u64() != Some(0)
++                    // A Revit 2022 file writes no m_GRepId on any external symbol (2026
++                    // files write 0 on all of them), so an absent field is taken as 0 and
++                    // only a present, non-zero one is refused.
++                    if info_fields
++                        .get("m_GRepId")
++                        .is_some_and(|v| v.as_u64() != Some(0))
+                         || info_fields["m_cda"]["m_pDoc"]["pointer_token"].as_u64() != Some(1)
+                         || !info_fields["m_cda"]["m_pDoc"]["class_tag"].is_null()
+                     {
