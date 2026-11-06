@@ -1,7 +1,7 @@
 // Composition root: owns the session lifecycle (open, change, save, export),
 // builds the tools, renderer and panels, and wires global listeners.
 
-import { PLAN_VIEW, blobSource, bytesSource, openVwxStream, setTurnSteps, withHeldImages, type ChangeEvent, type EditSession, type LayerView } from "../core/index.ts";
+import { PLAN_VIEW, blobSource, bytesSource, openVwxStream, savedYear, setTurnSteps, withHeldImages, type ChangeEvent, type EditSession, type LayerView } from "../core/index.ts";
 import { blankDrawing } from "../core/blank.ts";
 import { exportDxf as toDxf } from "../export/dxf.ts";
 import { pageEmf } from "../export/emf.ts";
@@ -1636,8 +1636,13 @@ export class App {
       await nextTask();
       if (cancelled) return "cancelled";
       done();
-      this.attach(session, file.name, file.handle, size, source, replacing);
+      // a file from before Vectorworks 2018 opens converted to the current format: it keeps no file
+      // handle, so saving asks where to write and the original stays as Vectorworks wrote it
+      const year = savedYear(session.doc.info.savedWith);
+      const converted = year !== null && year < 2018;
+      this.attach(session, file.name, converted ? null : file.handle, size, source, replacing);
       if (file.handle) void rememberRecent(file.handle);
+      if (converted) toast(`${baseName(file.name)} is from Vectorworks ${year}: its 2D came in, its 3D objects and images aren't read yet. Saving makes a new file in the current format, so the original stays as it is.`, "info");
       return "open";
     } catch (err) {
       if (cancelled) return "cancelled";

@@ -12740,6 +12740,7 @@
   "{0} is checked out by {1}": "{0} 已被 {1} 签出",
   "{0} is focused {1} above its lens, so its beam points up. Lower the focus, or the lens.": "{0} 的焦点比镜头高 {1}，因此光束朝上。请降低焦点或镜头。",
   "{0} is focused {1} {2} of the centre line, outside the {3} stage.": "{0} 聚焦于中心线{2}侧 {1} 处，超出 {3} 宽的舞台范围。",
+  "{0} is from Vectorworks {1}: its 2D came in, its 3D objects and images aren't read yet. Saving makes a new file in the current format, so the original stays as it is.": "{0} 来自 Vectorworks {1}：其二维内容已读入，三维对象和图像暂不读取。保存会以当前格式生成新文件，原文件保持不变。",
   "{0} is in the row below the input: move it to loop the input.": "{0} 位于输入下方的那一行：移动它才能环通该输入。",
   "{0} is in the script palette {1}: double-click it to run it.": "{0} 位于脚本面板 {1} 中：双击即可运行。",
   "{0} is looped already.": "{0} 已环通。",

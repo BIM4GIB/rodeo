@@ -22,6 +22,18 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T22:30:00Z",
+    "vectorworks-2013",
+    "Vectorworks 2013 drawings open",
+    `Files saved by Vectorworks 2013 now open instead of failing with "bad chunk".
+- Their 2D comes in: lines, shapes, ovals, text, symbols, lighting and other plug-in objects as drawn, layers, sheets, viewports and classes, in the file's units.
+- 3D objects, images, worksheets and textures aren't read yet and are left out.
+- Saving writes a new file in the current Vectorworks format, so the 2013 file stays as it was.
+- A file from before 2013 says which year it was saved in, rather than "bad chunk".
+- A Revit model's note about elements drawn as boxes no longer counts its rooms, which are drawn as their outlines and names.`,
+    "plan3d",
+  ),
+  release(
     "2026-11-06T22:10:00Z",
     "language",
     "Rodeo in Simplified Chinese",

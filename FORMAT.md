@@ -54,6 +54,47 @@ Chunk boundaries do not line up with records. Any valid Snappy encoding is
 accepted when reading; openvwx re-encodes with its own compressor and the
 stream round-trips byte-for-byte.
 
+### 1.1 Vectorworks 2013 files (core/legacy.ts)
+
+Measured on one file saved by VW 18.0.5 (2013, build 208827), 8,602 records;
+2014 to 2017 are not measured. The header up to 0x94 is laid out as above
+(here a 0x880-byte settings block, with the length unit as ASCII text, not
+UTF-16). The **body is the record stream itself, uncompressed**: walking u32
+sizes from the body's start lands exactly on the end of the file. Records
+have a **0x28-byte header** and no GUID; the 2018+ header's fields are there,
+narrower (2013 → 2018+): size u32 +0x00 → u64 +0x00; next mark u32 +0x04 →
+u64 +0x08; aux pointer u32 +0x08 → u64 +0x10; type +0x0d → +0x19; name index
++0x0e → +0x1a; flags +0x13 → +0x1f; class +0x14 → +0x20; by-class +0x18 →
++0x24; owner u32 +0x1a → u64 +0x26; ten bytes +0x1e → +0x2e (meaning not
+known). The body starts at +0x28 (2018+: +0x50). A terminator's body is a u32,
+the offset of its parent (722 of 723). The tree builds from the owners as in §2.
+
+Bodies, 2013 against 2018+ (record offsets):
+* Same layout from the body on: lines (2; a u32 tail at +0x60 is 2018+'s
+  +0x88), loci (9, 17), line markers (125, values of the "drawn" byte not
+  understood), aux records (76), the palette (80).
+* No u32 material slot (2018+ +0x88): rectangles, polygons, polylines, arcs,
+  rounded rectangles, symbols, lights; the attribute block and plan box sit
+  0x28 earlier, the fields after the slot 0x2c earlier (rectangle origin
+  +0x60, polygon count +0x62 and vertices +0x64, symbol matrix +0x6a).
+* Type 4 is an oval: a rectangle's layout, the ellipse inside its frame.
+* Text (10): 16 bytes of point sizes fewer before the font; chars UTF-16LE.
+* Name table (55): count at +0x30, entries from +0x78, each a u32 index, a u8
+  length, that many Mac OS Roman bytes and a block of 0 to 64 bytes (colour
+  indices, sometimes a braced GUID) that parses only one way to the count.
+* Classes (94, 112 bytes), layers (31, 764 bytes, name as a u8 length and Mac
+  OS Roman at +0x9c), fonts (74, 262-byte entries of Mac OS Roman) and record
+  formats (47, 70-byte fields) are shorter than 2018+'s and are rebuilt.
+
+openvwx converts each body to the 2018+ layout (legacyDoc.ts, legacyShapes.ts;
+an oval becomes the arc record of its whole ellipse) and gives the drawing a
+2018+ header with the file's units, so saving writes a 2018+ file. Left out,
+with what they hold: 3D objects (24, 34, 38, 42, 84, 111 to 114), images (14),
+record data (48: plug-ins keep their drawn geometry), worksheets (18),
+textures (97), preview images (119), wall styles (127), the document header
+(33), and records of other types neither converts that hold nothing. Other
+containers of unknown types keep their 2013 bodies.
+
 ## 2. Record stream
 
 The stream is a flat sequence of records, laid end to end with no gaps

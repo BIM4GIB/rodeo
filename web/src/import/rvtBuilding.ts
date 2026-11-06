@@ -176,7 +176,8 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
       properties: propertiesOf(e, i),
       ...(e.material_index != null && materials[e.material_index] ? { material: e.material_index } : {}),
     };
-    const boxed = typeof source === "string" && /bbox|box/.test(source) && !profiled;
+    // a room is drawn as its outline and name, never as its box
+    const boxed = typeof source === "string" && /bbox|box/.test(source) && !profiled && e.ifc_type !== "IFCSPACE";
     if (boxed) boxes++;
     const ex = e.extrusion;
     const turn = e.rotation_radians ?? 0;

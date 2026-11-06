@@ -370,8 +370,8 @@ export class Scene {
         if (!obj.shape || !this.isObjectVisible(obj)) continue;
         box = unionBBox(box, this.shownBox(obj));
       }
-      // what design-layer viewports draw (a plan viewport's box is already inside its sheet's objects)
-      for (const vp of this.viewports(layer.id)) if (vp.uncropped) box = unionBBox(box, vp.clip);
+      // what viewports draw: a plan viewport its crop on the sheet (a sheet may hold nothing else), a design-layer one the box round its drawing
+      for (const vp of this.viewports(layer.id)) box = unionBBox(box, vp.clip);
     }
     // a viewport's annotations being edited are drawn over its box, at its scale
     const open = store.symbolEdit;

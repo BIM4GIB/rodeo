@@ -425,6 +425,11 @@ function records(mm: boolean): Rec[] {
   return out;
 }
 
+/** The container header of a new drawing in the given units (legacy.ts writes a legacy drawing's units over it). */
+export function blankHeader(units: "mm" | "ftin"): Uint8Array {
+  return header(units === "mm");
+}
+
 /** A new drawing in the given units: one design layer, no objects. */
 export function blankDrawing(units: "mm" | "ftin"): Uint8Array {
   const mm = units === "mm";
