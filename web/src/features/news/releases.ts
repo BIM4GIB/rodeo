@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T20:30:00Z",
+    "revit-lights-hoods",
+    "Revit pendant lights and range hoods come in",
+    `More Revit fixtures now come in as Revit drew them, instead of see-through boxes.
+- Pendant lights are drawn as their canopy, rod and shade.
+- Range hoods and similar fittings whose families hide some parts in 3D come in without those parts.
+- Curved faces whose edges meet a neighbour's within a few hundredths of an inch now join up rather than staying boxes.`,
+    "walls",
+  ),
+  release(
     "2026-11-06T16:00:00Z",
     "revit-railings-curves",
     "Revit railings, basins and appliances come in",

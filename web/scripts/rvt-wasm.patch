@@ -121,7 +121,7 @@ index 86e48f0..c6c4992 100644
      })
  }
 diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
-index 03d4f31..20b652b 100644
+index 03d4f31..e1fe29b 100644
 --- a/src/ifc/saved_meshes.rs
 +++ b/src/ifc/saved_meshes.rs
 @@ -28,8 +28,8 @@
@@ -162,15 +162,31 @@ index 03d4f31..20b652b 100644
                  solid_shape,
                  property_set: Some(set),
                  ..
-@@ -232,6 +235,24 @@ pub fn attach_scoped_with_control(
+@@ -232,6 +235,40 @@ pub fn attach_scoped_with_control(
              if triangles.is_empty() {
                  return Ok(());
              }
 +            // A body with a curved-profile face must lie in its record box and
 +            // fill most of it on each axis; otherwise it is only part of the
-+            // element, and the box stays.
++            // element, and the box stays. Where the owner left out hidden
++            // components, the record box also holds geometry Revit does not
++            // draw in 3D, so one short axis is allowed.
 +            if element.meshes.curved_extension_faces > 0
-+                && !fills_record_box(&vertices, extrusion.as_ref())
++                && !fills_record_box(
++                    &vertices,
++                    &triangles,
++                    extrusion.as_ref(),
++                    element.meshes.excluded_visibility_branches > 0,
++                )
++            {
++                return Ok(());
++            }
++            // A curved-profile shell admitted only by the seam tolerance (the
++            // exact rim refuses it) must have no triangle longer than half its
++            // box's diagonal; the seam tolerance is not allowed to draw a body
++            // that spans across its element.
++            if element.meshes.seam_admitted_shell
++                && has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
 +            {
 +                return Ok(());
 +            }
@@ -187,17 +203,22 @@ index 03d4f31..20b652b 100644
              report.replaced += 1;
              report.triangles += triangles.len();
              *solid_shape = Some(SolidShape::TriangulatedFaceSet {
-@@ -250,3 +271,66 @@ pub fn attach_scoped_with_control(
+@@ -250,3 +287,98 @@ pub fn attach_scoped_with_control(
      )?;
      Ok(report)
  }
 +
 +/// Whether the body's vertices (in the element's frame, the record box
 +/// centred on x and y, from z = 0 to its height) lie within the box to 0.5 ft
-+/// and span at least 70% of it on every axis.
++/// and span at least 70% of it on every axis. With `hidden_excluded` (the
++/// owner left out components Revit hides in 3D), one axis may fall short, but
++/// then no triangle may be longer than half the box's diagonal: a body that
++/// is only part of the element must not span across it.
 +fn fills_record_box(
 +    vertices: &[[f64; 3]],
++    triangles: &[BrepTriangle],
 +    extrusion: Option<&crate::ifc::entities::Extrusion>,
++    hidden_excluded: bool,
 +) -> bool {
 +    const TOLERANCE: f64 = 0.5;
 +    const MIN_FILL: f64 = 0.7;
@@ -221,7 +242,34 @@ index 03d4f31..20b652b 100644
 +            max[k] = max[k].max(v[k]);
 +        }
 +    }
-+    (0..3).all(|k| (max[k] - min[k]) >= MIN_FILL * size[k])
++    let short = (0..3)
++        .filter(|&k| (max[k] - min[k]) < MIN_FILL * size[k])
++        .count();
++    match short {
++        0 => true,
++        1 => hidden_excluded && !has_giant_triangle(vertices, triangles, extrusion),
++        _ => false,
++    }
++}
++
++/// Whether some triangle of the body has an edge longer than half the
++/// diagonal of its record box.
++fn has_giant_triangle(
++    vertices: &[[f64; 3]],
++    triangles: &[BrepTriangle],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    let Some(x) = extrusion else {
++        return false;
++    };
++    let limit = (x.width_feet.powi(2) + x.depth_feet.powi(2) + x.height_feet.powi(2)).sqrt() / 2.;
++    let length = |a: u32, b: u32| {
++        let (p, q) = (vertices[a as usize], vertices[b as usize]);
++        (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
++    };
++    triangles.iter().any(|t| {
++        length(t.0, t.1) > limit || length(t.1, t.2) > limit || length(t.2, t.0) > limit
++    })
 +}
 +
 +/// Whether `vertices`, in the element's frame (origin at its location, the
@@ -254,6 +302,18 @@ index 03d4f31..20b652b 100644
 +/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
 +/// their graphics on every railing measured on the sample projects.
 +const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;
+diff --git a/src/research.rs b/src/research.rs
+index 9e098d1..e061f19 100644
+--- a/src/research.rs
++++ b/src/research.rs
+@@ -132,6 +132,7 @@ pub mod native_parameter_definitions;
+ pub mod native_parameters;
+ pub mod native_parametric_mesh;
+ pub mod native_parametric_surface;
++pub(crate) mod native_parametric_trim;
+ pub mod native_phases;
+ pub mod native_rendered_content;
+ pub mod native_saved_mesh;
 diff --git a/src/research/native_document.rs b/src/research/native_document.rs
 index a369d89..31f8df6 100644
 --- a/src/research/native_document.rs
@@ -296,10 +356,10 @@ index 15db1d8..e99be94 100644
          }
          Ok(())
 diff --git a/src/research/native_parametric_mesh.rs b/src/research/native_parametric_mesh.rs
-index b50dc80..ad3b253 100644
+index b50dc80..157876c 100644
 --- a/src/research/native_parametric_mesh.rs
 +++ b/src/research/native_parametric_mesh.rs
-@@ -1,11 +1,84 @@
+@@ -1,11 +1,98 @@
  //! Bounded UV-grid meshing for decoded parametric surfaces.
  
  use crate::native_parameters::ObjectGraph;
@@ -310,11 +370,25 @@ index b50dc80..ad3b253 100644
  use anyhow::{Context, Result, ensure};
  
 +/// The chord tolerance, in document feet, that bounds every tessellated curve.
-+const CHORD: f64 = 0.001;
++pub(crate) const CHORD: f64 = 0.001;
 +
-+/// The largest gap, in document feet, a decoded surface may leave on a shared
-+/// edge with its neighbour before the element keeps its record box.
-+const SHARED_EDGE_TOLERANCE: f64 = 1e-4;
++/// The display tolerance for seams, in document feet (about 1 mm). Revit draws
++/// a seam where a finely sampled curve meets a neighbour's coarser samples
++/// with a gap of this order, so a gap this small is not a crack: vertices
++/// closer than this are one vertex, and an edge that lies along another open
++/// edge within it is a T-junction, not an opening.
++pub(crate) const VISUAL: f64 = 0.003;
++
++/// The largest disagreement, in document feet, a decoded surface may leave on
++/// a shared edge with its neighbour before the element keeps its record box.
++/// Revit's own seams are drawn within [`VISUAL`], so that is the bound.
++pub(crate) const SHARED_EDGE_TOLERANCE: f64 = VISUAL;
++
++/// The largest deviation, in document feet, a triangle touching a trim
++/// boundary may show from its surface. Revit's own boundary samples are not
++/// drawn finer than this, so no triangle along them is held to less than the
++/// samples themselves (see the trim module).
++pub(crate) const DISPLAY_TOLERANCE: f64 = 0.01;
 +
 +/// The parameter step over which a curve with curvature-speed `r` (a circle's
 +/// radius, see [`Curve::curvature_speed_max`]) deviates from its chords by at
@@ -385,7 +459,7 @@ index b50dc80..ad3b253 100644
  #[derive(Debug, Clone)]
  pub struct ParametricMesh {
      pub vertices: Vec<[f64; 3]>,
-@@ -273,11 +346,8 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -273,11 +360,8 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
          }
          ensure!((end - max[axis]).abs() < 1e-7, "incomplete trim perimeter");
      }
@@ -399,7 +473,7 @@ index b50dc80..ad3b253 100644
      let (du, dv) = match &surface {
          ParametricSurface::SurfRev { profile, .. } => match profile {
              Curve::Line {
-@@ -293,6 +363,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -293,6 +377,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
                  angular(center[0].hypot(center[1]) + 2. * radius),
                  angular(*radius),
              ),
@@ -412,7 +486,7 @@ index b50dc80..ad3b253 100644
          },
          ParametricSurface::ConeSurf { half_angle, .. } => {
              // The generators are straight: only the angle needs a chord bound.
-@@ -318,30 +394,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -318,30 +408,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
                  }
                  let s = ParametricSurface::read(g, surface_index)?;
                  let ParametricSurface::RuledSurf {
@@ -447,7 +521,7 @@ index b50dc80..ad3b253 100644
              }
              (1. / n, 1. / n)
          }
-@@ -370,8 +428,171 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -370,8 +442,178 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
      })
  }
  
@@ -472,7 +546,7 @@ index b50dc80..ad3b253 100644
 +/// The 3D point of face `face` at `uv`, for the surfaces the shared-edge
 +/// check evaluates (planes, and the parametric surfaces above). `None` leaves
 +/// the neighbour unverifiable.
-+fn face_point(g: &ObjectGraph, face: usize, uv: [f64; 2]) -> Result<Option<[f64; 3]>> {
++pub(crate) fn face_point(g: &ObjectGraph, face: usize, uv: [f64; 2]) -> Result<Option<[f64; 3]>> {
 +    use crate::native_saved_mesh::pointer;
 +    let f = &g.objects[face];
 +    let Some(si) = pointer(g, face, &f.fields["m_pSurf"])? else {
@@ -525,7 +599,7 @@ index b50dc80..ad3b253 100644
 +/// The largest distance, over the samples of every edge this face shares
 +/// with a neighbour, between this face's surface and the neighbour's at the
 +/// same edge sample. Returns `(error, unverifiable edges)`.
-+fn shared_edge_error(
++pub(crate) fn shared_edge_error(
 +    g: &ObjectGraph,
 +    fi: usize,
 +    surface: &ParametricSurface,
@@ -604,7 +678,15 @@ index b50dc80..ad3b253 100644
 +}
 +
  pub fn face(g: &ObjectGraph, fi: usize) -> Result<FaceMesh> {
-     let grid = face_grid(g, fi)?;
+-    let grid = face_grid(g, fi)?;
++    let grid = match face_grid(g, fi) {
++        Ok(grid) => grid,
++        // A trim that is not a UV rectangle is drawn inside its loops instead.
++        Err(e) if e.to_string() == crate::research::native_parametric_trim::NONRECTANGULAR => {
++            return crate::research::native_parametric_trim::face(g, fi);
++        }
++        Err(e) => return Err(e),
++    };
 +    if is_new_path(&grid.surface) {
 +        let (error, unverifiable) = shared_edge_error(g, fi, &grid.surface)?;
 +        ensure!(
@@ -869,11 +951,584 @@ index b902e19..e85fcc5 100644
 -    }
 +    c_range_of(c)
  }
+diff --git a/src/research/native_parametric_trim.rs b/src/research/native_parametric_trim.rs
+new file mode 100644
+index 0000000..6612ffd
+--- /dev/null
++++ b/src/research/native_parametric_trim.rs
+@@ -0,0 +1,522 @@
++//! Parametric faces whose saved trim is not a UV rectangle. Each trim loop is
++//! read as a UV polygon; the polygon with its holes is triangulated on its own
++//! boundary samples, which are the samples neighbouring faces share, and the
++//! triangles are split at their centroids until the surface stays within
++//! [`CHORD`] of its linear mapping. A split leaves every boundary edge in
++//! place, so the mesh stays conforming. Anything else is refused and the
++//! element keeps its record box.
++
++use crate::native_parameters::ObjectGraph;
++use crate::native_parametric_mesh::{
++    CHORD, DISPLAY_TOLERANCE, SHARED_EDGE_TOLERANCE, VISUAL, shared_edge_error,
++};
++use crate::native_parametric_surface::ParametricSurface;
++use crate::native_saved_mesh::{FaceMesh, pointer};
++use crate::vector_math::distance;
++use anyhow::{Context, Result, bail, ensure};
++use std::collections::{BTreeMap, BTreeSet};
++
++/// The most vertices one trimmed face may build.
++const MAX_VERTICES: usize = 200_000;
++/// The most triangles one trimmed face may build.
++const MAX_TRIANGLES: usize = 400_000;
++/// The error text the rectangular grid gives a non-rectangular trim.
++pub(crate) const NONRECTANGULAR: &str = "nonrectangular parametric trim";
++
++type Uv = [f64; 2];
++
++/// Whether `fi`'s rectangular grid refuses only because its trim is not a
++/// UV rectangle, so that this module draws it instead.
++pub(crate) fn is_trimmed_fallback(g: &ObjectGraph, fi: usize) -> bool {
++    match crate::native_parametric_mesh::face_grid(g, fi) {
++        Ok(_) => false,
++        Err(e) => e.to_string() == NONRECTANGULAR,
++    }
++}
++
++fn point3(surface: &ParametricSurface, uv: Uv) -> Result<[f64; 3]> {
++    surface.evaluate(uv[0], uv[1])
++}
++
++/// The UV samples of one trim loop's edges, in loop order, each edge read on
++/// the side of `fi`.
++fn loop_segments(g: &ObjectGraph, fi: usize, li: usize) -> Result<Vec<Vec<Uv>>> {
++    let l = &g.objects[li];
++    ensure!(
++        ["EdgeLoop", "EdgeLoopWithChainEnvelopes"].contains(&l.class_name.as_str()),
++        "unsupported trim loop"
++    );
++    ensure!(l.fields["m_open"] == false, "open trim loop");
++    ensure!(
++        pointer(g, li, &l.fields["m_pFace"])? == Some(fi),
++        "loop owner mismatch"
++    );
++    let mut cur = pointer(g, li, &l.fields["m_next"])?.context("empty trim")?;
++    let mut seen = BTreeSet::new();
++    let mut segments = Vec::new();
++    while cur != li {
++        ensure!(seen.insert(cur), "trim edge cycle");
++        let e = &g.objects[cur];
++        ensure!(e.class_name == "Edge", "nonedge trim member");
++        let faces = e.fields["m_pFace"].as_array().context("edge face pair")?;
++        ensure!(faces.len() == 2, "edge face pair length");
++        let mut side = None;
++        for (i, p) in faces.iter().enumerate() {
++            if pointer(g, cur, p)? == Some(fi) {
++                ensure!(side.is_none(), "ambiguous face side");
++                side = Some(i);
++            }
++        }
++        let side = side.context("edge does not belong to face")?;
++        let ends = e.fields["m_firstAndLastEdgePnts"]
++            .as_array()
++            .context("edge endpoints")?;
++        ensure!(ends.len() == 2, "edge endpoint count");
++        let uv = |v: &serde_json::Value| -> Result<Uv> {
++            let a = v.as_array().context("UV array")?;
++            ensure!(a.len() == 2, "UV dimension");
++            let p = [
++                a[0].as_f64().context("UV number")?,
++                a[1].as_f64().context("UV number")?,
++            ];
++            ensure!(p.iter().all(|x| x.is_finite()), "nonfinite UV");
++            Ok(p)
++        };
++        let mut points = vec![uv(&ends[0]["uv"][side])?];
++        for p in e.fields["m_interiorEdgePnts"]
++            .as_array()
++            .context("edge interior points")?
++        {
++            points.push(uv(&p["uv"][side])?);
++        }
++        points.push(uv(&ends[1]["uv"][side])?);
++        segments.push(points);
++        cur = pointer(g, cur, &e.fields["m_next"][side])?.context("null trim next")?;
++    }
++    ensure!(!segments.is_empty(), "too few parametric edges");
++    Ok(segments)
++}
++
++/// Joins a loop's edge samples into one closed UV ring, end to end in 3D.
++fn closed_ring(surface: &ParametricSurface, segments: Vec<Vec<Uv>>) -> Result<Vec<Uv>> {
++    let env = surface.bounds();
++    let segments = segments
++        .into_iter()
++        .map(|seg| {
++            seg.into_iter()
++                .map(|p| {
++                    for k in 0..2 {
++                        ensure!(
++                            p[k] >= env[0][k] - 1e-7 && p[k] <= env[1][k] + 1e-7,
++                            "trim outside surface envelope"
++                        );
++                    }
++                    Ok([p[0].clamp(env[0][0], env[1][0]), p[1].clamp(env[0][1], env[1][1])])
++                })
++                .collect::<Result<Vec<_>>>()
++        })
++        .collect::<Result<Vec<_>>>()?;
++    // Corners join within 1e-7 of each other in 3D; failing every ordering
++    // that way, within VISUAL.
++    for tolerance in [1e-7, VISUAL] {
++        for reverse in [false, true] {
++            let mut ring: Vec<Uv> = segments[0].clone();
++            if reverse {
++                ring.reverse();
++            }
++            let mut valid = true;
++            for seg in &segments[1..] {
++                let last = point3(surface, *ring.last().context("empty ring")?)?;
++                let a = seg[0];
++                let b = *seg.last().context("empty segment")?;
++                if distance(last, point3(surface, a)?) < tolerance {
++                    ring.extend_from_slice(&seg[1..]);
++                } else if distance(last, point3(surface, b)?) < tolerance {
++                    ring.extend(seg.iter().rev().skip(1).copied());
++                } else {
++                    valid = false;
++                    break;
++                }
++            }
++            if valid
++                && distance(
++                    point3(surface, ring[0])?,
++                    point3(surface, *ring.last().context("empty ring")?)?,
++                ) < tolerance
++            {
++                ring.pop();
++                ring.dedup_by(|a, b| (a[0] - b[0]).abs() < 1e-12 && (a[1] - b[1]).abs() < 1e-12);
++                while ring.len() > 1 {
++                    let (first, last) = (ring[0], *ring.last().unwrap());
++                    if (first[0] - last[0]).abs() < 1e-12 && (first[1] - last[1]).abs() < 1e-12 {
++                        ring.pop();
++                    } else {
++                        break;
++                    }
++                }
++                ensure!(ring.len() >= 3, "degenerate trim ring");
++                return Ok(ring);
++            }
++        }
++    }
++    bail!("disconnected parametric trim")
++}
++
++/// Twice the signed area of the UV triangle (a, b, c).
++fn cross2(a: Uv, b: Uv, c: Uv) -> f64 {
++    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
++}
++
++fn signed_area(r: &[Uv]) -> f64 {
++    0.5 * (0..r.len())
++        .map(|i| {
++            let a = r[i];
++            let b = r[(i + 1) % r.len()];
++            a[0] * b[1] - b[0] * a[1]
++        })
++        .sum::<f64>()
++}
++
++/// Whether `p` lies inside `r` by the even-odd rule.
++fn inside(p: Uv, r: &[Uv]) -> bool {
++    let mut hit = false;
++    for i in 0..r.len() {
++        let a = r[i];
++        let b = r[(i + 1) % r.len()];
++        if (a[1] > p[1]) != (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0] {
++            hit = !hit;
++        }
++    }
++    hit
++}
++
++/// The distance from `p` to the segment `a`-`b`.
++fn segment_distance(p: Uv, a: Uv, b: Uv) -> f64 {
++    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
++    let len2 = dx * dx + dy * dy;
++    let t = if len2 > 0. {
++        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0., 1.)
++    } else {
++        0.
++    };
++    (p[0] - (a[0] + t * dx)).hypot(p[1] - (a[1] + t * dy))
++}
++
++/// The point of `tris` containing `p` strictly, if any.
++fn containing(uv: &[Uv], tris: &[[u32; 3]], p: Uv) -> Option<usize> {
++    tris.iter().position(|t| {
++        let [a, b, c] = [uv[t[0] as usize], uv[t[1] as usize], uv[t[2] as usize]];
++        cross2(a, b, p) > 1e-12 && cross2(b, c, p) > 1e-12 && cross2(c, a, p) > 1e-12
++    })
++}
++
++/// The triangulation of the boundary `tris` with interior lattice points
++/// added at `divisions` per UV-box axis, each split into its triangle.
++fn lattice_refine(
++    outer: &[Uv],
++    holes: &[Vec<Uv>],
++    boundary: &[Uv],
++    tris: &[[u32; 3]],
++    divisions: usize,
++) -> Result<(Vec<Uv>, Vec<[u32; 3]>)> {
++    let mut uv = boundary.to_vec();
++    let mut tris = tris.to_vec();
++    if divisions == 0 {
++        return Ok((uv, tris));
++    }
++    let min: Uv = std::array::from_fn(|k| outer.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min));
++    let max: Uv = std::array::from_fn(|k| outer.iter().map(|p| p[k]).fold(f64::NEG_INFINITY, f64::max));
++    let step = [(max[0] - min[0]) / divisions as f64, (max[1] - min[1]) / divisions as f64];
++    let rings: Vec<&[Uv]> = std::iter::once(outer).chain(holes.iter().map(Vec::as_slice)).collect();
++    for i in 1..divisions {
++        for j in 1..divisions {
++            let p = [min[0] + step[0] * i as f64, min[1] + step[1] * j as f64];
++            let inside_trim = inside(p, outer) && holes.iter().all(|h| !inside(p, h));
++            if !inside_trim {
++                continue;
++            }
++            // Keep lattice points off the boundary so no triangle is a sliver.
++            let clear = rings.iter().all(|r| {
++                (0..r.len()).all(|k| {
++                    segment_distance(p, r[k], r[(k + 1) % r.len()]) > 0.25 * step[0].min(step[1])
++                })
++            });
++            if !clear {
++                continue;
++            }
++            let Some(t) = containing(&uv, &tris, p) else {
++                continue;
++            };
++            ensure!(tris.len() < MAX_TRIANGLES && uv.len() < MAX_VERTICES, "trimmed face exceeds its budget");
++            let q = uv.len() as u32;
++            uv.push(p);
++            let [a, b, c] = tris[t];
++            tris[t] = [a, b, q];
++            tris.push([b, c, q]);
++            tris.push([c, a, q]);
++        }
++    }
++    Ok((uv, tris))
++}
++
++/// The deviation a triangle touching the trim boundary may show: the largest
++/// sagitta of the boundary's own samples, the chord each saved sample pair
++/// makes against the surface at the middle of its UV span. Revit's boundary
++/// is drawn with that deviation, so a triangle along it is not held finer
++/// than the samples are; it is clamped to [`CHORD`, `DISPLAY_TOLERANCE`].
++/// Interior triangles keep [`CHORD`].
++fn boundary_tolerance(surface: &ParametricSurface, rings: &[&[Uv]]) -> Result<f64> {
++    let mut sagitta = 0_f64;
++    for ring in rings {
++        for k in 0..ring.len() {
++            let (a, b) = (ring[k], ring[(k + 1) % ring.len()]);
++            let (pa, pb) = (point3(surface, a)?, point3(surface, b)?);
++            let chord: [f64; 3] = std::array::from_fn(|i| (pa[i] + pb[i]) / 2.);
++            let mid = point3(surface, [(a[0] + b[0]) / 2., (a[1] + b[1]) / 2.])?;
++            sagitta = sagitta.max(distance(mid, chord));
++        }
++    }
++    Ok(sagitta.clamp(CHORD, DISPLAY_TOLERANCE))
++}
++
++/// Whether every triangle's surface stays within its tolerance of its linear
++/// mapping: [`CHORD`] for interior triangles, `boundary_tol` for those with a
++/// vertex among the first `boundary_count` (the trim samples, which are not
++/// refined).
++fn within_chord(
++    surface: &ParametricSurface,
++    uv: &[Uv],
++    tris: &[[u32; 3]],
++    boundary_count: usize,
++    boundary_tol: f64,
++) -> Result<bool> {
++    let verts3: Vec<[f64; 3]> = uv.iter().map(|&p| point3(surface, p)).collect::<Result<_>>()?;
++    for &[a, b, c] in tris {
++        let tol = if [a, b, c].iter().any(|&k| (k as usize) < boundary_count) {
++            boundary_tol
++        } else {
++            CHORD
++        };
++        let (pa, pb, pc) = (uv[a as usize], uv[b as usize], uv[c as usize]);
++        let (qa, qb, qc) = (verts3[a as usize], verts3[b as usize], verts3[c as usize]);
++        let samples = [
++            ([1. / 3., 1. / 3., 1. / 3.], [(pa[0] + pb[0] + pc[0]) / 3., (pa[1] + pb[1] + pc[1]) / 3.]),
++            ([0.5, 0.5, 0.], [(pa[0] + pb[0]) / 2., (pa[1] + pb[1]) / 2.]),
++            ([0., 0.5, 0.5], [(pb[0] + pc[0]) / 2., (pb[1] + pc[1]) / 2.]),
++            ([0.5, 0., 0.5], [(pa[0] + pc[0]) / 2., (pa[1] + pc[1]) / 2.]),
++        ];
++        for (w, s) in samples {
++            let true_point = point3(surface, s)?;
++            let linear: [f64; 3] = std::array::from_fn(|k| w[0] * qa[k] + w[1] * qb[k] + w[2] * qc[k]);
++            if distance(true_point, linear) > tol {
++                return Ok(false);
++            }
++        }
++    }
++    Ok(true)
++}
++
++/// The trimmed mesh of a parametric face whose trim the rectangular grid
++/// cannot draw. It is refused unless its shared edges agree with their
++/// neighbours, as the curved-profile path requires.
++pub(crate) fn face(g: &ObjectGraph, fi: usize) -> Result<FaceMesh> {
++    let f = g.objects.get(fi).context("face index")?;
++    ensure!(f.class_name == "Face", "not Face");
++    ensure!(
++        f.fields["m_faceRegions"]
++            .as_array()
++            .is_some_and(Vec::is_empty),
++        "face regions need subdivision"
++    );
++    let si = pointer(g, fi, &f.fields["m_pSurf"])?.context("face surface")?;
++    let surface = ParametricSurface::read(g, si)?;
++    let (error, unverifiable) = shared_edge_error(g, fi, &surface)?;
++    ensure!(
++        unverifiable == 0,
++        "shared edge with an unverifiable neighbour"
++    );
++    ensure!(
++        error <= SHARED_EDGE_TOLERANCE,
++        "shared edge disagrees with its neighbour"
++    );
++
++    // Every loop of the face, the outer one first among the rest by area.
++    let mut rings = Vec::new();
++    let mut seen = BTreeSet::new();
++    let mut next = pointer(g, fi, &f.fields["m_pFirstLoop"])?;
++    while let Some(li) = next {
++        ensure!(seen.insert(li), "loop-list cycle");
++        rings.push(closed_ring(&surface, loop_segments(g, fi, li)?)?);
++        next = pointer(g, li, &g.objects[li].fields["m_nextLoop"])?;
++    }
++    ensure!(!rings.is_empty(), "face has no trim loop");
++    let outer_index = (0..rings.len())
++        .max_by(|&a, &b| signed_area(&rings[a]).abs().total_cmp(&signed_area(&rings[b]).abs()))
++        .context("no trim ring")?;
++    let outer = rings[outer_index].clone();
++    let holes: Vec<Vec<Uv>> = rings
++        .iter()
++        .enumerate()
++        .filter(|(i, _)| *i != outer_index)
++        .map(|(_, r)| r.clone())
++        .collect();
++    let mut expected = signed_area(&outer).abs();
++    for (i, h) in holes.iter().enumerate() {
++        ensure!(inside(h[0], &outer), "trim hole outside its outer loop");
++        ensure!(
++            holes
++                .iter()
++                .enumerate()
++                .all(|(j, other)| i == j || !inside(h[0], other)),
++            "nested trim holes unsupported"
++        );
++        expected -= signed_area(h).abs();
++    }
++    ensure!(expected > 1e-12, "degenerate parametric trim area");
++
++    // Triangulate the boundary samples with their holes.
++    let mut uv: Vec<Uv> = outer.clone();
++    let mut hole_starts = Vec::new();
++    for h in &holes {
++        hole_starts.push(uv.len() as u32);
++        uv.extend_from_slice(h);
++    }
++    let mut boundary_edges = BTreeSet::new();
++    let mut add_ring = |start: usize, len: usize| {
++        for k in 0..len {
++            let a = (start + k) as u32;
++            let b = (start + (k + 1) % len) as u32;
++            boundary_edges.insert((a.min(b), a.max(b)));
++        }
++    };
++    add_ring(0, outer.len());
++    for (h, &start) in holes.iter().zip(&hole_starts) {
++        add_ring(start as usize, h.len());
++    }
++    let mut indices = Vec::<u32>::new();
++    earcut::Earcut::new().earcut(uv.iter().copied(), &hole_starts, &mut indices);
++    ensure!(!indices.is_empty() && indices.len() % 3 == 0, "triangulation failed");
++    let mut tris: Vec<[u32; 3]> = Vec::new();
++    let mut sum = 0.;
++    for t in indices.chunks_exact(3) {
++        let t = [t[0], t[1], t[2]];
++        ensure!(t.iter().all(|&k| (k as usize) < uv.len()), "triangle bounds");
++        let a = cross2(uv[t[0] as usize], uv[t[1] as usize], uv[t[2] as usize]);
++        if a.abs() <= 1e-14 {
++            continue;
++        }
++        sum += a.abs() * 0.5;
++        tris.push(if a > 0. { t } else { [t[0], t[2], t[1]] });
++    }
++    ensure!(
++        (sum - expected).abs() <= 1e-7 * expected.max(1e-6),
++        "triangulated area mismatch"
++    );
++    // Interior points are added on a lattice, one containing triangle at a
++    // time, so every boundary sample and boundary edge stays as it is. The
++    // coarsest lattice whose triangles all stay within CHORD of the surface is
++    // taken; none is refused.
++    let rings: Vec<&[Uv]> = std::iter::once(outer.as_slice())
++        .chain(holes.iter().map(Vec::as_slice))
++        .collect();
++    let boundary_tol = boundary_tolerance(&surface, &rings)?;
++    let boundary_count = uv.len();
++    let mut found = None;
++    for divisions in [0_usize, 8, 16, 32, 64] {
++        let (points, tris) = lattice_refine(&outer, &holes, &uv, &tris, divisions)?;
++        if within_chord(&surface, &points, &tris, boundary_count, boundary_tol)? {
++            found = Some((points, tris));
++            break;
++        }
++    }
++    let (uv, done) = found.context("trimmed face needs a finer interior lattice")?;
++    let verts3: Vec<[f64; 3]> = uv.iter().map(|&p| point3(&surface, p)).collect::<Result<_>>()?;
++    {
++        // The boundary is still the samples' own: each boundary edge is used
++        // once, each interior edge twice.
++        let mut uses: BTreeMap<(u32, u32), u32> = BTreeMap::new();
++        for t in &done {
++            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
++                *uses.entry((a.min(b), a.max(b))).or_default() += 1;
++            }
++        }
++        for (edge, count) in &uses {
++            ensure!(
++                if boundary_edges.contains(edge) { *count == 1 } else { *count == 2 },
++                "trim triangulation is not a manifold"
++            );
++        }
++        ensure!(
++            boundary_edges.iter().all(|e| uses.contains_key(e)),
++            "trim boundary not covered"
++        );
++    }
++
++    // Normals and winding follow the grid's rule (tessellate_uv): the
++    // surface's own orientation against the face's flag.
++    let flags = f.fields["m_faceFlags_v9"].as_u64().context("face flags")?;
++    let orient = flags & 2 == 0;
++    let winding = surface.orientation() == orient;
++    let area3 = |x: u32, y: u32, z: u32| {
++        let p = verts3[x as usize];
++        let q = verts3[y as usize];
++        let r = verts3[z as usize];
++        let u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
++        let v = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
++        (u[1] * v[2] - u[2] * v[1])
++            .hypot((u[2] * v[0] - u[0] * v[2]).hypot(u[0] * v[1] - u[1] * v[0]))
++    };
++    let collapsed = |x: u32, y: u32| {
++        let p = verts3[x as usize];
++        let q = verts3[y as usize];
++        (0..3).map(|k| (q[k] - p[k]).powi(2)).sum::<f64>() <= 1e-20
++    };
++    let mut remap = vec![u32::MAX; verts3.len()];
++    let mut vertices = Vec::new();
++    let mut normals = Vec::new();
++    let mut triangles = Vec::new();
++    for t in &done {
++        let [a, b, c] = *t;
++        let (pa, pb, pc) = (uv[a as usize], uv[b as usize], uv[c as usize]);
++        // The triangle is counter-clockwise in UV, as the grid's are.
++        let ccw = cross2(pa, pb, pc) > 0.;
++        let (x, y, z) = if ccw { (a, b, c) } else { (a, c, b) };
++        if area3(x, y, z) <= 1e-12 {
++            ensure!(
++                collapsed(x, y) || collapsed(y, z) || collapsed(z, x),
++                "noncollapsed degenerate parametric triangle"
++            );
++            continue;
++        }
++        let mut out = [0u32; 3];
++        for (slot, &vi) in [x, y, z].iter().enumerate() {
++            if remap[vi as usize] == u32::MAX {
++                let p = uv[vi as usize];
++                remap[vi as usize] = vertices.len() as u32;
++                vertices.push(verts3[vi as usize]);
++                let mut n = surface.normal(p[0], p[1])?;
++                if !orient {
++                    for value in &mut n {
++                        *value = -*value;
++                    }
++                }
++                normals.push(n);
++            }
++            out[slot] = remap[vi as usize];
++        }
++        triangles.push(if winding { out } else { [out[0], out[2], out[1]] });
++    }
++    ensure!(!triangles.is_empty(), "trimmed parametric face produced no triangles");
++    let normal = normals[0];
++    Ok(FaceMesh {
++        face_index: fi,
++        face_tag: f.fields["m_GInfo"]["m_tag"].as_i64().unwrap_or(-1),
++        render_style_id: crate::native_metadata::identifier(&f.fields["m_renderStyleId"])?,
++        normal,
++        vertices,
++        normals,
++        triangles,
++        analytic_surface: None,
++        trim_uv: outer,
++    })
++}
 diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
-index 199cbbe..db3cde1 100644
+index 199cbbe..5edb347 100644
 --- a/src/research/native_saved_mesh.rs
 +++ b/src/research/native_saved_mesh.rs
-@@ -278,19 +278,22 @@ fn refined_plane_edge(
+@@ -3,7 +3,9 @@ use crate::native_parameters::ObjectGraph;
+ use anyhow::{Context, Result, bail, ensure};
+ use serde::{Deserialize, Serialize};
+ use serde_json::Value;
+-use std::collections::{BTreeMap, BTreeSet};
++use std::collections::{BTreeMap, BTreeSet, HashMap};
++use crate::native_parametric_mesh::VISUAL;
++use crate::vector_math::distance;
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+ pub struct FaceMesh {
+     pub face_index: usize,
+@@ -257,12 +259,27 @@ fn refined_plane_edge(
+         });
+         (us, vs, eval)
+     } else {
+-        let grid = crate::native_parametric_mesh::face_grid(g, other)?;
+-        (
+-            grid.u,
+-            grid.v,
+-            Box::new(move |uv: [f64; 2]| grid.surface.evaluate(uv[0], uv[1])),
+-        )
++        match crate::native_parametric_mesh::face_grid(g, other) {
++            Ok(grid) => (
++                grid.u,
++                grid.v,
++                Box::new(move |uv: [f64; 2]| grid.surface.evaluate(uv[0], uv[1])),
++            ),
++            // A trimmed neighbour has no knot grid. Its edge samples are the
++            // boundary both faces mesh against, so the plane keeps its own.
++            Err(e) if e.to_string() == crate::research::native_parametric_trim::NONRECTANGULAR => {
++                let surface = crate::research::native_parametric_surface::ParametricSurface::read(
++                    g,
++                    other_surface,
++                )?;
++                (
++                    Vec::new(),
++                    Vec::new(),
++                    Box::new(move |uv: [f64; 2]| surface.evaluate(uv[0], uv[1])),
++                )
++            }
++            Err(e) => return Err(e),
++        }
+     };
+     let ends = edge.fields["m_firstAndLastEdgePnts"]
+         .as_array()
+@@ -278,19 +295,22 @@ fn refined_plane_edge(
      samples.push(point::<2>(&ends[1]["uv"][other_side])?);
      let start = samples[0];
      let end = *samples.last().unwrap();
@@ -903,7 +1558,7 @@ index 199cbbe..db3cde1 100644
      let plane_index = index
          .resolve(face, &g.objects[face].fields["m_pSurf"])?
          .context("plane surface missing")?;
-@@ -336,6 +339,9 @@ fn refined_plane_edge(
+@@ -336,7 +356,13 @@ fn refined_plane_edge(
              "shared edge surface samples disagree"
          );
      }
@@ -911,9 +1566,57 @@ index 199cbbe..db3cde1 100644
 +        return Ok(original);
 +    };
      let knots = if axis == 0 { u_values } else { v_values };
++    if knots.is_empty() {
++        return Ok(original);
++    }
      let lo = start[axis].min(end[axis]);
      let hi = start[axis].max(end[axis]);
-@@ -1318,6 +1324,11 @@ pub struct GraphicsMeshes {
+     let mut values = knots
+@@ -445,13 +471,16 @@ fn ring_impl(
+         segments.iter().all(|s: &Vec<_>| !s.is_empty()),
+         "empty boundary edge"
+     );
+-    let mut output = None;
+-    for reverse in [false, true] {
++    // Corners join on their UV samples being equal. A corner joined only by
++    // its 3D distance (within VISUAL) was tried and admitted the IFCBEAM
++    // elements of a school model, whose long faces are their own length:
++    // their edges exceed half the record box's diagonal, so they are kept as
++    // their boxes. The ring therefore keeps the exact join.
++    let chain = |reverse: bool| -> Option<Vec<[f64; 2]>> {
+         let mut out = segments[0].clone();
+         if reverse {
+             out.reverse()
+         };
+-        let mut valid = true;
+         for s in &segments[1..] {
+             let last = *out.last().unwrap();
+             if close(last, s[0]) {
+@@ -459,16 +488,17 @@ fn ring_impl(
+             } else if close(last, *s.last().unwrap()) {
+                 out.extend(s.iter().rev().skip(1).copied())
+             } else {
+-                valid = false;
+-                break;
++                return None;
+             }
+         }
+-        if valid && close(out[0], *out.last().unwrap()) {
++        if close(out[0], *out.last().unwrap()) {
+             out.pop();
+-            output = Some(out);
+-            break;
++            Some(out)
++        } else {
++            None
+         }
+-    }
++    };
++    let output = [false, true].into_iter().find_map(chain);
+     let mut out = output.context("disconnected UV boundary")?;
+     out.dedup_by(|a, b| close(*a, *b));
+     ensure!(
+@@ -1318,6 +1348,16 @@ pub struct GraphicsMeshes {
      pub excluded_non_surface_branches: usize,
      #[serde(default)]
      pub profile_observations: Vec<String>,
@@ -922,20 +1625,27 @@ index 199cbbe..db3cde1 100644
 +    /// element is accepted only if its open edges form one rim.
 +    #[serde(default)]
 +    pub curved_extension_faces: usize,
++    /// Set where a curved-profile shell passes its rim only through the seam
++    /// tolerance: the exact rim (edges merged to 1e-5 ft, no T-junctions)
++    /// would have refused it.
++    #[serde(default)]
++    pub seam_admitted_shell: bool,
  }
  /// Decode selected saved graphics. Positions and normals are in the owning
  /// document frame; length units remain Revit internal feet.
-@@ -1424,6 +1435,9 @@ fn graphics_impl<'a>(
+@@ -1424,6 +1464,11 @@ fn graphics_impl<'a>(
                      let fi = index.resolve(oi, ptr)?.context("null geometry face")?;
                      match face_indexed(g, index, fi)? {
                          Some(m) => {
-+                            if crate::native_parametric_mesh::is_new_path_face(g, fi)? {
++                            if crate::native_parametric_mesh::is_new_path_face(g, fi)?
++                                || crate::research::native_parametric_trim::is_trimmed_fallback(g, fi)
++                            {
 +                                out.curved_extension_faces += 1;
 +                            }
                              let normals = if m.normals.len() == m.vertices.len() {
                                  m.normals.clone()
                              } else {
-@@ -1555,8 +1569,58 @@ fn graphics_impl<'a>(
+@@ -1555,8 +1600,179 @@ fn graphics_impl<'a>(
              Err(e) => out.diagnostics.push(format!("object {oi}: {e:#}")),
          }
      }
@@ -949,13 +1659,15 @@ index 199cbbe..db3cde1 100644
 +            out.curved_extension_faces
 +        ));
 +    }
++    out.seam_admitted_shell = out.curved_extension_faces > 0
++        && !out.primitives.is_empty()
++        && !open_edges_form_one_rim_exact(&out.primitives);
      out
  }
 +
-+/// Whether the edges used by one triangle only, across all the primitives
-+/// (their vertices matched by position), lie within 0.05 ft of one plane
-+/// parallel to an axis, or there are none.
-+fn open_edges_form_one_rim(primitives: &[Primitive]) -> bool {
++/// The rim rule before the seam tolerance: open edges merged by position to
++/// 1e-5 ft, with no T-junctions closed, lie within 0.05 ft of one plane.
++fn open_edges_form_one_rim_exact(primitives: &[Primitive]) -> bool {
 +    let key = |p: [f64; 3]| p.map(|c| (c * 1e5).round() as i64);
 +    let mut edges: BTreeMap<([i64; 3], [i64; 3]), (usize, [f64; 3])> = BTreeMap::new();
 +    for primitive in primitives {
@@ -984,13 +1696,132 @@ index 199cbbe..db3cde1 100644
 +    }
 +    (0..3).any(|axis| {
 +        let lo = open.iter().map(|m| m[axis]).fold(f64::INFINITY, f64::min);
-+        let hi = open
-+            .iter()
-+            .map(|m| m[axis])
-+            .fold(f64::NEG_INFINITY, f64::max);
++        let hi = open.iter().map(|m| m[axis]).fold(f64::NEG_INFINITY, f64::max);
 +        hi - lo <= 0.05
 +    })
 +}
++
++/// Whether the open edges across all the primitives (their vertices merged
++/// within [`VISUAL`]) lie within 0.05 ft of one plane parallel to an axis, or
++/// there are none. An open edge that lies along other open edges within
++/// [`VISUAL`] is a T-junction where a finer sampled side meets a coarser one,
++/// which Revit draws closed, so it is not counted: only genuine gaps are.
++fn open_edges_form_one_rim(primitives: &[Primitive]) -> bool {
++    let mut offset = Vec::with_capacity(primitives.len());
++    let mut points: Vec<[f64; 3]> = Vec::new();
++    for p in primitives {
++        offset.push(points.len());
++        points.extend_from_slice(&p.vertices);
++    }
++    // Vertices within VISUAL of each other are one vertex (union-find over a
++    // grid of VISUAL cells, so only neighbouring cells are compared).
++    let mut parent: Vec<usize> = (0..points.len()).collect();
++    let mut grid: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
++    for (i, &p) in points.iter().enumerate() {
++        let c = p.map(|x| (x / VISUAL).floor() as i64);
++        for dx in -1..=1 {
++            for dy in -1..=1 {
++                for dz in -1..=1 {
++                    let Some(list) = grid.get(&[c[0] + dx, c[1] + dy, c[2] + dz]) else {
++                        continue;
++                    };
++                    for &j in list {
++                        if distance(p, points[j]) < VISUAL {
++                            let (ri, rj) = (find(&mut parent, i), find(&mut parent, j));
++                            parent[ri] = rj;
++                        }
++                    }
++                }
++            }
++        }
++        grid.entry(c).or_default().push(i);
++    }
++    let mut edges: BTreeMap<(usize, usize), (usize, [f64; 3], [f64; 3])> = BTreeMap::new();
++    for (pi, primitive) in primitives.iter().enumerate() {
++        for t in &primitive.triangles {
++            for (a, b) in [(0, 1), (1, 2), (2, 0)] {
++                let (Some(_), Some(_)) = (
++                    primitive.vertices.get(t[a] as usize),
++                    primitive.vertices.get(t[b] as usize),
++                ) else {
++                    continue;
++                };
++                let (ia, ib) = (offset[pi] + t[a] as usize, offset[pi] + t[b] as usize);
++                let (ca, cb) = (find(&mut parent, ia), find(&mut parent, ib));
++                if ca == cb {
++                    continue;
++                }
++                edges
++                    .entry((ca.min(cb), ca.max(cb)))
++                    .or_insert((0, points[ia], points[ib]))
++                    .0 += 1;
++            }
++        }
++    }
++    let open: Vec<([f64; 3], [f64; 3])> = edges
++        .values()
++        .filter(|(n, _, _)| *n == 1)
++        .map(|(_, a, b)| (*a, *b))
++        .collect();
++    if open.is_empty() {
++        return true;
++    }
++    let boxes: Vec<([f64; 3], [f64; 3])> = open
++        .iter()
++        .map(|(a, b)| {
++            (
++                std::array::from_fn(|k| a[k].min(b[k]) - VISUAL),
++                std::array::from_fn(|k| a[k].max(b[k]) + VISUAL),
++            )
++        })
++        .collect();
++    let mut gaps = Vec::new();
++    for (i, &(a, b)) in open.iter().enumerate() {
++        let lies_on_another = (0..=4).all(|k| {
++            let t = k as f64 / 4.;
++            let p: [f64; 3] = std::array::from_fn(|c| a[c] + t * (b[c] - a[c]));
++            (0..open.len()).any(|j| {
++                let (lo, hi) = boxes[j];
++                j != i
++                    && (0..3).all(|c| p[c] >= lo[c] && p[c] <= hi[c])
++                    && segment_distance3(p, open[j].0, open[j].1) <= VISUAL
++            })
++        });
++        if !lies_on_another {
++            gaps.push(std::array::from_fn::<f64, 3, _>(|c| (a[c] + b[c]) * 0.5));
++        }
++    }
++    if gaps.is_empty() {
++        return true;
++    }
++    (0..3).any(|axis| {
++        let lo = gaps.iter().map(|m| m[axis]).fold(f64::INFINITY, f64::min);
++        let hi = gaps.iter().map(|m| m[axis]).fold(f64::NEG_INFINITY, f64::max);
++        hi - lo <= 0.05
++    })
++}
++
++/// The union-find root of `i`, halving the path as it goes.
++fn find(parent: &mut [usize], mut i: usize) -> usize {
++    while parent[i] != i {
++        parent[i] = parent[parent[i]];
++        i = parent[i];
++    }
++    i
++}
++
++/// The distance from `p` to the segment `a`-`b` in 3D.
++fn segment_distance3(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
++    let d: [f64; 3] = std::array::from_fn(|k| b[k] - a[k]);
++    let len2: f64 = d.iter().map(|x| x * x).sum();
++    let t = if len2 > 0. {
++        ((0..3).map(|k| (p[k] - a[k]) * d[k]).sum::<f64>() / len2).clamp(0., 1.)
++    } else {
++        0.
++    };
++    distance(p, std::array::from_fn(|k| a[k] + t * d[k]))
++}
++
  fn transform(p: &mut Primitive, m: [[f64; 4]; 4]) -> Result<()> {
      let a = [m[0][0], m[1][0], m[2][0]];
      let b = [m[0][1], m[1][1], m[2][1]];
