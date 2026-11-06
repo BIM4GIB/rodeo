@@ -139,7 +139,7 @@ import { SOURCE_TOLERANCE, type SourcePoly, sourceDataProblems } from "./sourceD
 import { intersectMeshes, MAX_CSG_TRIANGLES, subtractMeshes } from "./csg.ts";
 import { facesOf } from "./faces3d.ts";
 import { deviceLightValues, isLightingDevice, readDeviceLight } from "./lightingDevice.ts";
-import { objectTriangles, writeLight } from "./model3d.ts";
+import { isPathGroup, isProfileGroup, objectTriangles, writeLight } from "./model3d.ts";
 import { meshTriangleCount, simplifiedMesh } from "./meshSimplify.ts";
 import { OVERALL, TAKES_TEXTURE, holdsParts, isTextureDict, newTextureDict, newUvMapDict, newUvTextureDict, partLike, readTextureParts, tailValues, textureDict, writeTexturePart } from "./texmap.ts";
 import { RESOURCE_TYPES, TEXT_STYLE_TYPE, newGradient, newTextStyle, previewSize, readTextStyle, writeGradient, writeHatch, writePreview, writeTextStyle } from "./resources.ts";
@@ -2341,10 +2341,12 @@ export class Session implements EditSession {
     const p = this.plan();
     const placed = (b: BBox): BBox | null => bboxOfPoints([{ x: b.x0, y: b.y0 }, { x: b.x1, y: b.y0 }, { x: b.x1, y: b.y1 }, { x: b.x0, y: b.y1 }].map((q) => applyAffine(m, q)));
     let box: BBox | null = null;
-    // its old drawing: the objects in its list, after its aux records
+    // its old drawing: the objects in its list, after its aux records, but for the path and profile
+    // groups Vectorworks draws it from, which stay
     let kept = 0;
     for (const c of r.children.slice(auxCount(r))) {
       if (c.type === 0) continue;
+      if (isPathGroup(c) || isProfileGroup(c)) continue;
       if (kept++ >= keep) {
         p.remove(c.index, subtreeEnd(c));
         continue;

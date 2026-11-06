@@ -4,7 +4,7 @@
 // (features/index.ts imports them all before the app starts); the editor calls
 // these hooks at fixed points, so a feature never edits the editor's files.
 
-import type { BBox, ChangeEvent, EditSession, ObjectInfo, Pt, RecordValue, VwxDocument } from "../core/index.ts";
+import type { BBox, ChangeEvent, EditSession, ObjectInfo, ObjectRecord, Pt, RecordValue, VwxDocument } from "../core/index.ts";
 import type { Palettes, PaletteSpec } from "./dock.ts";
 import type { Row } from "./menu.ts";
 import type { Scene } from "./scene.ts";
@@ -158,6 +158,10 @@ export interface PluginDriver {
   readonly shape: "point" | "linear" | "rect";
   /** drawn by Rodeo itself, placed by a tool of its own, so Plug-in Insertion doesn't offer it */
   readonly builtIn?: boolean;
+  /** what Object Info says over its parameters, instead of how a change draws it */
+  readonly note?: string;
+  /** false for those drawn again only when a parameter changes (Vectorworks' own Landmark objects): Reset All Plug-Ins leaves them as they were */
+  readonly resets?: boolean;
   /** what Object Info calls a parameter (its display name), or undefined for its field name */
   label(field: string): string | undefined;
   /** whether a parameter is only shown (static text the script sets) */
@@ -175,9 +179,10 @@ export interface PluginDriver {
   reset(id: string): Promise<string | null>;
   /**
    * The plug-in's own Object Info layout, or null to list its fields as they are. Undefined until it is
-   * known (its script runs to set it up), and `ready` is called then.
+   * known (its script runs to set it up), and `ready` is called then. `rec` is the object's parameter
+   * record, for a layout that lists what the object has.
    */
-  layout(ready: () => void): readonly PluginWidget[] | null | undefined;
+  layout(ready: () => void, rec?: ObjectRecord): readonly PluginWidget[] | null | undefined;
   /**
    * Which widgets of object `id`'s layout are greyed or hidden. `apply` gets what is known now, if
    * anything, and then what the plug-in's script says for the object's values, when that differs.

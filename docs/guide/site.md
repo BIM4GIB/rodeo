@@ -2,6 +2,23 @@
 
 This page covers site models, grading, planting, hardscape, roads and parking, surveyed trees and georeferencing. The tools here are all in the Site Planning tool set.
 
+## Landmark objects in Vectorworks files
+
+A drawing made with Vectorworks Landmark opens with its plants, existing trees, hardscapes, landscape areas, massing models and hedgerows drawn as Vectorworks drew them, in plan and in 3D. Round tree canopies show as solid shapes.
+
+Select one and **Object Info** lists its data a group at a time: a plant's ID, names, spread and height; a tree's number, species, size, condition and action; an area's quantities, planting and 3D settings. Everything else it holds is under **Other Parameters**. A change is kept in the object, for Vectorworks to use when it opens the file.
+
+Some changes draw the object again, Rodeo's way:
+
+- **Existing Tree**: its canopy, DBH, height, root zones, protection zone or action. Its canopy keeps Vectorworks' fill, and in 3D it gets a trunk and a round canopy on the same ground. Its TPZ area follows.
+- **Plant**: its spread or height. Each plant is drawn where it stood, as the Plant tool draws one. Its ID, names and sizes are copied into its Plant Record.
+- **Hardscape** and **Landscape Area**: a Reshape of the outline, or a hardscape's border. The outline keeps its fill, and its 3D slab or bed stays as thick and as high. Its areas and perimeters follow.
+- **Massing Model**: a Reshape, or its height, floors or roof. It's drawn as Rodeo's Massing Model draws, and its gross area follows.
+
+**Tools › Reports** makes three schedules of them: **Plant Schedule** (plants counted by ID, Laubwerk plants by botanical name), **Existing Tree Schedule** (one tree a row, with its layer) and **Landscape Quantities** (areas by name). Each is a new worksheet, or a CSV file in a drawing with no worksheet to copy.
+
+**Limits:** what's redrawn is Rodeo's drawing, not Vectorworks' symbols or sketch styles; Vectorworks draws it its own way again on reset. Reset All Plug-Ins leaves Landmark objects as they are. Laubwerk plants, hedgerows, curbs, grades and stakes keep their data but aren't redrawn. Rodeo doesn't place new Landmark objects; Site Planning's tools draw their like.
+
 ## Site model and terrain
 
 ### Site Model

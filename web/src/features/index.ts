@@ -22,6 +22,7 @@ import "./vwplugins/index.ts";
 import "./usdz/index.ts";
 import "./sunstudy/index.ts";
 import "./theatre/index.ts";
+import "./landmark/index.ts";
 import "./timelapse/index.ts";
 import "./render/index.ts";
 import "./agents/index.ts";

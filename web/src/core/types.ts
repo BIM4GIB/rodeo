@@ -1386,6 +1386,10 @@ export interface VwxDocument {
   heliodon(id: string): HeliodonSun | null;
   /** Plug-in parameters and attached records of an object, in file order (empty if none). */
   records(id: string): ObjectRecord[];
+  /** A path plug-in's path (a hardscape's outline, a plant line's run): the polyline or polygon in its path group, by id; null when it has none. */
+  pluginPath(id: string): string | null;
+  /** The heights an object spans in 3D, in its layer's frame (its elevation not added); null when it shows nothing in 3D. */
+  heightsOf(id: string): { readonly min: number; readonly max: number } | null;
   /** The data records attached to a symbol definition (by its SymbolInfo.index), which instances placed after start with. */
   symbolRecords(index: number): ObjectRecord[];
   /** An object's texture parts; empty when it has none yet but can take a texture, null when it can't. */
@@ -1785,8 +1789,8 @@ export interface EditSession {
    * Replaces what plug-in object `id` draws with the objects `ids`: objects at the top level of a
    * layer, drawn in the plug-in's own frame (its insertion point at the origin, unturned), as a
    * plug-in's script draws them. They move into it as they are and its old drawing goes (the
-   * groups among its aux records stay); its plan box becomes theirs as its matrix places them. One
-   * undo step.
+   * groups among its aux records stay, and its path and profile groups); its plan box becomes theirs
+   * as its matrix places them. One undo step.
    */
   setPluginDrawing(id: string, ids: readonly string[], keep?: number): void;
   /** the text style the class's texts follow as "Class Text Style": a text style's name index, 0 for none */

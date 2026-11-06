@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T22:00:00Z",
+    "landmark",
+    "Vectorworks Landmark files open, edit and schedule",
+    `Drawings made with Vectorworks Landmark now look as Vectorworks drew them, and their site objects can be changed and scheduled.
+- Plants, existing trees, hardscapes and landscape areas show without the extra rings and boxes Vectorworks keeps for selection, and tree canopies show round in 3D.
+- Object Info lists a plant's, tree's or area's data a group at a time, and changes are kept for Vectorworks.
+- Changing a tree's canopy or DBH, a plant's spread, a massing model's height, or reshaping a hardscape draws it again, with its areas and Plant Record kept up.
+- Tools › Reports makes a Plant Schedule, an Existing Tree Schedule and Landscape Quantities.`,
+    "site",
+  ),
+  release(
     "2026-11-06T20:45:00Z",
     "cloud-save-progress",
     "Cloud saves show their progress at once",

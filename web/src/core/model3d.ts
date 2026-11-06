@@ -17,9 +17,10 @@
 // two edges at a vertex span collects the edges lying in it, the planar graph
 // of those edges gives its bounded faces, and nesting decides which are solid
 // (even depth) and which are holes. Curved side faces come from pairs of
-// curves that are translated copies of each other (extrusions). Faces whose
-// boundary is not planar and not such a pair (spheres, free-form surfaces)
-// show as edges only.
+// curves that are translated copies of each other (extrusions). A round body
+// whose edges are only meridians from one pole to another and rings round them
+// (an existing tree's canopy) is swept round its axis (meridianFaces). Other
+// faces whose boundary is not planar (free-form surfaces) show as edges only.
 //
 // Site models (the "DTM6" plug-in) cache only their bounding box as a body;
 // the terrain is in their aux records (76, tag at +0x50 as stored):
@@ -40,7 +41,9 @@
 // assembly's frames.
 // A hardscape's or landscape area's path draped on the terrain (a group with a
 // TDMD of kind "htap") is its boundary, a few corners left at 0 where draping
-// failed. Both are left out; the objects show their own parts.
+// failed. Both are left out; the objects show their own parts. So is a
+// selection group (tagged "gles": a copy of what it shows, or a box round it,
+// which Vectorworks doesn't draw) where the plug-in shows something else.
 //
 // Textures: an object's RenderWorks texture is a "TDMD" aux record (76) whose
 // 4CC at +0x56 is "ttwr". TDMD records are typed dictionaries: u16 count at
@@ -225,13 +228,15 @@ function apply(m: Xf, src: ArrayLike<number>, out: Float32Array | Float64Array):
 
 // ---- body records ----------------------------------------------------------------
 
-interface Wire {
+export interface Wire {
   /** merged vertices, xyz */
   pts: Float64Array;
   /** vertex index pairs */
   edges: Uint32Array;
   /** curves as vertex index runs, for ruled faces */
   curves: Uint32Array[];
+  /** runs of three or more points of the straight edges' section (a canopy's meridians), for meridianFaces */
+  lines: Uint32Array[];
 }
 
 /** Local-frame triangles and edge segments of one body, cached per record buffer. */
@@ -300,6 +305,7 @@ function readWire(d: Uint8Array): Wire | null {
   const seen = new Set<number>();
   const edges: number[] = [];
   const curves: Uint32Array[] = [];
+  const lines: Uint32Array[] = [];
   const nv = pts.length / 3;
   const addEdge = (a: number, b: number): void => {
     if (a === b) return;
@@ -319,10 +325,11 @@ function readWire(d: Uint8Array): Wire | null {
       for (let i = 0; i < count; i++) run[i] = remap[first + i];
       for (let i = 1; i < count; i++) addEdge(run[i - 1], run[i]);
       if (id === SEC_CURVES && count >= 3) curves.push(run);
+      if (id === SEC_LINES && count >= 3) lines.push(run);
     }
   }
   if (!edges.length) return null;
-  return { pts: Float64Array.from(pts), edges: Uint32Array.from(edges), curves };
+  return { pts: Float64Array.from(pts), edges: Uint32Array.from(edges), curves, lines };
 }
 
 function bodyGeometry(r: Rec): BodyGeometry | null {
@@ -333,8 +340,10 @@ function bodyGeometry(r: Rec): BodyGeometry | null {
       const w = readWire(r.data);
       if (w) {
         const tris: number[] = [];
-        planarFaces(w, tris);
-        ruledFaces(w, tris);
+        if (!meridianFaces(w, tris)) {
+          planarFaces(w, tris);
+          ruledFaces(w, tris);
+        }
         const edges = new Float64Array(w.edges.length * 3);
         for (let i = 0; i < w.edges.length; i++) {
           const v = w.edges[i];
@@ -666,6 +675,138 @@ function translated(pts: Float64Array, a: Uint32Array, b: Uint32Array): boolean 
     }
   }
   return true;
+}
+
+// ---- round bodies from their meridians -------------------------------------------
+
+/** samples along each meridian, pole to pole */
+const MERIDIAN_SAMPLES = 16;
+/** steps round the axis from one meridian to the next */
+const MERIDIAN_TURNS = 6;
+/** meridians a body may have to be swept round */
+const MAX_MERIDIANS = 64;
+
+/**
+ * A round body whose edges are three or more meridians from one pole to another and, besides
+ * them, only closed rings round it (an existing tree's canopy: four meridians, two rings): its
+ * surface swept round the axis through the poles, each meridian's height along the axis and
+ * distance from it blending into the next's. The rings aren't the edges of flat faces, as
+ * planarFaces would take them. False, adding nothing, for any other body.
+ */
+export function meridianFaces(w: Wire, out: number[]): boolean {
+  const { pts } = w;
+  const runs = [...w.curves, ...w.lines];
+  const open = runs.filter((r) => r[0] !== r[r.length - 1]);
+  if (open.length < 3 || open.length > MAX_MERIDIANS) return false;
+  const [a, b] = [open[0][0], open[0][open[0].length - 1]];
+  const ends = (r: Uint32Array): boolean => (r[0] === a && r[r.length - 1] === b) || (r[0] === b && r[r.length - 1] === a);
+  if (!open.every(ends)) return false;
+  // every edge of the body is on a meridian or a ring
+  const nv = pts.length / 3;
+  const onRuns = new Set<number>();
+  for (const r of runs) for (let i = 1; i < r.length; i++) onRuns.add(Math.min(r[i - 1], r[i]) * nv + Math.max(r[i - 1], r[i]));
+  for (let i = 0; i < w.edges.length; i += 2) if (!onRuns.has(Math.min(w.edges[i], w.edges[i + 1]) * nv + Math.max(w.edges[i], w.edges[i + 1]))) return false;
+  const at = (v: number): Vec3 => [pts[3 * v], pts[3 * v + 1], pts[3 * v + 2]];
+  const pa = at(a);
+  const axis = minusOf(at(b), pa);
+  const length = Math.hypot(...axis);
+  if (length < PLANE_TOL) return false;
+  const u: Vec3 = [axis[0] / length, axis[1] / length, axis[2] / length];
+  // a frame round the axis
+  const helper: Vec3 = Math.abs(u[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const e1 = normalized(crossOf(helper, u));
+  const e2 = crossOf(u, e1);
+  // each meridian, a to b, at even steps along it: height along the axis, distance from it, and its turn
+  const meridians = open.map((r) => {
+    const run = r[0] === a ? r : r.slice().reverse();
+    const lengths = [0];
+    for (let i = 1; i < run.length; i++) lengths.push(lengths[i - 1] + Math.hypot(...minusOf(at(run[i]), at(run[i - 1]))));
+    const total = lengths[lengths.length - 1];
+    const t: number[] = [];
+    const radius: number[] = [];
+    let turn = 0;
+    let widest = -1;
+    for (let s = 0, j = 1; s <= MERIDIAN_SAMPLES; s++) {
+      const want = (total * s) / MERIDIAN_SAMPLES;
+      while (j < run.length - 1 && lengths[j] < want) j++;
+      const span = lengths[j] - lengths[j - 1];
+      const f = span > 0 ? Math.min(1, Math.max(0, (want - lengths[j - 1]) / span)) : 0;
+      const [p0, p1] = [minusOf(at(run[j - 1]), pa), minusOf(at(run[j]), pa)];
+      const p: Vec3 = [p0[0] + (p1[0] - p0[0]) * f, p0[1] + (p1[1] - p0[1]) * f, p0[2] + (p1[2] - p0[2]) * f];
+      const along = dotOf(p, u);
+      const x = dotOf(p, e1);
+      const y = dotOf(p, e2);
+      t.push(along);
+      radius.push(Math.hypot(x, y));
+      if (radius[s] > widest) {
+        widest = radius[s];
+        turn = Math.atan2(y, x);
+      }
+    }
+    return { t, radius, turn };
+  });
+  meridians.sort((p, q) => p.turn - q.turn);
+  const m = meridians.length;
+  // Catmull-Rom through the meridians' values round the axis, which closes on itself
+  const blend = (values: (k: number) => number, k: number, f: number): number => {
+    const [p0, p1, p2, p3] = [values((k + m - 1) % m), values(k), values((k + 1) % m), values((k + 2) % m)];
+    return 0.5 * (2 * p1 + (p2 - p0) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (3 * p1 - p0 - 3 * p2 + p3) * f * f * f);
+  };
+  const rings: Vec3[][] = [];
+  for (let s = 0; s <= MERIDIAN_SAMPLES; s++) {
+    const ring: Vec3[] = [];
+    for (let k = 0; k < m; k++) {
+      const gap = (((meridians[(k + 1) % m].turn - meridians[k].turn) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) || 2 * Math.PI;
+      for (let j = 0; j < MERIDIAN_TURNS; j++) {
+        const f = j / MERIDIAN_TURNS;
+        const angle = meridians[k].turn + gap * f;
+        const t = blend((i) => meridians[i].t[s], k, f);
+        const r = Math.max(0, blend((i) => meridians[i].radius[s], k, f));
+        const [c, sn] = [Math.cos(angle) * r, Math.sin(angle) * r];
+        ring.push([pa[0] + u[0] * t + e1[0] * c + e2[0] * sn, pa[1] + u[1] * t + e1[1] * c + e2[1] * sn, pa[2] + u[2] * t + e1[2] * c + e2[2] * sn]);
+      }
+    }
+    rings.push(ring);
+  }
+  // counter-clockwise seen from outside: away from the axis
+  const mid = rings[MERIDIAN_SAMPLES >> 1];
+  const n = mid.length;
+  const [p0, p1, p2] = [mid[0], mid[1], rings[(MERIDIAN_SAMPLES >> 1) + 1][0]];
+  const normal = crossOf(minusOf(p1, p0), minusOf(p2, p0));
+  const from = minusOf(p0, pa);
+  const h = dotOf(from, u);
+  const outward: Vec3 = [from[0] - u[0] * h, from[1] - u[1] * h, from[2] - u[2] * h];
+  const flip = dotOf(normal, outward) < 0;
+  const push = (...corners: Vec3[]): void => {
+    const [x, y, z] = flip ? [corners[0], corners[2], corners[1]] : corners;
+    if (Math.hypot(...crossOf(minusOf(y, x), minusOf(z, x))) < PLANE_TOL) return;
+    out.push(...x, ...y, ...z);
+  };
+  for (let s = 0; s < MERIDIAN_SAMPLES; s++) {
+    for (let j = 0; j < n; j++) {
+      const [q0, q1, q2, q3] = [rings[s][j], rings[s][(j + 1) % n], rings[s + 1][(j + 1) % n], rings[s + 1][j]];
+      push(q0, q1, q2);
+      push(q0, q2, q3);
+    }
+  }
+  return true;
+}
+
+function minusOf(p: Vec3, q: Vec3): Vec3 {
+  return [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+}
+
+function dotOf(p: Vec3, q: Vec3): number {
+  return p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+}
+
+function crossOf(p: Vec3, q: Vec3): Vec3 {
+  return [p[1] * q[2] - p[2] * q[1], p[2] * q[0] - p[0] * q[2], p[0] * q[1] - p[1] * q[0]];
+}
+
+function normalized(p: Vec3): Vec3 {
+  const l = Math.hypot(...p) || 1;
+  return [p[0] / l, p[1] / l, p[2] / l];
 }
 
 // ---- 3D polygons -----------------------------------------------------------------
@@ -1172,6 +1313,10 @@ function auxTag(d: Uint8Array): string {
 const SITE_MODEL = "DTM6";
 /** the tag of a plug-in's profile group, as stored */
 const PROFILE_GROUP = "gorp";
+/** the tag of a plug-in's selection group, as stored */
+const SELECTION_GROUP = "gles";
+/** the tag of a plug-in's path group (the outline or line it is drawn along), as stored */
+const PATH_GROUP = "gtap";
 /** the TDMD kind marking a hardscape's or landscape area's path draped on the terrain, as stored */
 const DRAPED_PATH = "htap";
 
@@ -1184,11 +1329,41 @@ export function isProfileGroup(r: Rec): boolean {
 }
 
 /**
+ * A plug-in object's selection group: a copy of what it shows or a box round it (a Laubwerk plant's
+ * ring and box, a hardscape's or landscape area's white outline and slab), which Vectorworks
+ * doesn't draw. Left out of a view where the plug-in shows something else (selectionHidden), as a
+ * wall feature's plan is only there.
+ */
+export function isSelectionGroup(r: Rec): boolean {
+  return r.type === GROUP && r.children.some((c) => c.type === AUX && auxTag(c.data) === SELECTION_GROUP);
+}
+
+/** A path plug-in's path group: the outline or line it is drawn along (a hardscape's, a massing model's), shown in neither view. */
+export function isPathGroup(r: Rec): boolean {
+  return r.type === GROUP && r.children.some((c) => c.type === AUX && auxTag(c.data) === PATH_GROUP);
+}
+
+/**
  * A plug-in object's group that is not part of what it shows: its profile group or its path draped
  * on the terrain (a few corners left at 0 where draping failed).
  */
 function isSourceGroup(r: Rec): boolean {
   return isProfileGroup(r) || (r.type === GROUP && tdmdRec(r, DRAPED_PATH) !== null);
+}
+
+/** what holds faces in 3D, or may (a symbol's definition, looked at no further) */
+const SHOWS_3D = new Set([24, 25, 34, 38, 40, 83, 84, 114, 15]);
+const shows3d = new WeakMap<Rec, boolean>();
+
+/** Whether a plug-in shows 3D outside its source and selection groups, so its selection group is left out of 3D. */
+function selectionHidden3d(plugin: Rec): boolean {
+  let has = shows3d.get(plugin);
+  if (has === undefined) {
+    const any = (r: Rec): boolean => r.children.some((c) => c.type !== AUX && !isSourceGroup(c) && !isSelectionGroup(c) && (SHOWS_3D.has(c.type) || any(c)));
+    has = any(plugin);
+    shows3d.set(plugin, has);
+  }
+  return has;
 }
 
 function tinGeometry(owner: Rec): BodyGeometry | null {
@@ -1692,7 +1867,7 @@ function walkChildren(ctx: Ctx, parent: Rec, m: Xf, topId: string | null): void 
     // the doors and windows in a wall are its children too; only its own faces sit back
     if (wall) ctx.recessed = c.type === GROUP || c.type === SOLID_ADDITION;
     if (c.type === BODY) continue; // read by its owner
-    if (parent.type === PLUGIN && isSourceGroup(c)) continue;
+    if (parent.type === PLUGIN && (isSourceGroup(c) || (isSelectionGroup(c) && selectionHidden3d(parent)))) continue;
     if (components && c.type === GROUP) {
       walk(ctx, c, m, top);
       continue;

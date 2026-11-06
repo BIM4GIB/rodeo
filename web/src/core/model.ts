@@ -65,7 +65,7 @@ import { FONT_LIST, readFontList } from "./fonts.ts";
 import { mirrorMarkers, readMarkers } from "./markers.ts";
 import { readLayerView } from "./layerView.ts";
 import { readDropShadow } from "./shadow.ts";
-import { buildLights3d, buildModel3d, buildModelTree, buildSymbolModel3d, isProfileGroup, turnStepsGeneration } from "./model3d.ts";
+import { buildLights3d, buildModel3d, buildModelTree, buildSymbolModel3d, isPathGroup, isProfileGroup, isSelectionGroup, objectTriangles, turnStepsGeneration } from "./model3d.ts";
 import { readNameTable } from "./names.ts";
 import { type AddObject, type Index, ObjectIndex } from "./objectIndex.ts";
 import { type FormatDef, RECORD, RECORD_FORMAT, readFormat, readValues, recordFormat } from "./params.ts";
@@ -255,6 +255,8 @@ const LAYER = 31;
 const SHEET_KIND = 2;
 /** the plug-in (format name of its parameters) Renderworks cameras are */
 export const CAMERA_PLUGIN = "RenderWorks Camera";
+/** Landmark's plant, whose path shows as its Poly Display says */
+const LANDMARK_PLANT = "Plant";
 
 /** The class every document has; geometry in it inside a symbol or plug-in takes the container's class. */
 const NONE_CLASS = "None";
@@ -880,6 +882,8 @@ export class Model implements VwxDocument {
   private cachedViewStyles = new Map<string, ReadonlyMap<string, StyleOverride> | null>();
   /** whether a plug-in or symbol definition has 2D geometry (hasPlanGeometry), by its data */
   private planParts = new WeakMap<Uint8Array, boolean>();
+  /** plug-ins that draw in plan besides their selection group (notInPlan) */
+  private planBesides = new WeakMap<Uint8Array, boolean>();
   /** record formats by name index, read when first asked for */
   private formatDefs: Map<number, FormatDef> | null = null;
   /** the font list's names, read when first asked for */
@@ -934,6 +938,7 @@ export class Model implements VwxDocument {
     this.dlvps = null;
     this.cachedViewStyles.clear();
     this.planParts = new WeakMap();
+    this.planBesides = new WeakMap();
     this.formatDefs = null;
     this.fontNames = null;
   }
@@ -1126,7 +1131,7 @@ export class Model implements VwxDocument {
         for (const c of kids) {
           // a design-layer viewport's layer entries are data; what it shows is drawn as a viewport (viewports)
           if (c.type === DLVP_LAYER || c === notes) continue;
-          if (parent.type === PLUGIN && isProfileGroup(c)) continue;
+          if (this.notInPlan(parent, c)) continue;
           if (plan && !this.isPlanPart(c)) continue;
           const onSheet = sheet && onViewportSheet(c);
           const cached = cachedTextPlacement(c);
@@ -1275,7 +1280,7 @@ export class Model implements VwxDocument {
     if (depth > 8) return found;
     const collect = (parent: Rec, m: Affine, plan: boolean) => {
       for (const c of objectChildren(parent)) {
-        if (parent.type === PLUGIN && isProfileGroup(c)) continue;
+        if (this.notInPlan(parent, c)) continue;
         if (plan && !this.isPlanPart(c)) continue;
         // a symbol's light objects are part of its 3D model (a light fixture's): Edit Symbol shows them
         if (c.type === LIGHT) continue;
@@ -1314,6 +1319,27 @@ export class Model implements VwxDocument {
       this.planParts.set(r.data, has);
     }
     return has;
+  }
+
+  /**
+   * Whether `c`, a child of `parent`, is a plug-in's group plan leaves out: its profile group, its
+   * selection group when it draws something else in plan (a wall feature draws only that), or a
+   * Landmark plant's path (the line its plants are spread along) unless its Poly Display shows it.
+   */
+  private notInPlan(parent: Rec, c: Rec): boolean {
+    if (parent.type !== PLUGIN) return false;
+    if (isProfileGroup(c)) return true;
+    if (isPathGroup(c) && this.pluginName(parent) === LANDMARK_PLANT) {
+      const shown = this.recordsOf(parent).find((r) => r.parametric)?.fields.find((f) => f.name === "poly display")?.value;
+      return shown === undefined || shown === "None";
+    }
+    if (!isSelectionGroup(c)) return false;
+    let besides = this.planBesides.get(parent.data);
+    if (besides === undefined) {
+      besides = objectChildren(parent).some((k) => !isProfileGroup(k) && !isSelectionGroup(k) && this.isPlanPart(k) && (k.type === 15 || shapeOf(k) !== null || this.hasPlanGeometry(k)));
+      this.planBesides.set(parent.data, besides);
+    }
+    return besides;
   }
 
   /**
@@ -1762,6 +1788,27 @@ export class Model implements VwxDocument {
   records(id: string): ObjectRecord[] {
     const r = this.rec(id);
     return r ? this.recordsOf(r) : [];
+  }
+
+  pluginPath(id: string): string | null {
+    const r = this.rec(id);
+    const group = r?.type === PLUGIN ? objectChildren(r).find(isPathGroup) : undefined;
+    const path = group && objectChildren(group).find((c) => c.type === 5 || c.type === 21);
+    return path ? guidOf(path) : null;
+  }
+
+  heightsOf(id: string): { min: number; max: number } | null {
+    const r = this.rec(id);
+    if (!r) return null;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const { triangles: t } of objectTriangles(this, r)) {
+      for (let i = 2; i < t.length; i += 3) {
+        if (t[i] < min) min = t[i];
+        if (t[i] > max) max = t[i];
+      }
+    }
+    return min <= max ? { min, max } : null;
   }
 
   symbolRecords(index: number): ObjectRecord[] {

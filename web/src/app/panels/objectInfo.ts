@@ -1466,17 +1466,18 @@ function recordRows(doc: VwxDocument, id: string, rec: ObjectRecord, saved: Kept
     layerNames: doc.layers().filter((l) => l.kind === "design").map((l) => l.name),
     driver,
   };
-  const layout = driver?.layout(relayout);
+  const layout = driver?.layout(relayout, rec);
   const rows = layout ? layoutRows(ctx, rec, layout) : rec.fields.map((f) => fieldRow(ctx, f));
   const out: Node[] = [];
   if (rec.parametric) {
     out.push(
       note(
-        ctx.driver?.builtIn
+        ctx.driver?.note ??
+          (ctx.driver?.builtIn
           ? "Drawn by Rodeo: a change draws it again"
           : ctx.driver
             ? "Drawn by the installed plug-in: a change draws it again"
-            : "Shown as saved; Vectorworks rebuilds it on reset",
+            : "Shown as saved; Vectorworks rebuilds it on reset"),
       ),
     );
   }

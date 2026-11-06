@@ -778,7 +778,12 @@ and fPlanarObjs, and the detail and phase fields.
 
 **3D.** Bodies (114) hold points and edges; openvwx rebuilds planar faces by
 grouping edges into planes, tracing half-edge loops, resolving holes by
-nesting, and triangulating, and builds ruled faces between twin curves.
+nesting, and triangulating, and builds ruled faces between twin curves. A
+body whose edges are only three or more meridians from one pole to another
+and closed rings round them is swept round the axis through the poles instead,
+each meridian's height and distance from the axis blending into the next's (a
+private 2025 sample's 80 existing trees: canopies of four meridians and two
+rings, as edges with no faces; likely).
 Points within 0.005 of each other on every axis are one vertex, and planes
 within 0.00005 of each other in each component of their normal and within
 their tolerance in offset are one plane, wherever the body lies, so a body moved with
@@ -1139,13 +1144,14 @@ group, or a TDMD dictionary of a telling kind. Stored backwards:
 | Tag | Group | |
 |---|---|---|
 | `gorp` (prog) | profile group: what the plug-in is rebuilt from. A plant's symbol at 0 while the plant itself (an instance among its parts, and a `gles` copy) stands on the terrain; a door's handle symbol unplaced at the door's origin; a door-and-window assembly's frame and mullion plug-ins, the panels it shows being its other parts; a tapered extrude's profile; a massing model 5.9 m below itself; a landscape area's plant mix, one of each at its origin, its scattered plants being another group. In a plant symbol's plant, the image prop at its own size (2 m for a plant shown 500 mm tall), the plant showing a copy at its set height beside it; 22 of a private sample's 107 such symbols, placed nowhere, keep no copy | likely (a private 2025 sample: 25 plants, 31 landscape areas, 141 massing models; 2026 demo: 17 doors, 15 assemblies) |
-| `gtap` (patg) | path group: a path plug-in's path, 2D | likely |
+| `gtap` (patg) | path group: a path plug-in's path, 2D, in the plug-in's frame: a hardscape's, landscape area's or massing model's outline, a plant's or hedgerow's run, a curb's line. Its first corner is the plug-in's origin for most. openvwx reads it as the object's path (VwxDocument.pluginPath), Reshape moves it, and drawing a plug-in again keeps it | likely (a private 2025 sample: every one of its hardscapes, landscape areas, massing models, plants, hedgerows and curbs) |
 | TDMD `htap` (path) | a hardscape's or landscape area's boundary draped on the terrain, as a 3D polygon; 4 of a private sample's hardscapes have 4 or 5 corners left at 0 where draping failed. Every one of the 36 with such a group has other 3D | likely |
-| `gles` (selg) | a copy of what the plug-in shows, or a box round it (a plant's tree, a hardscape's whole thickness as one extrude): perhaps for selection | not known |
+| `gles` (selg) | selection group: a copy of what the plug-in shows, or a box round it (a plant's tree, a hardscape's whole thickness as one extrude, a Laubwerk plant's ring and box), which Vectorworks doesn't draw: the Dover Dam demo's published PDF shows its Laubwerk plants with no ring | likely |
 | `gchw`, `ggcw` | in doors and windows: a box the size of the opening | not known |
 
-openvwx leaves profile groups and draped paths out of 3D; the rest it still
-builds.
+openvwx leaves profile groups and draped paths out of 3D, and selection groups
+out of plan and 3D where the plug-in shows something else there; the rest it
+still builds.
 
 **Placing a slab** copies a slab plug-in (`Slab`, parameters `Style`,
 `Bounding`, `Texture Set`, `Height`: none holds the outline, which is its
