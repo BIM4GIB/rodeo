@@ -1,6 +1,6 @@
 // A Revit model as rvt-rs reads it (web/vendor/rvt-rs, Apache-2.0): its levels, elements with their
 // geometry, materials and parameters, and a glTF of every element's body as rvt-rs draws it. The
-// reader is WebAssembly (7.9 MB, 2.6 MB compressed), loaded only when a Revit model is imported; in
+// reader is WebAssembly (9.3 MB), loaded only when a Revit model is imported; in
 // the browser it runs in the worker that makes the drawing (app/revitImport.worker.ts), as a big
 // model takes many seconds; the checks load it under Node (rvtBuilding.check.ts). Lengths are feet,
 // z up, as rvt-rs keeps them; rvtBuilding.ts turns the model into Rodeo's.
@@ -85,8 +85,9 @@ type Rvt = typeof import("../../vendor/rvt-rs/rvt.js");
 /** Reads a Revit model with an initialised rvt-rs. */
 export function readWith(rvt: Rvt, bytes: Uint8Array, progress?: (step: string) => void): RvtRead {
   progress?.("Reading the Revit model");
-  // doors and windows from the meshes Revit saved for them (Revit 2023 on), the rest as decoded
-  const result = rvt.openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes, "scaffold", { savedMeshes: true, largeModel: bytes.length > 256 * 1024 * 1024 }) as {
+  // every element rvt-rs knows only by its box drawn from the mesh Revit saved for display (Revit 2023
+  // to 2027: roofs, stair flights, furniture, mullions and the rest), else that box
+  const result = rvt.openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes, "scaffold", { savedMeshes: "all", largeModel: bytes.length > 256 * 1024 * 1024 }) as {
     model: RvtModel;
     diagnostics: RvtDiagnostics;
   };

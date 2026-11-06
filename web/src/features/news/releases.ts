@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T12:00:00Z",
+    "revit-saved-geometry",
+    "Much more of a Revit model comes in",
+    `Revit projects saved in Revit 2023 to 2027 now bring in the geometry Revit saved for roofs, stairs, furniture, curtain wall mullions and panels, columns, footings and light fittings, where before most of these were see-through boxes.
+- On Autodesk's sample house, the elements drawn as boxes fall from about 380 to about 60, and on a large tower model from 3,765 to 1,518.
+- RPC trees, which Revit keeps only as photos, are drawn as a simple trunk and crown at their size instead of a big see-through box.
+- Big models take a little longer to open while the extra geometry is read.
+- Stairs in files from Revit 2022 and earlier are still boxes.`,
+    "walls",
+  ),
+  release(
     "2026-11-05T12:50:00Z",
     "sketchup-many-edges",
     "Detailed SketchUp models come in",

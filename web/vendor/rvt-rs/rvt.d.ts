@@ -62,7 +62,7 @@ export function openRvtBytesWithDiagnosticsMode(bytes: Uint8Array, mode: string)
 /**
  * [`open_rvt_bytes_with_diagnostics_mode`] under the resource limits of
  * `limits`, a JS object
- * `{ largeModel?, maxStreamBytes?, maxInflateBytes?, savedMeshes? }` or
+ * `{ largeModel?, maxStreamBytes?, maxInflateBytes?, savedMeshes?, phase? }` or
  * `null` for the defaults. A field left out keeps its default; the first
  * three are `rvt-ifc`'s flags of the same names, resolved by
  * [`rvt::cli::open_limits`] (`largeModel` is `--large-model`, and an
@@ -79,14 +79,31 @@ export function openRvtBytesWithDiagnosticsMode(bytes: Uint8Array, mode: string)
  *   to 2027 files from the meshes Revit saved for them, as `rvt-ifc` does
  *   without `--no-saved-meshes`; `false` keeps their bounding boxes and
  *   skips the extra pass over the file's saved graphics.
+ * - `phase` (a phase's name, matched exactly first, or its ElementId as a
+ *   number) exports that project phase, as `rvt-ifc --phase` does: an element
+ *   that does not exist in it, and a room whose own phase is not it, are left
+ *   out. Left out, the export is the project's last phase. A phase the file
+ *   lacks throws, with the file's phases in the message. The result's
+ *   `phases` lists them (`{ id, name? }`, in order, the last being the
+ *   default).
  *
  * Byte limits are whole numbers of bytes. A stream a limit keeps from being
  * read is listed in `diagnostics` (the `stream_not_read_resource_limit`
  * skipped item and a `Not read whole:` warning per stream, #1075), and the
  * model is missing what it holds. Unknown fields and fractional, negative
  * or non-finite byte limits throw.
+ *
+ * `progress`, when given, is a JS function `(stage, done, total)` called as
+ * the decoder works: `stage` is a [`Stage`] name as `rvt-gltf --progress`
+ * prints it (`schema-parse`, `candidate-scan`, `element-decode`,
+ * `partition-scan`, `saved-graphics`, `saved-meshes`), `done` a count and
+ * `total` the count it is out of, or `null` where the stage has no
+ * denominator yet (#1195). It is called when a stage begins, when it ends,
+ * and each time a stage with a total passes another whole percent, so a
+ * stage costs at most about a hundred calls. An exception it throws is
+ * ignored.
  */
-export function openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes: Uint8Array, mode: string, limits: any): any;
+export function openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes: Uint8Array, mode: string, limits: any, progress?: Function | null): any;
 
 /**
  * Quick summary — reads only the cheap metadata (BasicFileInfo +
@@ -124,7 +141,7 @@ export interface InitOutput {
     readonly modelToGlb: (a: number, b: number) => void;
     readonly modelToIfcStep: (a: number, b: number) => void;
     readonly openRvtBytesWithDiagnosticsMode: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly openRvtBytesWithDiagnosticsModeAndOpenLimits: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly openRvtBytesWithDiagnosticsModeAndOpenLimits: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly quickSummary: (a: number, b: number, c: number) => void;
     readonly renderPlanSvg: (a: number, b: number, c: number) => void;
     readonly scheduleCsv: (a: number, b: number, c: number, d: number, e: number, f: number) => void;

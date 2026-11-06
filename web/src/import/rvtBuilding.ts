@@ -6,7 +6,9 @@
 // Rodeo's walls and slabs from those; everything else (and a wall or floor rvt-rs gives a body
 // of another shape: curved, tapered, sloped) takes its body from rvt-rs's glTF, which draws each
 // element's as rvt-rs's IFC export does. Rooms become their outline and name in plan. What rvt-rs
-// couldn't decode is drawn as the element's box, see-through, and the notes say how many.
+// couldn't decode is drawn as the element's box, see-through, and the notes say how many. An RPC
+// tree (Revit's photo entourage, which keeps no geometry for it) is drawn as a plain trunk and crown
+// filling its box instead, so a site's trees don't hide the building in 3D.
 
 import type { Pt } from "../core/types.ts";
 import type { Body, BuildingModel, BuildingObject, Category, Component, Material, Opening, Property, PropertySets, Rgb, Slab, Wall } from "./building.ts";
@@ -154,6 +156,7 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
   const objects: BuildingObject[] = [];
   const drawing: BuildingModel["drawing"] = [];
   let boxes = 0;
+  let trees = 0;
 
   ents.forEach((e, i) => {
     if (e.kind !== "BuildingElement") return;
@@ -231,7 +234,12 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
 
     // an opening is the hole in its host, not a body of its own
     if (e.ifc_type === "IFCOPENINGELEMENT") return;
-    const own = boxed ? bodies.get(i)?.map((b) => ({ ...b, box: true })) : bodies.get(i);
+    const tree = boxed && RPC_TREE.test(e.name ?? "") ? standInTree(bodies.get(i) ?? []) : null;
+    if (tree) {
+      boxes--;
+      trees++;
+    }
+    const own = tree ?? (boxed ? bodies.get(i)?.map((b) => ({ ...b, box: true })) : bodies.get(i));
     if (!own?.length) {
       // curtain walls are drawn by their panels and mullions
       if (e.ifc_type !== "IFCCURTAINWALL") skip(`${categories[base.category].name.toLowerCase()} without a body`);
@@ -305,6 +313,7 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
   }
 
   if (boxes) notes.push(`${boxes.toLocaleString()} element${boxes === 1 ? " is" : "s are"} drawn as ${boxes === 1 ? "its" : "their"} bounding box${boxes === 1 ? "" : "es"}, see-through: Revit's geometry for ${boxes === 1 ? "it" : "them"} isn't decoded yet`);
+  if (trees) notes.push(`${trees.toLocaleString()} RPC tree${trees === 1 ? " is" : "s are"} drawn as a plain trunk and crown, their size: Revit keeps no model of ${trees === 1 ? "it" : "them"}`);
   for (const w of read.diagnostics.warnings ?? []) if (/not read whole|resource limit/i.test(w)) notes.push(w);
 
   return {
@@ -418,4 +427,51 @@ function roomName(e: RvtEntity, sets: RvtPropertySet[] | undefined): string {
   const ref = sets?.flatMap((s) => s.properties).find((p) => p.name === "Reference")?.value.value;
   if (typeof ref === "string" && ref.trim()) return ref.trim();
   return splitName(e.name ?? "")[1];
+}
+
+/** An RPC tree's name: Revit's photo entourage of trees and plants, which carries no geometry. */
+const RPC_TREE = /\bRPC\b.*\b(tree|plant|shrub|bush|palm|conifer|deciduous|evergreen)/i;
+
+/** A plain tree filling the box round `bodies` (mm, z up): a trunk up the middle and a crown above it; null with no box. */
+function standInTree(bodies: readonly Body[]): Body[] | null {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const b of bodies)
+    for (const f of b.faces)
+      for (let k = 0; k < f.length; k++) {
+        lo[k % 3] = Math.min(lo[k % 3], f[k]);
+        hi[k % 3] = Math.max(hi[k % 3], f[k]);
+      }
+  const [w, d, h] = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+  if (!(w > 0 && d > 0 && h > 0)) return null;
+  const cx = (lo[0] + hi[0]) / 2;
+  const cy = (lo[1] + hi[1]) / 2;
+  const SIDES = 8;
+  const ring = (rx: number, ry: number, z: number): number[][] =>
+    Array.from({ length: SIDES }, (_, k) => [cx + rx * Math.cos((2 * Math.PI * k) / SIDES), cy + ry * Math.sin((2 * Math.PI * k) / SIDES), z]);
+  // the trunk: an eighth of the crown's width, up to a third of the height
+  const r = Math.max(75, Math.min(w, d) / 16);
+  const top = lo[2] + h / 3;
+  const foot = ring(r, r, lo[2]);
+  const head = ring(r, r, top);
+  const trunk = foot.map((p, k) => [...p, ...foot[(k + 1) % SIDES], ...head[(k + 1) % SIDES], ...head[k]]);
+  // the crown: an ellipsoid from a quarter of the height up, its rings' corners joined in quads
+  const zc = lo[2] + (h * 5) / 8;
+  const rz = (h * 3) / 8;
+  const RINGS = 6;
+  const rings = Array.from({ length: RINGS + 1 }, (_, j) => {
+    const a = -Math.PI / 2 + (Math.PI * j) / RINGS;
+    return ring((w / 2) * Math.cos(a), (d / 2) * Math.cos(a), zc + rz * Math.sin(a));
+  });
+  const crown: number[][] = [];
+  for (let j = 0; j < RINGS; j++)
+    for (let k = 0; k < SIDES; k++) {
+      const [a, b, c, e] = [rings[j][k], rings[j][(k + 1) % SIDES], rings[j + 1][(k + 1) % SIDES], rings[j + 1][k]];
+      // the poles' rings are points: a triangle there
+      crown.push(j === 0 ? [...a, ...c, ...e] : j === RINGS - 1 ? [...a, ...b, ...c] : [...a, ...b, ...c, ...e]);
+    }
+  return [
+    { faces: trunk, color: { r: 0.42, g: 0.31, b: 0.2 } },
+    { faces: crown, color: { r: 0.36, g: 0.55, b: 0.28 } },
+  ];
 }

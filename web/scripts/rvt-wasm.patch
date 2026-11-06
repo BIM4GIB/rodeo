@@ -1,0 +1,122 @@
+diff --git a/rvt-wasm/src/lib.rs b/rvt-wasm/src/lib.rs
+index 86e48f0..c6c4992 100644
+--- a/rvt-wasm/src/lib.rs
++++ b/rvt-wasm/src/lib.rs
+@@ -81,7 +81,8 @@ pub fn open_rvt_bytes_with_diagnostics_mode(bytes: &[u8], mode: &str) -> Result<
+         mode,
+         OpenLimits::default(),
+         rvt::walker::WalkerLimits::default(),
+-        true,
++        SavedMeshChoice::Default,
++        false,
+         None,
+         None,
+     )
+@@ -144,6 +145,7 @@ pub fn open_rvt_bytes_with_diagnostics_mode_and_open_limits(
+         request.open_limits,
+         request.walker_limits,
+         request.saved_meshes,
++        request.family_extrusions,
+         request.phase,
+         progress,
+     )
+@@ -226,7 +228,8 @@ fn export_with_limits(
+     mode: &str,
+     open_limits: OpenLimits,
+     walker_limits: rvt::walker::WalkerLimits,
+-    saved_meshes: bool,
++    saved_meshes: SavedMeshChoice,
++    family_extrusions: bool,
+     phase: Option<String>,
+     progress: Option<js_sys::Function>,
+ ) -> Result<JsValue, JsValue> {
+@@ -237,6 +240,7 @@ fn export_with_limits(
+         open_limits,
+         walker_limits,
+         saved_meshes,
++        family_extrusions,
+         phase,
+         &control,
+     );
+@@ -259,7 +263,8 @@ fn export_with_control(
+     mode: &str,
+     open_limits: OpenLimits,
+     walker_limits: rvt::walker::WalkerLimits,
+-    saved_meshes: bool,
++    saved_meshes: SavedMeshChoice,
++    family_extrusions: bool,
+     phase: Option<String>,
+     control: &WalkerControl,
+ ) -> Result<JsValue, JsValue> {
+@@ -270,11 +275,8 @@ fn export_with_control(
+     // is false.
+     let options = ExportOptions::default()
+         .with_mode(quality_mode)
+-        .with_saved_meshes(if saved_meshes {
+-            SavedMeshChoice::Default
+-        } else {
+-            SavedMeshChoice::Off
+-        })
++        .with_saved_meshes(saved_meshes)
++        .with_family_extrusions(family_extrusions)
+         .with_phase(phase);
+     let run = run_export_with_limits_and_control(&mut rf, &options, walker_limits, control)
+         .map_err(err_str)?;
+@@ -315,10 +317,32 @@ struct LimitsOptions {
+     large_model: Option<bool>,
+     max_stream_bytes: Option<f64>,
+     max_inflate_bytes: Option<f64>,
+-    saved_meshes: Option<bool>,
++    saved_meshes: Option<SavedMeshesOption>,
++    family_extrusions: Option<bool>,
+     phase: Option<PhaseOption>,
+ }
+ 
++/// `savedMeshes` as the page gives it: true or false, or "all".
++#[derive(serde::Deserialize)]
++#[serde(untagged)]
++enum SavedMeshesOption {
++    On(bool),
++    Scope(String),
++}
++
++impl SavedMeshesOption {
++    fn into_choice(self) -> Result<SavedMeshChoice, JsValue> {
++        match self {
++            Self::On(true) => Ok(SavedMeshChoice::Default),
++            Self::On(false) => Ok(SavedMeshChoice::Off),
++            Self::Scope(scope) if scope == "all" => Ok(SavedMeshChoice::All),
++            Self::Scope(scope) => Err(JsValue::from_str(&format!(
++                "savedMeshes must be true, false or \"all\", got {scope:?}"
++            ))),
++        }
++    }
++}
++
+ /// A phase as the page names it: its name, or its ElementId as a number.
+ #[derive(serde::Deserialize)]
+ #[serde(untagged)]
+@@ -345,7 +369,8 @@ impl PhaseOption {
+ struct ExportRequest {
+     open_limits: OpenLimits,
+     walker_limits: rvt::walker::WalkerLimits,
+-    saved_meshes: bool,
++    saved_meshes: SavedMeshChoice,
++    family_extrusions: bool,
+     phase: Option<String>,
+ }
+ 
+@@ -382,7 +407,12 @@ fn limits_from_js(limits: JsValue) -> Result<ExportRequest, JsValue> {
+     Ok(ExportRequest {
+         open_limits,
+         walker_limits,
+-        saved_meshes: options.saved_meshes.unwrap_or(true),
++        saved_meshes: options
++            .saved_meshes
++            .map(SavedMeshesOption::into_choice)
++            .transpose()?
++            .unwrap_or(SavedMeshChoice::Default),
++        family_extrusions: options.family_extrusions.unwrap_or(false),
+         phase: options.phase.map(PhaseOption::into_request).transpose()?,
+     })
+ }

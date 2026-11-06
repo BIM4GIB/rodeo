@@ -209,7 +209,7 @@ export function openRvtBytesWithDiagnosticsMode(bytes, mode) {
 /**
  * [`open_rvt_bytes_with_diagnostics_mode`] under the resource limits of
  * `limits`, a JS object
- * `{ largeModel?, maxStreamBytes?, maxInflateBytes?, savedMeshes? }` or
+ * `{ largeModel?, maxStreamBytes?, maxInflateBytes?, savedMeshes?, phase? }` or
  * `null` for the defaults. A field left out keeps its default; the first
  * three are `rvt-ifc`'s flags of the same names, resolved by
  * [`rvt::cli::open_limits`] (`largeModel` is `--large-model`, and an
@@ -226,25 +226,43 @@ export function openRvtBytesWithDiagnosticsMode(bytes, mode) {
  *   to 2027 files from the meshes Revit saved for them, as `rvt-ifc` does
  *   without `--no-saved-meshes`; `false` keeps their bounding boxes and
  *   skips the extra pass over the file's saved graphics.
+ * - `phase` (a phase's name, matched exactly first, or its ElementId as a
+ *   number) exports that project phase, as `rvt-ifc --phase` does: an element
+ *   that does not exist in it, and a room whose own phase is not it, are left
+ *   out. Left out, the export is the project's last phase. A phase the file
+ *   lacks throws, with the file's phases in the message. The result's
+ *   `phases` lists them (`{ id, name? }`, in order, the last being the
+ *   default).
  *
  * Byte limits are whole numbers of bytes. A stream a limit keeps from being
  * read is listed in `diagnostics` (the `stream_not_read_resource_limit`
  * skipped item and a `Not read whole:` warning per stream, #1075), and the
  * model is missing what it holds. Unknown fields and fractional, negative
  * or non-finite byte limits throw.
+ *
+ * `progress`, when given, is a JS function `(stage, done, total)` called as
+ * the decoder works: `stage` is a [`Stage`] name as `rvt-gltf --progress`
+ * prints it (`schema-parse`, `candidate-scan`, `element-decode`,
+ * `partition-scan`, `saved-graphics`, `saved-meshes`), `done` a count and
+ * `total` the count it is out of, or `null` where the stage has no
+ * denominator yet (#1195). It is called when a stage begins, when it ends,
+ * and each time a stage with a total passes another whole percent, so a
+ * stage costs at most about a hundred calls. An exception it throws is
+ * ignored.
  * @param {Uint8Array} bytes
  * @param {string} mode
  * @param {any} limits
+ * @param {Function | null} [progress]
  * @returns {any}
  */
-export function openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes, mode, limits) {
+export function openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes, mode, limits, progress) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
         const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(mode, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len1 = WASM_VECTOR_LEN;
-        wasm.openRvtBytesWithDiagnosticsModeAndOpenLimits(retptr, ptr0, len0, ptr1, len1, addHeapObject(limits));
+        wasm.openRvtBytesWithDiagnosticsModeAndOpenLimits(retptr, ptr0, len0, ptr1, len1, addHeapObject(limits), isLikeNone(progress) ? 0 : addHeapObject(progress));
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -448,6 +466,10 @@ function __wbg_get_imports() {
             const ret = getObject(arg0).call(getObject(arg1));
             return addHeapObject(ret);
         }, arguments); },
+        __wbg_call_86e39d65afc3d9db: function() { return handleError(function (arg0, arg1, arg2, arg3, arg4) {
+            const ret = getObject(arg0).call(getObject(arg1), getObject(arg2), getObject(arg3), getObject(arg4));
+            return addHeapObject(ret);
+        }, arguments); },
         __wbg_done_9158f7cc8751ba32: function(arg0) {
             const ret = getObject(arg0).done;
             return ret;
@@ -456,7 +478,7 @@ function __wbg_get_imports() {
             const ret = Object.entries(getObject(arg0));
             return addHeapObject(ret);
         },
-        __wbg_error_1441598adce18cad: function(arg0, arg1) {
+        __wbg_error_48b1f4a6e65004c8: function(arg0, arg1) {
             console.error(getStringFromWasm0(arg0, arg1));
         },
         __wbg_get_1affdbdd5573b16a: function() { return handleError(function (arg0, arg1) {
