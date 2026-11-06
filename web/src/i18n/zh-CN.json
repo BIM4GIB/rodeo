@@ -17258,5 +17258,16 @@
   "“{0}” is still open here, but it is no longer in the cloud.": "“{0}”仍在此处打开，但已不在云端。",
   "“{0}” is used more than once.": "“{0}”被多次使用。",
   "… and {0} more": "…另有 {0} 个",
-  "…and {0} more": "…另有 {0} 项"
+  "…and {0} more": "…另有 {0} 项",
+  "Clearer 2D, 3D and split views": "更清晰的二维、三维和分屏视图",
+  "The workspace says more plainly what each view shows, why a command is greyed out, and where things are.": "工作区更清楚地说明每个视图显示什么、命令为何呈灰色，以及各项功能在哪里。",
+  "The top bar has 2D, 3D and Split. In a split, 2D and 3D take you to that pane rather than turning the one you're in into the other kind, so you no longer end up with two plans or two 3D views.": "顶部栏提供二维、三维和分屏。分屏时，二维和三维会转到对应的窗格，而不是把当前窗格换成另一种视图，因此不会再出现两个平面或两个三维视图。",
+  "Each pane has a label in its corner with Show Plan Here, Show 3D Here and Close Pane. A click in the other pane acts at once, and the render mode and 3D commands work whenever a 3D view is on screen.": "每个窗格的角落都有一个标签，提供“在此显示平面”“在此显示三维”和“关闭窗格”。在另一个窗格中单击会立即生效；只要屏幕上有三维视图，渲染模式和三维命令就可以使用。",
+  "What you select shows in the 3D view too, edged and tinted in the selection colour.": "所选对象也会在三维视图中显示，以选择颜色描边并着色。",
+  "Greyed-out menu rows say what to do first.": "呈灰色的菜单项会说明需要先做什么。",
+  "The top bar fits any window: the tools scroll and the ends stay put. Wall, Door, Window, Slab, Stair, Push/Pull, lights and cameras are in it, and a Tool sets button reaches every tool. Projection, Active Plane, Rotate Plan and Quick Preferences are under More view options.": "顶部栏适应任何窗口宽度：工具可以滚动，两端保持不动。墙体、门、窗、楼板、楼梯、推/拉、灯光和相机都在其中，“工具集”按钮可打开所有工具。投影、当前平面、旋转平面和快速偏好设置位于“更多视图选项”中。",
+  "Each dock's rail keeps to everyday palettes, with a ⋯ button for the rest, and palette tabs with no room go into a ⋯ menu. A narrow window no longer puts your palettes away for good.": "每个停靠区的图标栏只保留常用面板，其余面板在 ⋯ 按钮中；放不下的面板标签页会进入 ⋯ 菜单。窗口较窄时不再永久收起你的面板。",
+  "Object Info names objects plainly and edits an extrude's position, size and bottom.": "对象信息用通俗的名称显示对象，并可编辑拉伸体的位置、尺寸和底部。",
+  "Menus lose their duplicates: Help › User Guide opens the guide, sharing is under File › Share, the theme under View › Appearance, Machine Design under Tools and AEC › Electrical is AEC › MEP. Paste is greyed till you've copied something, and ⌘I shows and hides Object Info.": "菜单去掉了重复项：帮助 › 用户指南 打开指南，共享位于 文件 › 共享，主题位于 视图 › 外观，机械设计移至 工具，AEC › 电气 改为 AEC › 机电。复制内容之前“粘贴”呈灰色，⌘I 可显示或隐藏对象信息。",
+  "This link is the drawing's gallery page. Unpublish it from File › Share › Publish to Gallery… instead.": "此链接是该图形的作品库页面。请改在 文件 › 共享 › 发布到作品库… 中取消发布。"
 }

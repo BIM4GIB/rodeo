@@ -22,6 +22,21 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T09:42:00Z",
+    "clearer-views",
+    "Clearer 2D, 3D and split views",
+    `The workspace says more plainly what each view shows, why a command is greyed out, and where things are.
+- The top bar has 2D, 3D and Split. In a split, 2D and 3D take you to that pane rather than turning the one you're in into the other kind, so you no longer end up with two plans or two 3D views.
+- Each pane has a label in its corner with Show Plan Here, Show 3D Here and Close Pane. A click in the other pane acts at once, and the render mode and 3D commands work whenever a 3D view is on screen.
+- What you select shows in the 3D view too, edged and tinted in the selection colour.
+- Greyed-out menu rows say what to do first.
+- The top bar fits any window: the tools scroll and the ends stay put. Wall, Door, Window, Slab, Stair, Push/Pull, lights and cameras are in it, and a Tool sets button reaches every tool. Projection, Active Plane, Rotate Plan and Quick Preferences are under More view options.
+- Each dock's rail keeps to everyday palettes, with a ⋯ button for the rest, and palette tabs with no room go into a ⋯ menu. A narrow window no longer puts your palettes away for good.
+- Object Info names objects plainly and edits an extrude's position, size and bottom.
+- Menus lose their duplicates: Help › User Guide opens the guide, sharing is under File › Share, the theme under View › Appearance, Machine Design under Tools and AEC › Electrical is AEC › MEP. Paste is greyed till you've copied something, and ⌘I shows and hides Object Info.`,
+    "viewcube",
+  ),
+  release(
     "2026-11-07T09:39:00Z",
     "languages",
     "Rodeo in 17 languages",
