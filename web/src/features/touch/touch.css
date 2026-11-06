@@ -119,7 +119,7 @@ html .topbar:not(.right-dock) .tb-right {
   }
 }
 
-/* ---- the quick bar (quickbar.ts): a column at the drawing's right edge --- */
+/* ---- the quick bar (quickbar.ts): at the drawing's right edge, a row on a phone ---- */
 
 .touch-quickbar {
   position: absolute;
@@ -132,12 +132,10 @@ html .topbar:not(.right-dock) .tb-right {
   gap: 4px;
   padding: 5px;
   transform: translateY(-50%);
-  border: 1px solid var(--pill-border);
+  border: 1px solid var(--chrome-border);
   border-radius: 16px;
-  background: var(--pill);
+  background: var(--chrome);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
 }
 
 .touch-qb-btn {
@@ -201,28 +199,53 @@ html .touch-palettes {
   }
 }
 
-/* with a sheet up, the View bar goes (the Navigation palette has the layers and classes) and the
-   quick bar lies in a row where it was, so the strip of drawing between it and the Mode bar is clear */
+/* with a sheet up, the View bar goes (the Navigation palette has the layers and classes) */
 .workspace.sheet-open #viewbar {
   display: none;
-}
-
-.workspace.sheet-open .touch-quickbar {
-  top: 8px;
-  transform: none;
-  flex-direction: row;
-  gap: 2px;
-}
-
-.workspace.sheet-open .touch-qb-sep {
-  width: 1px;
-  height: 26px;
-  margin: 0 3px;
 }
 
 /* at its tallest the sheet leaves no drawing to edit, and the quick bar waits */
 .workspace.sheet-tall .touch-quickbar {
   display: none;
+}
+
+/* a phone: the quick bar lies in a row over the Mode bar at the drawing's left, so the drawing's
+   right is clear (the round microphone keeps the lower right, features/voice); the row is 274 px
+   long, clear of the microphone on a phone 360 px wide or more */
+@media (max-width: 560px) {
+  .touch-quickbar {
+    top: auto;
+    right: auto;
+    /* the Mode bar's foot (12 px) and height (36 px), and a gap */
+    bottom: 56px;
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    flex-direction: row;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 14px;
+    transform: none;
+  }
+
+  .touch-qb-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .touch-qb-sep {
+    width: 1px;
+    height: 24px;
+    margin: 0 2px;
+  }
+
+  /* the layer's name matters more than the class's: it takes twice the class's share of the View bar,
+     and the bar's menu buttons leave out their carets to give the names the room */
+  html #viewbar .bar-select:first-of-type {
+    flex-grow: 2;
+  }
+
+  html #viewbar .bar-menu > svg + svg {
+    display: none;
+  }
 }
 
 /* ---- the update notice (install.ts) ------------------------------------- */

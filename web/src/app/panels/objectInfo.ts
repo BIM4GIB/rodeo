@@ -4,7 +4,7 @@
 // a light's, a wall's or a slab's settings, a linear dimension's points, offset
 // and value, a Heliodon's sun and its plug-in parameters; a
 // polygon's or polyline's vertices one by one, as Vectorworks' Reshape by
-// numbers), several objects (shared class and layer, move by dx/dy). Its Data
+// numbers), several objects (shared class and layer, move by X and Y offsets). Its Data
 // tab lists the records attached to the object, and its Render tab the
 // object's texture parts: the texture on each (none, the class's or one of the
 // drawing's) and its offset, scale and rotation. Attributes shows the
@@ -282,7 +282,7 @@ function layerField(doc: VwxDocument, objs: readonly ObjectInfo[]): HTMLElement 
   return field("Layer", control);
 }
 
-/** "Move by dx / dy" row. Values are applied with the Move button. */
+/** The Move row: offsets along X and Y, applied with the Move button. */
 function moveRow(ids: string[]): HTMLElement {
   let dx = 0;
   let dy = 0;
@@ -292,9 +292,9 @@ function moveRow(ids: string[]): HTMLElement {
   const iy = lengthInput(0, (v) => {
     dy = v;
   });
-  const btn = h("button", { cls: "btn small", text: "Move", title: "Move by dx, dy" });
+  const btn = h("button", { cls: "btn small", text: "Move", title: "Move by the X and Y offsets" });
   btn.addEventListener("click", () => moveObjects(ids, dx, dy));
-  return section("Move", grid(field("dx", ix), field("dy", iy)), h("div", { cls: "row-end" }, btn));
+  return section("Move", grid(field("Offset X", ix), field("Offset Y", iy)), h("div", { cls: "row-end" }, btn));
 }
 
 // ---- panels ---------------------------------------------------------------
@@ -318,23 +318,34 @@ function emptyPanel(doc: VwxDocument): HTMLElement {
   );
 }
 
-/** A type name as the palette shows it: "3d-polygon" as "3D polygon". */
-const shownType = (typeName: string): string => typeName.replace(/-/g, " ").replace(/\b3d\b/g, "3D");
+/** Type names Vectorworks writes otherwise than as their words in Title Case. */
+const TYPE_TITLES: Readonly<Record<string, string>> = { locus: "2D Locus", "plug-in-object": "Plug-in Object" };
+
+/**
+ * A type name as the palette shows it, in Title Case as Vectorworks names it ("rounded-rectangle" as
+ * "Rounded Rectangle", "3d-polygon" as "3D Polygon"); null for a type openvwx has no name for ("type-130").
+ */
+function typeTitle(typeName: string): string | null {
+  if (!typeName || /^type-\d+$/.test(typeName)) return null;
+  const words = typeName.split("-").map((w) => (w === "3d" ? "3D" : w.charAt(0).toUpperCase() + w.slice(1)));
+  return TYPE_TITLES[typeName] ?? words.join(" ");
+}
 
 function singlePanel(doc: VwxDocument, o: ObjectInfo): { shape: HTMLElement; data: HTMLElement; render: HTMLElement } {
   // a plug-in object goes by its plug-in's name (Lighting Device, Door), as Vectorworks shows it
   const plugin = o.typeName === "plug-in-object" ? doc.records(o.id).find((r) => r.parametric)?.name : undefined;
+  const title = typeTitle(o.typeName);
   const head = (): HTMLElement =>
     h(
       "div",
       { cls: "info-head" },
-      h("strong", { text: plugin || shownType(o.typeName) || o.kind }),
-      // the kind only when the type name says something else
-      plugin ? h("span", { cls: "muted", text: "plug-in object" }) : o.typeName && o.typeName !== o.kind ? h("span", { cls: "muted", text: o.kind }) : null,
+      h("strong", { text: plugin || title || "Object" }),
+      // under a plug-in's name its kind; under an object openvwx has no name for, its record type
+      plugin ? h("span", { cls: "muted", text: "Plug-in Object" }) : title ? null : h("span", { cls: "muted", text: `Type ${o.type}` }),
     );
   const shape = h("div", { cls: "info" }, head(), section("Object", classField(doc, [o]), layerField(doc, [o]), nameField(o)));
   if (o.kind === "symbol") shape.append(symbolSection(doc, o));
-  const geo = geometrySection(o);
+  const geo = geometrySection(o) ?? extrudeSection(doc, o);
   if (geo) shape.append(geo);
   const measure = measurementSection(doc, o);
   if (measure) shape.append(measure);
@@ -644,7 +655,7 @@ function renderPanel(doc: VwxDocument, o: ObjectInfo, head: HTMLElement): HTMLEl
 function multiPanel(doc: VwxDocument, objs: readonly ObjectInfo[]): HTMLElement {
   const counts = new Map<string, number>();
   for (const o of objs) counts.set(o.typeName, (counts.get(o.typeName) ?? 0) + 1);
-  const summary = [...counts].map(([name, n]) => `${n} ${shownType(name)}`).join(", ");
+  const summary = [...counts].map(([name, n]) => `${n} × ${typeTitle(name) ?? "Object"}`).join(", ");
   return h(
     "div",
     { cls: "info" },
@@ -712,6 +723,38 @@ function geometrySection(o: ObjectInfo): HTMLElement | null {
     default:
       return null;
   }
+}
+
+/** an extrude's and a multiple extrude's record types */
+const EXTRUDES: ReadonlySet<number> = new Set([24, 38]);
+
+/**
+ * An extrude's or a multiple extrude's footprint in plan, from its lower left corner, and its bottom
+ * and height above its layer. The footprint moves and stretches (moveObjects, transformObjects) and
+ * the bottom raises or lowers it (moveObjects3D); the edit session has no way to set an extrusion's
+ * height, so Height is shown, not set.
+ */
+function extrudeSection(doc: VwxDocument, o: ObjectInfo): HTMLElement | null {
+  const bb = o.bounds;
+  const heights = EXTRUDES.has(o.type) ? doc.heightsOf(o.id) : null;
+  if (!bb || !heights) return null;
+  const id = o.id;
+  const width = bb.x1 - bb.x0;
+  const depth = bb.y1 - bb.y0;
+  // stretched from the footprint's lower left corner, which stays put
+  const stretch = (kx: number, ky: number): boolean =>
+    tryEdit("Resize extrude", (s) => s.transformObjects([id], { a: kx, b: 0, c: 0, d: ky, e: bb.x0 * (1 - kx), f: bb.y0 * (1 - ky) }));
+  return section(
+    "Geometry",
+    grid(
+      field("X", lengthInput(bb.x0, (x) => moveObjects([id], x - bb.x0, 0))),
+      field("Y", lengthInput(bb.y0, (y) => moveObjects([id], 0, y - bb.y0))),
+      field("Width", committedLength(width, (v) => v > 0 && width > 0 && stretch(v / width, 1))),
+      field("Depth", committedLength(depth, (v) => v > 0 && depth > 0 && stretch(1, v / depth))),
+      field("Bottom", committedLength(heights.min, (z) => tryEdit("Move extrude", (s) => s.moveObjects3D([id], 0, 0, z - heights.min)))),
+      field("Height", readOnly(formatLength(heights.max - heights.min, doc.info.units))),
+    ),
+  );
 }
 
 // ---- vertices -------------------------------------------------------------
@@ -783,8 +826,8 @@ function vertexSection(id: string, shape: Shape, apply: (label: string, next: Ne
       return b;
     };
     const fields: HTMLElement[] = [
-      field("x", lengthInput(v.p.x, (x) => replace("Move vertex", index, { p: { x, y: v.p.y } }))),
-      field("y", lengthInput(v.p.y, (y) => replace("Move vertex", index, { p: { x: v.p.x, y } }))),
+      field("X",lengthInput(v.p.x, (x) => replace("Move vertex", index, { p: { x, y: v.p.y } }))),
+      field("Y",lengthInput(v.p.y, (y) => replace("Move vertex", index, { p: { x: v.p.x, y } }))),
     ];
     if (poly) {
       fields.push(field("Type", selectInput(VERTEX_KINDS, v.kind, (k) => replace("Vertex type", index, { kind: k as VertexKind, radius: 0 }))));
@@ -842,10 +885,10 @@ function lineSection(shape: Shape, apply: (label: string, next: NewShape) => voi
   return section(
     "Geometry",
     grid(
-      field("x1", lengthInput(a.x, (v) => apply("Edit line", { kind: "line", a: { x: v, y: a.y }, b }))),
-      field("y1", lengthInput(a.y, (v) => apply("Edit line", { kind: "line", a: { x: a.x, y: v }, b }))),
-      field("x2", lengthInput(b.x, (v) => apply("Edit line", { kind: "line", a, b: { x: v, y: b.y } }))),
-      field("y2", lengthInput(b.y, (v) => apply("Edit line", { kind: "line", a, b: { x: b.x, y: v } }))),
+      field("Start X",lengthInput(a.x, (v) => apply("Edit line", { kind: "line", a: { x: v, y: a.y }, b }))),
+      field("Start Y",lengthInput(a.y, (v) => apply("Edit line", { kind: "line", a: { x: a.x, y: v }, b }))),
+      field("End X",lengthInput(b.x, (v) => apply("Edit line", { kind: "line", a, b: { x: v, y: b.y } }))),
+      field("End Y",lengthInput(b.y, (v) => apply("Edit line", { kind: "line", a, b: { x: b.x, y: v } }))),
     ),
   );
 }
@@ -860,9 +903,9 @@ function locus3dSection(o: ObjectInfo): HTMLElement | null {
   return section(
     "Geometry",
     grid(
-      field("x", committedLength(q[0], (v) => move(v - q[0], 0, 0))),
-      field("y", committedLength(q[1], (v) => move(0, v - q[1], 0))),
-      field("z", committedLength(q[2] - base, (v) => move(0, 0, v + base - q[2]))),
+      field("X",committedLength(q[0], (v) => move(v - q[0], 0, 0))),
+      field("Y",committedLength(q[1], (v) => move(0, v - q[1], 0))),
+      field("Z",committedLength(q[2] - base, (v) => move(0, 0, v + base - q[2]))),
     ),
   );
 }
@@ -873,8 +916,8 @@ function locusSection(shape: Shape, apply: (label: string, next: NewShape) => vo
   return section(
     "Geometry",
     grid(
-      field("x", lengthInput(p.x, (v) => apply("Edit locus", { kind: "locus", at: { x: v, y: p.y } }))),
-      field("y", lengthInput(p.y, (v) => apply("Edit locus", { kind: "locus", at: { x: p.x, y: v } }))),
+      field("X",lengthInput(p.x, (v) => apply("Edit locus", { kind: "locus", at: { x: v, y: p.y } }))),
+      field("Y",lengthInput(p.y, (v) => apply("Edit locus", { kind: "locus", at: { x: p.x, y: v } }))),
     ),
   );
 }
@@ -910,23 +953,23 @@ function rectSection(id: string, shape: Shape, apply: (label: string, next: NewS
   return section(
     "Geometry",
     grid(
-      field("x", lengthInput(bb.x0, (x) => moveObjects([id], x - bb.x0, 0))),
-      field("y", lengthInput(bb.y0, (y) => moveObjects([id], 0, y - bb.y0))),
+      field("X",lengthInput(bb.x0, (x) => moveObjects([id], x - bb.x0, 0))),
+      field("Y",lengthInput(bb.y0, (y) => moveObjects([id], 0, y - bb.y0))),
       field(
-        "width",
+        "Width",
         lengthInput(
           w,
           positive((x) => (turned ? transform("Edit rectangle", stretch(u, x / w)) : set(bb.x0, bb.y0, bb.x0 + x, bb.y1))),
         ),
       ),
       field(
-        "height",
+        "Height",
         lengthInput(
           hgt,
           positive((y) => (turned ? transform("Edit rectangle", stretch(v, y / hgt)) : set(bb.x0, bb.y0, bb.x1, bb.y0 + y))),
         ),
       ),
-      field("rotation °", numberInput(angle, (deg) => transform("Rotate rectangle", rotationAbout(centre, deg - angle)))),
+      field("Rotation °",numberInput(angle, (deg) => transform("Rotate rectangle", rotationAbout(centre, deg - angle)))),
     ),
   );
 }
@@ -957,13 +1000,13 @@ function arcSection(shape: Shape, apply: (label: string, next: NewShape) => void
   const radii = elliptic
     ? [
         field(
-          "radius x",
+          "Radius X",
           lengthInput(r, (v) => {
             if (v > 0) set(c, v, ry);
           }),
         ),
         field(
-          "radius y",
+          "Radius Y",
           lengthInput(ry, (v) => {
             if (v > 0) set(c, r, v);
           }),
@@ -971,7 +1014,7 @@ function arcSection(shape: Shape, apply: (label: string, next: NewShape) => void
       ]
     : [
         field(
-          "radius",
+          "Radius",
           lengthInput(r, (v) => {
             if (v > 0) set(c, v, v);
           }),
@@ -980,8 +1023,8 @@ function arcSection(shape: Shape, apply: (label: string, next: NewShape) => void
   return section(
     "Geometry",
     grid(
-      field("centre x", lengthInput(c.x, (v) => set({ x: v, y: c.y }, r, ry))),
-      field("centre y", lengthInput(c.y, (v) => set({ x: c.x, y: v }, r, ry))),
+      field("Centre X",lengthInput(c.x, (v) => set({ x: v, y: c.y }, r, ry))),
+      field("Centre Y",lengthInput(c.y, (v) => set({ x: c.x, y: v }, r, ry))),
       ...radii,
     ),
   );
@@ -1078,12 +1121,12 @@ function textSection(o: ObjectInfo, shape: Shape): HTMLElement {
           flag("Underline", !!shape.underline, (underline) => ({ underline })),
           grid(
             field(
-              "size pt",
+              "Size pt",
               numberInput(size / (MM_PER_PT * scale), (v) => {
                 if (v > 0) style("Text size", { size: v * MM_PER_PT * scale });
               }),
             ),
-            field("rotation °", numberInput(angle, (v) => style("Rotate text", { angle: v }))),
+            field("Rotation °",numberInput(angle, (v) => style("Rotate text", { angle: v }))),
           ),
           grid(
             field("Align", selectInput(H_ALIGN, String(shape.hAlign ?? 1), (v) => style("Justify text", { hAlign: Number(v) }))),
@@ -1094,8 +1137,8 @@ function textSection(o: ObjectInfo, shape: Shape): HTMLElement {
     ...(at
       ? [
           grid(
-            field("x", lengthInput(at.x, (v) => moveObjects([id], v - at.x, 0))),
-            field("y", lengthInput(at.y, (v) => moveObjects([id], 0, v - at.y))),
+            field("X",lengthInput(at.x, (v) => moveObjects([id], v - at.x, 0))),
+            field("Y",lengthInput(at.y, (v) => moveObjects([id], 0, v - at.y))),
           ),
         ]
       : []),
@@ -1110,8 +1153,8 @@ function imageSection(id: string, shape: Shape): HTMLElement {
     ...(bb
       ? [
           grid(
-            field("x", lengthInput(bb.x0, (v) => moveObjects([id], v - bb.x0, 0))),
-            field("y", lengthInput(bb.y1, (v) => moveObjects([id], 0, v - bb.y1))),
+            field("X",lengthInput(bb.x0, (v) => moveObjects([id], v - bb.x0, 0))),
+            field("Y",lengthInput(bb.y1, (v) => moveObjects([id], 0, v - bb.y1))),
           ),
         ]
       : []),
