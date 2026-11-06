@@ -4,7 +4,7 @@ This page covers the 3D view: opening it, moving around, standard views and proj
 
 ## Opening the 3D view
 
-Open the 3D view with **View › 3D View**, the 3D button or key <kbd>3</kbd>. **View › Standard Views**, **View › Rendering** and **View › Projection**, or the View bar, pick the direction, the render mode and the projection. Top/Plan goes back to the plan.
+Open the 3D view with **View › 3D View**, the 3D button or key <kbd>3</kbd>. **View › Standard Views**, **View › Rendering** and **View › Projection**, or the top bar's **Standard views**, **Render mode** and **More view options** pop-ups, pick the direction, the render mode and the projection. Top/Plan goes back to the plan. In a split, these and the 3 key make the plan or 3D pane of that kind the active one instead (see [View panes](workspace.md#view-panes)).
 
 ### What the 3D view shows
 
@@ -30,7 +30,7 @@ The active design layer's saved view opens with the drawing: a layer saved in a 
 
 ### Orbit, pan and zoom
 
-Orbit, pan and zoom to the cursor; click a face to select its object. Double-click a point to orbit about it.
+Orbit, pan and zoom to the cursor; click a face to select its object. The selection shows highlighted in the 3D view, objects in groups as they are in plan (see [Render modes](#render-modes)). Double-click a point to orbit about it.
 
 ### Walking with the keys
 
@@ -72,7 +72,7 @@ The standard views are:
 
 ### Projections
 
-**View › Projection** picks Orthogonal or a perspective:
+**View › Projection**, or **More view options › Projection** in the top bar, picks Orthogonal or a perspective:
 
 - **Narrow**, **Normal** and **Wide Perspective** see 20°, 35° and 60° from the picture's top to its bottom.
 - **Set Custom Perspective…** takes any angle from 5° to 120°.
@@ -84,7 +84,7 @@ In a perspective, the camera stands nearer or further back so the model keeps it
 
 ### Rotate Plan
 
-**View › Rotate Plan** turns the plan on screen and leaves the drawing where it is. Click the centre, then click along the line that will lie level (<kbd>Shift</kbd> for 15° steps), or type an angle in the View bar's field beside its button. **Rotated Top/Plan** (<kbd>⌘5</kbd>) and **Standard Views** swap between it and the true Top/Plan.
+**View › Rotate Plan** turns the plan on screen and leaves the drawing where it is. Click the centre, then click along the line that will lie level (<kbd>Shift</kbd> for 15° steps), or choose **More view options › Set Plan Rotation…** and type an angle. While the plan is rotated, the top bar shows its angle in a box beside **More view options**, and typing a new angle there turns the plan. **Rotated Top/Plan** (<kbd>⌘5</kbd>) and **Standard Views** swap between it and the true Top/Plan.
 
 While the plan is rotated:
 
@@ -98,7 +98,7 @@ While the plan is rotated:
 
 ### Render modes
 
-**View › Rendering**, or the View bar's Render mode pop-up, picks how the model is drawn:
+**View › Rendering**, or the top bar's **Render mode** pop-up (greyed out while no 3D view is on screen), picks how the model is drawn:
 
 - **Wireframe**
 - **Hidden Line**
@@ -108,9 +108,11 @@ While the plan is rotated:
 - **Textured**
 - **Realistic** or **Path Traced** (see Rendering, below)
 
+A selected object is drawn highlighted over the model in every mode, in the selection colour that **Preferences › Appearance** sets: its edges, faint where other faces hide them, and its visible faces tinted, except in Wireframe. In Realistic and Path Traced only its edges show, all of them.
+
 ### Shaded Options
 
-**View › Rendering › Shaded Options…** (also at the foot of the View bar's Render mode pop-up) sets:
+**View › Rendering › Shaded Options…** (also at the foot of the top bar's Render mode pop-up) sets:
 
 - whether Shaded draws textures (on at first; off, a textured face shows its fill colour) and colours (off: white faces)
 - whether it draws the edges
@@ -203,6 +205,8 @@ A change, there or to those parameters in its record, writes the figures it show
 
 As you type, it shows the sun's azimuth from south and from north, its elevation and the true solar time. OK aims the selected directional lights at the sun, or adds one at the view's centre (copying a light the drawing has). A sun below the horizon is refused.
 
+**View › Sun Study**, beside it, shows a bar over the 3D view that sets the date, the solar time between sunrise and sunset, the seasons, Play Day and Play Year, north and the place. **File › Export › Export Sun Study…** records the study's day as a movie (.mp4, or .webm where the browser can't make one) or an animated .gif, with the date and solar time on each frame.
+
 ### Set Lighting Options
 
 **View › Set Lighting Options…** sets, in Vectorworks' groups:
@@ -226,7 +230,7 @@ The 3D view's **Realistic** mode draws the model each frame in physically based 
 
 ### Render palette
 
-The Render palette (**View › Render Settings**) sets:
+The Render palette (**View › Render Settings**, after Renderworks Style) sets:
 
 - the sky (physical for the sun, a gradient, a solid colour or a studio), its haze and intensity
 - a ground plane under a model that stands on level ground (a sloping site model is its own ground)
@@ -243,7 +247,7 @@ Its Cameras list looks through the drawing's cameras. The settings belong to the
 
 ### Renderworks styles
 
-**View › Renderworks Style** (and the View bar's Render mode pop-up) applies one of Vectorworks' default styles by name:
+**View › Renderworks Style** (and the top bar's Render mode pop-up) applies one of Vectorworks' default styles by name:
 
 - Preview
 - Realistic Fast or Final
@@ -278,7 +282,7 @@ It shows its progress, with **Finish now** and **Cancel**, then shows the pictur
 
 ### Export Panorama
 
-**File › Export › Export Panorama…** makes a 360° picture from the 3D view's eye (Shaded, Realistic or Path Traced, up to 8192 × 4096). It saves it as a .jpg, or as one .html page with the picture inside it, to look around in by dragging, the wheel or a pinch.
+**File › Export › Export Panorama…** makes a 360° picture from the 3D view's eye (Shaded, Realistic or Path Traced, up to 8192 × 4096). It is greyed out while no 3D view is on screen. It saves it as a .jpg, or as one .html page with the picture inside it, to look around in by dragging, the wheel or a pinch.
 
 ### Render Bitmap
 
@@ -326,7 +330,7 @@ The Reshape tool moves the path's points.
 
 ### Working Planes palette
 
-The Working Planes palette (**Window › Palettes**, or the View bar's Active Plane pop-up) sets a working plane on a face: **Set on Face**, then click one in the 3D view. The plane lies on it, its x along the world's as near as the face allows, and the 3D view draws its grid there with red and green x and y axes.
+The Working Planes palette (**Window › Palettes**, or the top bar's **More view options › Active Plane**) sets a working plane on a face: **Set on Face**, then click one in the 3D view. The plane lies on it, its x along the world's as near as the face allows, and the 3D view draws its grid there with red and green x and y axes.
 
 - **Save** keeps it, by name, with the drawing's file name in this browser (double-click a row to rename it, × deletes it).
 - Clicking a row makes it active.

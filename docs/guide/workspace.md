@@ -6,7 +6,7 @@ This page covers Rodeo's window and how to arrange it: the bars and palettes, mo
 
 ### The window
 
-The workspace is laid out after Spline's editor and is dark by default. **View › Theme** sets Dark, Light or System, and **View › Dark Canvas** inverts the drawing's ink and paper.
+The workspace is laid out after Spline's editor and is dark by default. **View › Appearance** sets the theme (Dark, Light or System), and its **Dark Canvas** row inverts the drawing's ink and paper.
 
 Full-height side panels flank the drawing, which sits in an inset card, beside one sidebar on the right packed as Vectorworks packs its palettes:
 
@@ -21,12 +21,15 @@ The top bar holds:
 
 - the Menu button (every menu)
 - the file's name
-- 2D or 3D, with the standard views and render mode
-- the tools in groups (each shows its last used tool; its caret drops the rest)
-- undo
-- the zoom (type a percentage)
-- Export (PDF, image files, SVG, DXF, Print)
-- Save
+- **2D**, **3D** and **Split**: the plan alone, the 3D view alone, or the plan and the 3D view in panes, as last arranged
+- the **Standard views**, **Render mode** and **View panes** pop-ups, and **More view options**: Projection, Active Plane, Rotate Plan, Set Plan Rotation… and Quick Preferences
+- the tools in groups by discipline (each shows its last used tool; its caret drops the rest), scrolled with ‹ and › when they don't fit
+- the **Tool sets** button, which drops every tool set's tools and opens the Tool Sets palette
+- **Undo** and **Redo**
+- **Fit to Window** and the zoom (type a percentage of the 2D plan)
+- **Save**, with a caret that holds Save As, Export, Share, Publish and Print
+
+A greyed-out row in a menu says why under it while the pointer rests on it (on a phone, once it is tapped), and its tooltip says the same.
 
 A right-click on the top bar (or **Window › Top Bar**) shows or hides its groups:
 
@@ -42,7 +45,8 @@ Over the drawing, the View bar pill holds:
 
 - the active layer and its scale, and the active class, with the layer and class options and visibility lists (see [Layers and classes](layers-classes.md))
 - the saved views
-- the active working plane
+
+The active working plane is in the top bar's **More view options › Active Plane**.
 
 **Window › View Bar Options** shows the View bar:
 
@@ -71,7 +75,7 @@ The Mode bar shows the active tool, its modes, its preferences, the step to take
 - Connect/Combine's single, dual and combining modes, chosen by number keys
 - the Selection tool's rectangle, polygon or lasso marquee and interactive scaling
 
-When the canvas is too narrow for every mode, the tool shows its icon alone and each mode group drops its modes from one button.
+When the canvas is too narrow for every mode, the tool shows its icon alone and each mode group drops its modes from one button. When the step has no room for its hint, the hint's key chips go first, from the last, and then the step ends in an ellipsis. The whole hint is the bar's tooltip.
 
 ### Notification Center
 
@@ -88,6 +92,24 @@ Right-click:
 - the drawing for what applies to the selection (or, on empty space, paste, select, zoom and grid)
 - a layer, class or viewport row for its own commands
 - a palette's title to roll it up, close, dock, float or tab it. The Tools and Tool Sets palettes also offer Small Icons, Large Icons or Icons and Names there, and Resources small, medium or large thumbnails or a list.
+
+A greyed-out row in a right-click menu says why under it, as a menu's rows do (see [The top bar](#the-top-bar)).
+
+### Touch screens and phones
+
+On a touch screen a finger is the main pointer, and the bars change to suit it:
+
+- Undo, Redo, Esc, Delete and the Shift and Option latches are the quick keys, a column at the drawing's right edge, not part of the top bar.
+- The top bar's microphone is hidden. The round microphone at the drawing's lower right is the one that starts voice commands.
+- The tool row has no ‹ and › buttons: a swipe scrolls it, and its faded edges show that more tools lie beyond.
+- A dock is at least as wide as the top bar's end over it, up to 35% of the window's width (see [Folding and auto-hiding docks](#folding-and-auto-hiding-docks)).
+
+On a phone, a window 560 px wide or less:
+
+- The tools are a bar along the bottom, with the **Tool sets** button at its end.
+- The top bar holds the Menu, 2D, 3D and Split, **Palettes** and Save. Save's caret is left out, so Save As, Export and Print are in **File**, and crit mode is in **View › Crit Mode**.
+- The quick keys lie in a row above the Mode bar at the drawing's lower left, and the round microphone at its lower right.
+- The palettes are one bottom sheet, opened from the **Palettes** button.
 
 ### Smart Options display
 
@@ -165,7 +187,7 @@ Firefox has no speech recognition of its own, and Brave's often doesn't answer. 
 
 ### Touch and mouse
 
-The microphone button in the top bar (and, on touch screens, the round one at the drawing's lower right) starts listening; tap the drawing to drop pins and tap the microphone again to send, or press and hold it while you speak.
+With a mouse, the microphone button in the top bar starts listening. On a touch screen that button is hidden, and the round one at the drawing's lower right does the job. Tap the drawing to drop pins and tap the microphone again to send, or press and hold it while you speak.
 
 ### Voice settings
 
@@ -179,15 +201,17 @@ The microphone button in the top bar (and, on touch screens, the round one at th
 
 The **Zoom** tool (<kbd>⇧Z</kbd>): click to zoom in, Option-click to zoom out, or drag a box.
 
+The zoom field at the top bar's right end sets the 2D plan's zoom as a percentage. It is greyed out while only the 3D view shows, and its tooltip says so.
+
 ### Undo/redo
 
-Undo/redo works for every edit, pan/zoom, fit and zoom to selection. **View › Previous View** and **Next View** step back and forth through the views shown (a zoom or pan counts once it has settled).
+Undo/redo works for every edit, pan/zoom, fit and zoom to selection. Its buttons are at the right of the top bar's tools (on a touch screen, on the quick keys). **View › Previous View** and **Next View** step back and forth through the views shown (a zoom or pan counts once it has settled).
 
 ### Fitting the view
 
 - **View › Fit to Objects** (<kbd>⌘6</kbd>) fits the selection, or everything when nothing is selected, in the plan or the 3D view.
 - **View › Fit to Page Area** fits a sheet's page in the window.
-- **Normal Scale** shows the drawing as large as it prints at the active layer's scale.
+- **Normal Scale** shows the 2D plan as large as it prints at the active layer's scale.
 
 ### Line thickness on screen
 
@@ -217,11 +241,14 @@ Each kind of snap turns on and off in the Snapping palette, whose **Snap Setting
 
 The data bar shows live coordinates, length and angle; <kbd>Tab</kbd> lets you type exact values.
 
-**Window › Data Bar Options** sets:
+**Window › Data Bar Options** has:
 
-- whether it shows always or only once Tab is pressed
-- whether it shows below the cursor or above it
-- whether a number typed while it shows starts its first field: keypad numbers too, the main keys only, or neither (the default, so the 3 key keeps showing the 3D view)
+- **Use Floating Data Bar Only When Tab Key Is Pressed**, a toggle: ticked, the bar shows only once Tab is pressed
+- **Show Floating Data Bar Above SmartCursor Cues**, a toggle: off, the bar shows below the cursor
+- **Allow Numeric Keypad Entry for Instant Data Bar Activation**, **Do Not Allow Numeric Keypad Entry for Instant Data Bar Activation** or **Do Not Allow Instant Data Bar Activation** (the default, so the 3 key keeps showing the 3D view): whether a number typed while the bar shows starts its first field, from keypad numbers too, the main keys only, or neither
+- **Show Only Primary Fields on Data Bar**, **Show Primary and Secondary Fields on Data Bar** or **Show Primary, Secondary, and Cursor Location Fields on Data Bar**: which fields it shows
+- **Auto Cycle to Non-Displayed Fields When Tabbing Past Last Field**, a toggle, on at first
+- **Show Floating Data Bar After Datum Creation**, a toggle, off at first
 
 It shows each tool's own fields (length and angle, ΔX and ΔY, or the radius), those and ΔX and ΔY, or those and the point's X and Y too. Tab past the last one shown brings out the rest unless turned off.
 
@@ -289,11 +316,11 @@ Menus, tools, palettes, dialogs, messages (the server's too), What's New and the
 - **3D**: the 3D conversion resolution, how finely circles and ellipses in extrude and sweep profiles become faces, from Low to Very High; whether the 3D view opens with the render mode and projection last used.
 - **Autosave**.
 - **Interactive**: a full-screen cursor; the selection box, which sets how near a click picks, and the snap box, the snap radius, each shown at the pointer if wished; pre-selection highlighting, the Selection tool outlining what a click would pick once the pointer rests; animated view transitions, Fit, Zoom to Selection, saved views and Previous and Next View easing there over the time and with the motion chosen, any pan or zoom by hand stopping one.
-- **Appearance**, Vectorworks' Interactive Appearance Settings: the colours of the selection (its outline, handles and the tools' previews), pre-selection, the snap indicators (markers, their names, smart points and the snap box) and the cursor (crosshairs and the selection box, else dark on white and light on black), with Restore Defaults.
+- **Appearance**, Vectorworks' Interactive Appearance Settings: the colours of the selection (its outline, handles, the tools' previews and its highlight in the 3D view), pre-selection, the snap indicators (markers, their names, smart points and the snap box) and the cursor (crosshairs and the selection box, else dark on white and light on black), with Restore Defaults.
 
 ### Quick Preferences
 
-The View bar's Quick Preferences pop-up lists the preferences turned on and off most, each checked while on. At first these are:
+The top bar's **More view options › Quick Preferences** lists the preferences turned on and off most, each checked while on. At first these are:
 
 - **Black Background**
 - **Zoom Line Thickness**
@@ -323,7 +350,7 @@ As in Vectorworks 2027, a tab of Object Info (Shape, Data, Render) or Navigation
 
 Tabs out of the same palette connect into one, and go back when dropped on it, closed, or docked back from its title bar menu ("Dock Data here", "Dock all tabs here").
 
-A tab dragged along the strip moves along it, and "Lock tabs" in that menu holds them where they are. Its Tab Style shows a palette's tabs as icons, names, or both (icons alone fit Navigation's six tabs in half the width).
+A tab dragged along the strip moves along it, and "Lock tabs" in that menu holds them where they are. Its Tab Style shows a palette's tabs as icons, names, or both (icons alone fit Navigation's six tabs in half the width). A tab with no room left goes to a ⋯ **More Tabs** menu at the strip's end, so no tab is cut short.
 
 ### Docking bars at the top and bottom
 
@@ -339,10 +366,12 @@ Floating palettes dock to each other too. Drag one over another and the docking 
 
 ### Dock rails
 
-Along each dock's window edge runs a rail of icons, one per palette of that side, closed ones too:
+Along each dock's window edge runs a rail of icons, one for each palette of that side that is open, used every day, or has been opened before:
 
-- The left rail has Tools, Tool Sets, Navigation and Resources, which starts as a tab of Navigation.
-- The right rail has Object Info, Attributes, Snapping, Visualization and the cloud palettes.
+- The left rail has Tools and Tool Sets.
+- The right rail has Object Info, Attributes, Navigation, Resources, Snapping, Visualization, Working Planes and Agents, with any others opened before.
+
+Resources and Agents are tabs of Navigation, and each has an icon of its own. The other palettes, the cloud ones among them, wait behind the ⋯ **More Palettes** button under the icons until they are opened once. A right-click on the icon of a palette that isn't used every day offers **Move to More Palettes**, which takes its icon off the rail again.
 
 A click on an icon opens a closed palette, brings a rolled-up one or a tab behind another into view, or closes one in view, and a right-click offers its title bar's menu. A dot marks the open ones out of view. A dock with every palette closed is just its rail.
 
@@ -362,11 +391,15 @@ Auto-hiding a dock (the pin on its rail, **Window › Auto-Hide Left Dock** or *
 
 **Window › Palette Options › Auto-Hide Docked Palettes** does it to both docks at once, and **Auto-Hide Floating Palettes** rolls each floating palette up to its title bar while the pointer is elsewhere, unrolling it as the pointer comes back.
 
+On a touch screen, a dock is at least as wide as the top bar's end over it, up to 35% of the window's width, so that the end's buttons fit.
+
 ### Showing and hiding palettes
 
 The Window menu shows each palette again (including Tools and Tool Sets, Vectorworks' grids of tool buttons), hides them all, rolls them up, toggles the View, Mode and Snapping bars and resets the arrangement, which is kept per browser.
 
-**Window › Palettes** lists every palette by its Vectorworks name, each tab of Object Info, Navigation and Visualization too (Shape, Data, Render, Design Layers, Classes, Sheet Layers, Saved Views, Lights, Cameras…). Choosing one brings it to the front, or closes it when it is in view.
+**Window › Palettes** lists every palette by its Vectorworks name, each tab of Object Info, Navigation and Visualization too (Shape, Data, Render, Design Layers, Classes, Sheet Layers, Saved Views, Lights, Cameras…). Choosing one brings it to the front, or closes it when it is in view. Object Info is also ⌘I, which shows or hides it.
+
+A window narrower than 900 px starts with the palettes put away, the docks' rails with them, for that visit only. Showing a palette from the Window menu brings the rails back. Widening the window, or the next wide visit, brings back the saved arrangement.
 
 **Hide Enabled Palettes** (<kbd>⇧⌘P</kbd>) puts them all away and back.
 
@@ -408,7 +441,7 @@ The bars over the drawing move and roll up too:
 
 **Window › Workspaces › Menus…** rearranges the menu bar: new menus, names, order, commands or submenus moved between menus or taken out (still running from their shortcuts). Workspaces keep it.
 
-**Window › Workspaces › Tool Sets…** rearranges the Tool Sets palette: new sets, names, order, which tools each holds. Workspaces keep them.
+**Window › Workspaces › Tool Sets…** rearranges the Tool Sets palette: new sets, names, order, which tools each holds. It also arranges the **Tool sets** button's menu at the end of the top bar's tools. Workspaces keep them.
 
 ### Shortcuts
 
@@ -420,7 +453,7 @@ The bars over the drawing move and roll up too:
 
 ### Splitting the drawing area
 
-**Window › View Panes** (or the View bar's View panes pop-up, or **View › Multiple View Panes**) splits the drawing area into two, three or four panes, all drawn at once and kept up to date as the drawing is edited, each a plan or a 3D view.
+**View › Multiple View Panes** (or the top bar's **View panes** pop-up) splits the drawing area into two, three or four panes, all drawn at once and kept up to date as the drawing is edited, each a plan or a 3D view.
 
 A new arrangement has the plan in the first and a 3D view in each of the others (Front, Right and an isometric view to start with):
 
@@ -436,17 +469,21 @@ The menu pictures each arrangement. Other commands:
 - **Single Pane** goes back to the one view.
 - **Reset Multiple View Panes** goes back to Four Panes, the dividers halfway and each pane in its standard view, and closes the floating panes.
 
-Every pane shows the same layers, classes and clip cube, so **Use Same Visibilities in All Panes** is always on.
+**Use Same Visibilities in All Panes** is greyed out: every pane shows the same layers, classes and clip cube.
+
+Each pane has a chip in its top-left corner: "Plan", or "3D" with the standard view its camera is in ("3D · Right Isometric"), "3D" alone once the camera has left it. Its menu has **Show Plan Here**, **Show 3D Here**, the standard views (for a 3D pane) and **Close Pane**.
 
 ### The active pane
 
-The active pane is ringed in the accent. The render mode, the zoom and Fit act on it, and Top/Plan, 3D View (the View bar's 2D and 3D) and the standard views turn it into a plan or a 3D view, so two plans can show the drawing at different zooms, or every pane a 3D view. A click in another pane makes that one active (the click does nothing else).
+The active pane is ringed in the accent. The render mode, the zoom and Fit act on it. Top/Plan, 3D View (or the 3 key) and the standard views make the active pane one of their kind, a plan pane or a 3D pane, and only when no pane is of that kind does the active pane turn into one. A chip's **Show Plan Here** or **Show 3D Here** turns its pane into one or the other, so two plans can show the drawing at different zooms, or every pane a 3D view. The top bar's 2D and 3D buttons show one view alone and leave the split; **Split** brings the panes back as last arranged.
+
+A click in a pane showing a picture makes it the active one, and does nothing else. A click in the other live pane, the plan or the 3D view, makes it active and then does what a click there does.
 
 The live plan, for drawing and editing, is in the plan pane last made active, and the live 3D view, for orbiting, picking and walking, in the 3D pane last made active. Every other pane shows the drawing from its own view, kept as it was left and drawn again as the drawing or the look changes.
 
 ### Render modes in panes
 
-Each 3D pane keeps its own render mode and projection. The View bar's Render mode and Projection set the live pane's, and the pane the live view moves to takes its own back (a new arrangement starts every pane in the one shown).
+Each 3D pane keeps its own render mode and projection. The top bar's **Render mode** pop-up and **View › Rendering** make the live 3D pane active, then set its render mode, and **More view options › Projection** sets the live pane's projection. The pane the live view moves to takes its own back (a new arrangement starts every pane in the one shown). A pane's picture doesn't show the selection; the live 3D view does.
 
 A Realistic pane without the live 3D view shows the render feature's picture through its own camera, Shaded until that has loaded.
 

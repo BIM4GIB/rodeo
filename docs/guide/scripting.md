@@ -6,7 +6,7 @@ This page covers running Python scripts and Vectorscripts written for Vectorwork
 
 ### Python scripts
 
-Python written for Vectorworks runs on the open drawing from **Plug-ins › Run Script…**, and from **Tools › Plug-ins** as in Vectorworks. It runs in a window that:
+Python written for Vectorworks runs on the open drawing from **Tools › Plug-ins › Run Script…**, as in Vectorworks. It runs in a window that:
 
 - keeps the script in this browser
 - opens and saves `.py` files

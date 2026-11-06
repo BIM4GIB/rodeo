@@ -47,6 +47,8 @@ How to use Rodeo, the drawing and 3D modelling app at [rodeo.build](https://rode
 - Tools are named with their tool set, such as the **Wall** tool (Building Shell tool set).
 - **Limits:** at the end of a section says what Rodeo doesn't do yet, or does differently from Vectorworks.
 
+This guide is also in the app: **Help › User Guide** opens it in a new tab.
+
 Rodeo is young, and files it writes have not yet been opened in Vectorworks. Keep your originals and check edited copies in Vectorworks or the free Vectorworks Viewer before relying on them.
 
 Found something wrong or missing? Use **Help › Report a Bug…** in the app, or open an issue on [GitHub](https://github.com/rodeobuild/rodeo/issues).

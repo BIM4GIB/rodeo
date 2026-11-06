@@ -36,7 +36,7 @@ Only two changes to the same thing at the same moment clash, such as two renames
 
 ### Share links
 
-**File › Share…** on a cloud drawing you own or edit makes public view-only links. Anyone with the link sees the drawing in 2D and 3D in their browser without an account. With **Allow download** they can also download it, or **Edit a Copy** as a drawing of their own. Pasted into Slack, Discord, iMessage, X or LinkedIn, a link shows the drawing's name, who shared it and a picture of it. **Revoke** turns a link off at once.
+**File › Share › People and Links…** on a cloud drawing you own or edit makes public view-only links. Anyone with the link sees the drawing in 2D and 3D in their browser without an account. With **Allow download** they can also download it, or **Edit a Copy** as a drawing of their own. Pasted into Slack, Discord, iMessage, X or LinkedIn, a link shows the drawing's name, who shared it and a picture of it. **Revoke** turns a link off at once.
 
 ### Previews
 
@@ -98,7 +98,7 @@ Its lines, rectangles, polygons, polylines, arcs, text and groups are written fr
 
 ### Publish to Gallery…
 
-**File › Publish to Gallery…** (or the Gallery row in **File › Share…**) puts a cloud drawing in the public gallery at [rodeo.build/gallery](https://rodeo.build/gallery). Only the drawing's owner can publish it; a drawing that isn't in the cloud asks to be saved there first.
+**File › Share › Publish to Gallery…** puts a cloud drawing in the public gallery at [rodeo.build/gallery](https://rodeo.build/gallery). Only the drawing's owner can publish it; a drawing that isn't in the cloud asks to be saved there first.
 
 Give it a title, a description, up to six tags and the name to credit, choose a licence (CC BY 4.0 unless you choose CC BY-SA 4.0, CC BY-NC 4.0 or CC0) and a cover: the drawing, or the 3D view as it is on screen.
 
