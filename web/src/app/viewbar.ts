@@ -562,17 +562,33 @@ export function mountModeBar(controller: ToolController): void {
     prefs.hidden = !controller.hasPreferences();
     modes.replaceChildren(...groups.map((m) => (compact ? menuOf(m) : segOf(m))));
   };
-  /** Shows every mode when they fit, else goes compact. */
+  /**
+   * Fits the hint to the room the Mode bar leaves it: its key chips go first, from the last, and only
+   * once none is left does the step end in an ellipsis (the whole hint is its tooltip).
+   */
+  const fitHint = (): void => {
+    const step = hint.querySelector<HTMLElement>(".mode-step");
+    const keys = [...hint.querySelectorAll<HTMLElement>(".mode-key")];
+    for (const k of keys) k.hidden = false;
+    if (!step || hint.hidden) return;
+    for (const k of keys.reverse()) {
+      if (step.scrollWidth <= step.clientWidth) return;
+      k.hidden = true;
+    }
+  };
+  /** Shows every mode when they fit, else goes compact; the hint then takes the room left. */
   const fit = (): void => {
     if (compact) {
       compact = false;
       bar.classList.remove("compact");
       syncModes();
     }
-    if (bar.scrollWidth <= bar.clientWidth + 1) return;
-    compact = true;
-    bar.classList.add("compact");
-    syncModes();
+    if (bar.scrollWidth > bar.clientWidth + 1) {
+      compact = true;
+      bar.classList.add("compact");
+      syncModes();
+    }
+    fitHint();
   };
   const syncHint = (): void => {
     const [step, ...keys] = store.hint.split(" · ");
@@ -583,6 +599,8 @@ export function mountModeBar(controller: ToolController): void {
       h("span", { cls: "mode-step", text: step ?? "" }),
       ...keys.map((k) => h("span", { cls: "mode-key", text: k })),
     );
+    // once its words are translated (i18n.ts translates new text as its mutation observer sees it)
+    queueMicrotask(fitHint);
   };
   store.on("tool", () => {
     syncTool();
@@ -604,6 +622,8 @@ export function mountModeBar(controller: ToolController): void {
   fit();
   // the canvas narrows and widens with the window and the docked palettes
   if (bar.parentElement) new ResizeObserver(fit).observe(bar.parentElement);
+  // the hint's room changes with the bars beside it too (the cursor's position widening), not only the canvas
+  new ResizeObserver(fitHint).observe(hint);
   // rolled up by its grip, or unrolled
   bar.addEventListener("barroll", fit);
 }

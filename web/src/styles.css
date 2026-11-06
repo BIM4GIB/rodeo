@@ -410,6 +410,11 @@ code {
   color: var(--danger);
 }
 
+/* a destructive button that can't act looks like any other disabled button, not like a warning */
+.btn.danger:disabled {
+  color: var(--text);
+}
+
 .btn.small {
   height: 24px;
   padding: 0 8px;
@@ -1003,11 +1008,11 @@ code {
   overflow: hidden;
 }
 
-/* a step wider than the whole hint (a long one, a wordier language) ends in "…" rather than cut;
-   the keys after it go first */
+/* the step gives way last: the key chips after it go first (mountModeBar), then a step too long for
+   the hint (a long one, a wordier language) ends in "…" rather than cut */
 .mode-step {
-  flex: none;
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1020,13 +1025,6 @@ code {
   border-radius: 5px;
   background: var(--fill);
   color: var(--text-2);
-}
-
-.mode-hint > :last-child {
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 

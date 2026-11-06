@@ -12,13 +12,16 @@
 // tab), a guide at each side of the drawing the end of that dock, and Option or
 // Ctrl held keeps the palette floating. A right-click on a
 // title bar offers the same moves. Along each dock's outer edge runs a rail of
-// icons, one per palette of that side, closed ones too: a click shows a palette,
-// brings its tab to the front or closes it, so every palette is a click away
-// without taking room from the drawing. A dock folds to its rail, leaving the
-// drawing all but the rail's width; an icon then opens its palette beside the
-// rail, over the drawing, until the next click elsewhere. The arrangement, with
-// the interface's density (Window > Compact Interface), is kept in localStorage,
-// per browser.
+// icons, one per palette of that side that is open, used every day (EVERYDAY) or
+// opened before, then a More palettes button with the rest of that side's: a click
+// shows a palette, brings its tab to the front or closes it, so every palette is a
+// click or two away without taking room from the drawing. A dock folds to its
+// rail, leaving the drawing all but the rail's width; an icon then opens its
+// palette beside the rail, over the drawing, until the next click elsewhere. The
+// arrangement, with the interface's density (Window > Compact Interface), is kept
+// in localStorage, per browser. A window narrower than the touch layout's puts the
+// palettes away for that visit only (awayForVisit): the arrangement kept stays the
+// wider window's.
 //
 // Window > View Bar Options shows the View bar in its regular size, compact (tighter, without the
 // layer's scale) or auto-hidden (out of sight till the pointer comes near it), with or without
@@ -32,7 +35,7 @@
 // the window.
 
 import { h } from "./dom.ts";
-import { openContextMenu, type Row } from "./menu.ts";
+import { menuButton, openContextMenu, type Row } from "./menu.ts";
 import "./dock.css";
 
 export type DockSide = "left" | "right";
@@ -166,6 +169,8 @@ interface Layout {
   tabLock: Record<string, boolean>;
   /** each palette's Tab Style, by its id: its tabs show their icons, their names or both (names where it has none) */
   tabStyle: Record<string, TabStyle>;
+  /** palettes opened at some time, which their rails go on listing after they close (EVERYDAY lists the rest) */
+  opened: Record<string, boolean>;
 }
 
 /** Vectorworks 2027's Tab Style for a palette's tabs: Icon Only, Text Only, or Icon and Text. */
@@ -225,6 +230,15 @@ const PHONE_QUERY = "(max-width: 560px)";
 /** a phone's sheet stops, in per cent of the window's height (the sheet starts at the middle one) */
 const SHEET_STOPS = [30, 55, 90];
 const SHEET_START = 1;
+/** a touch screen, whose larger top bar buttons make the bar's ends wide */
+const COARSE_QUERY = "(pointer: coarse)";
+/** on a touch screen, the most of the window's width the top bar's end over a dock widens the dock to */
+const MAX_FLOOR_SHARE = 0.35;
+/**
+ * The palettes every rail lists, open or closed: the everyday ones. The rest join their rail once
+ * they have been opened, and wait in its More palettes menu till then.
+ */
+const EVERYDAY: ReadonlySet<string> = new Set(["objectInfo", "attributes", "navigation", "resources", "snapping", "visualization", "workingPlanes", "agents", "basic", "toolsets"]);
 
 const CHEVRON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 /** points into the drawing: unfolding the left dock; mirrored for the right */
@@ -234,6 +248,8 @@ const GRIP = `<svg viewBox="0 0 8 14" aria-hidden="true"><g fill="currentColor">
 /** a pushpin: a dock kept open, or (lit) auto-hidden */
 const PIN = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 1.5h3M5 1.5v3.2L3.3 6.6h5.4L7 4.7V1.5M6 6.6v3.9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const CROSS = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 3.5 8.5 8.5M8.5 3.5 3.5 8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+/** three dots: the palettes a rail leaves to its More palettes menu, and the tabs a strip has no room for */
+const MORE = `<svg viewBox="0 0 16 16" aria-hidden="true"><g fill="currentColor"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></g></svg>`;
 
 /** Where a docking guide's square puts the dragged palette against the one under it. */
 type GuideAt = "top" | "bottom" | "left" | "right" | "tab";
@@ -316,6 +332,7 @@ function defaults(specs: readonly PaletteSpec[]): Layout {
     tabOrder: {},
     tabLock: {},
     tabStyle: {},
+    opened: {},
   };
 }
 
@@ -349,7 +366,11 @@ function parse(specs: readonly PaletteSpec[], raw: unknown): Layout {
     const v = saved.shelf?.[shelf];
     if (typeof v === "number" && Number.isFinite(v)) layout.shelf[shelf] = Math.max(MIN_SHELF_H, v);
   }
-  layout.away = saved.away === true;
+  // every palette closed and put away is how a window narrower than the touch layout's used to leave
+  // the arrangement (features/touch/layout.ts): such a one starts with its palettes shown as they
+  // first are, and in view
+  const leftAway = saved.away === true && Object.values(saved.palettes ?? {}).every((p) => !p || p.shown !== true);
+  layout.away = saved.away === true && !leftAway;
   if (saved.density === "compact") layout.density = "compact";
   if (saved.viewBar === "compact" || saved.viewBar === "autohide") layout.viewBar = saved.viewBar;
   layout.viewBarLabels = saved.viewBarLabels === true;
@@ -363,6 +384,9 @@ function parse(specs: readonly PaletteSpec[], raw: unknown): Layout {
   }
   for (const [id, style] of Object.entries(saved.tabStyle ?? {})) {
     if (style === "icon" || style === "both") layout.tabStyle[id] = style;
+  }
+  for (const [id, on] of Object.entries(saved.opened ?? {})) {
+    if (on === true) layout.opened[id] = true;
   }
   for (const bar of BAR_IDS) {
     if (typeof saved.bars?.[bar] === "boolean") layout.bars[bar] = saved.bars[bar];
@@ -383,7 +407,7 @@ function parse(specs: readonly PaletteSpec[], raw: unknown): Layout {
       if (typeof p[k] === "number" && Number.isFinite(p[k])) into[k] = p[k];
     }
     if (typeof p.collapsed === "boolean") into.collapsed = p.collapsed;
-    if (typeof p.shown === "boolean") into.shown = p.shown;
+    if (typeof p.shown === "boolean" && !leftAway) into.shown = p.shown;
     if (p.group === null || typeof p.group === "string") into.group = p.group;
     if (p.stack === null || typeof p.stack === "string") into.stack = p.stack;
     if (p.tab === null || typeof p.tab === "string") into.tab = p.tab;
@@ -430,8 +454,15 @@ export class Palettes {
   /** a folded dock's palette, opened beside its rail */
   private readonly flyout = h("div", { cls: "dock-flyout", hidden: true });
   private open: { side: DockSide; id: string } | null = null;
-  /** the least an open dock is drawn at: the top bar's end over it, with its buttons (app.ts) */
+  /** the least an open dock is drawn at: the top bar's end over it, with its buttons (app.ts), within a share of a touch screen's window (span) */
   private readonly floor: Record<DockSide, number> = { left: 0, right: 0 };
+  /** each dock's width as last drawn: a window's resize lays the docks out again only when it moves one */
+  private readonly drawn: Record<DockSide, number> = { left: 0, right: 0 };
+  /**
+   * While a narrow window has the palettes put away for its visit (awayForVisit): the placements and
+   * the put-away state the saved arrangement keeps, brought back as the window widens (endVisit).
+   */
+  private kept: Pick<Layout, "palettes" | "away"> | null = null;
   /** an auto-hidden dock's palette about to slide out or back */
   private hoverTimer = 0;
   /** an auto-hidden View bar about to go out of sight */
@@ -480,6 +511,7 @@ export class Palettes {
   private sheetId: string | null = null;
   private sheetStop = SHEET_START;
   private readonly phoneQuery = window.matchMedia(PHONE_QUERY);
+  private readonly coarseQuery = window.matchMedia(COARSE_QUERY);
   private readonly sheet: HTMLElement;
   /** the sheet's grip: drag it to make the sheet taller or shorter */
   private readonly grip = h(
@@ -556,6 +588,13 @@ export class Palettes {
     window.addEventListener("focusin", () => this.revealViewBar(null));
     // a window crossing the phone's width lays the palettes out again
     this.phoneQuery.addEventListener("change", () => this.commit());
+    // on a touch screen the top bar's end widens a dock by at most a share of the window (span): a
+    // resize that moves a dock lays them out again
+    window.addEventListener("resize", () => {
+      if (this.span("left") === this.drawn.left && this.span("right") === this.drawn.right) return;
+      this.place();
+      for (const fn of this.listeners) fn();
+    });
     this.place();
   }
 
@@ -822,6 +861,30 @@ export class Palettes {
     this.commit();
   }
 
+  /**
+   * Puts the palettes away for this visit, rails and all, as a window narrower than the touch layout's
+   * starts (features/touch/layout.ts): each closes, so showing one later shows that one alone (a phone's
+   * sheet just starts empty). The arrangement saved stays as it was (commit saves the kept placements)
+   * until endVisit, a workspace or a reset replaces it.
+   */
+  awayForVisit(): void {
+    if (this.kept === null) this.kept = JSON.parse(JSON.stringify({ palettes: this.layout.palettes, away: this.layout.away })) as Pick<Layout, "palettes" | "away">;
+    for (const { id } of this.list()) if (this.layout.palettes[id]?.shown) this.hide(id);
+    this.layout.away = true;
+    this.sheetId = null;
+    this.commit();
+  }
+
+  /** Ends the visit's put-away palettes (awayForVisit): they come back as the saved arrangement has them. */
+  endVisit(): void {
+    if (this.kept === null) return;
+    const kept = this.kept;
+    this.kept = null;
+    this.layout = parse([...this.specs.values()], { ...this.layout, ...kept });
+    this.open = null;
+    this.commit();
+  }
+
   isFolded(side: DockSide): boolean {
     return this.layout.folded[side];
   }
@@ -991,6 +1054,7 @@ export class Palettes {
 
   /** Back to the arrangement openvwx starts with. */
   reset(): void {
+    this.kept = null;
     this.layout = defaults([...this.specs.values()]);
     this.commit();
   }
@@ -1002,7 +1066,11 @@ export class Palettes {
 
   /** Arranges the palettes as a kept snapshot has them. */
   restore(snapshot: unknown): void {
+    const opened = this.layout.opened;
+    this.kept = null;
     this.layout = parse([...this.specs.values()], snapshot);
+    // the palettes opened before stay on their rails whatever the workspace
+    this.layout.opened = { ...opened, ...this.layout.opened };
     this.commit();
   }
 
@@ -1033,8 +1101,8 @@ export class Palettes {
     return h("div", { cls: `shelf shelf-${shelf}`, attrs: { "data-shelf": shelf, role: "region", "aria-label": SHELF_NAMES[shelf] }, hidden: true }, this.shelfRows[shelf], edge);
   }
 
-  /** The palettes a dock's rail lists, closed ones included, in the order the Window menu has them. */
-  private railed(side: DockSide): string[] {
+  /** The palettes of a dock's side, closed ones included, in the order the Window menu has them. */
+  private sided(side: DockSide): string[] {
     return [...this.specs.keys()].filter((id) => {
       const p = this.layout.palettes[id];
       // a tab out of its palette while it is out
@@ -1043,7 +1111,25 @@ export class Palettes {
     });
   }
 
-  /** A dock's rail: an icon per palette (lit while it is in view, marked while it is open), then the fold button. */
+  /** Whether a palette's icon is on its rail: while it is open, for an everyday one, and once it has been opened. */
+  private onRail(id: string): boolean {
+    return this.layout.palettes[id].shown || EVERYDAY.has(id) || this.layout.opened[id] === true;
+  }
+
+  /** The palettes a dock's rail lists, in the order the Window menu has them. */
+  private railed(side: DockSide): string[] {
+    return this.sided(side).filter((id) => this.onRail(id));
+  }
+
+  /** The palettes of a dock's side that its rail leaves to the More palettes menu. */
+  private unrailed(side: DockSide): string[] {
+    return this.sided(side).filter((id) => !this.onRail(id));
+  }
+
+  /**
+   * A dock's rail: an icon per palette it lists (lit while it is in view, marked while it is open), the
+   * More palettes button with the rest of that side's palettes, then the fold button.
+   */
   private fillRail(side: DockSide): void {
     const narrow = this.narrow(side);
     const icons = this.railed(side).map((id) => {
@@ -1061,8 +1147,7 @@ export class Palettes {
       btn.addEventListener("pointerenter", (e) => this.hoverRail(side, id, e));
       btn.addEventListener("contextmenu", (e) => {
         e.preventDefault();
-        const rows: Row[] = p.shown ? this.paletteMenu(host) : [{ label: `Show ${spec.title}`, run: () => this.show(id) }];
-        openContextMenu(rows, e.clientX, e.clientY);
+        openContextMenu(p.shown ? this.paletteMenu(host) : this.closedRows(id), e.clientX, e.clientY);
       });
       return btn;
     });
@@ -1084,7 +1169,27 @@ export class Palettes {
     });
     pin.addEventListener("click", () => this.toggleAutoHide(side));
     pin.hidden = fold.hidden;
-    this.rails[side].replaceChildren(...icons, h("div", { cls: "dock-rail-gap" }), pin, fold);
+    // the side's other palettes, by name, wait behind the More palettes button
+    const rest = this.unrailed(side).sort((a, b) => this.specs.get(a)!.title.localeCompare(this.specs.get(b)!.title));
+    const more = menuButton(
+      h("button", { cls: "dock-icon dock-more", html: MORE, title: "More Palettes", attrs: { type: "button", "aria-label": "More Palettes" } }),
+      () => rest.map((id): Row => ({ label: this.specs.get(id)!.title, run: () => this.show(id) })),
+    );
+    more.hidden = rest.length === 0;
+    this.rails[side].replaceChildren(...icons, more, h("div", { cls: "dock-rail-gap" }), pin, fold);
+  }
+
+  /** What a right-click on a closed palette's rail icon offers: showing it, and for one not used every day, leaving the rail. */
+  private closedRows(id: string): Row[] {
+    const show: Row = { label: `Show ${this.specs.get(id)!.title}`, run: () => this.show(id) };
+    if (EVERYDAY.has(id)) return [show];
+    return [show, { label: "Move to More Palettes", run: () => this.unrail(id) }];
+  }
+
+  /** Takes a closed palette's icon off its rail: it waits in the More palettes menu again. */
+  private unrail(id: string): void {
+    delete this.layout.opened[id];
+    this.commit();
   }
 
   /** The pointer resting on an auto-hidden dock's icon: its palette slides out (a closed one waits for a click). */
@@ -1231,9 +1336,15 @@ export class Palettes {
     return this.layout.folded[side] || this.docked(side, except).length === 0;
   }
 
-  /** How wide a dock is drawn: just its rail while it is narrow, and never narrower than the top bar's end over it. */
+  /**
+   * How wide a dock is drawn: just its rail while it is narrow, and never narrower than the top bar's
+   * end over it, except that on a touch screen, whose larger buttons make the end wide, the end widens
+   * it to a share of the window at most (MAX_FLOOR_SHARE).
+   */
   private span(side: DockSide, except?: string): number {
-    return this.narrow(side, except) ? this.rail() : Math.max(this.layout.width[side], this.floor[side]);
+    if (this.narrow(side, except)) return this.rail();
+    const floor = this.coarseQuery.matches ? Math.min(this.floor[side], window.innerWidth * MAX_FLOOR_SHARE) : this.floor[side];
+    return Math.max(this.layout.width[side], floor);
   }
 
   /** Opens a folded dock's palette beside its strip, `tab` in front, or closes the one open (null). */
@@ -1689,8 +1800,9 @@ export class Palettes {
       const dock = this.docks[side];
       const narrow = this.narrow(side);
       dock.classList.toggle("folded", narrow);
-      dock.hidden = away || this.railed(side).length === 0;
-      dock.style.width = `${this.span(side)}px`;
+      dock.hidden = away || this.sided(side).length === 0;
+      this.drawn[side] = this.span(side);
+      dock.style.width = `${this.drawn[side]}px`;
       this.fillRail(side);
       // put away, the palettes are in no dock (a phone's is in its sheet)
       if (narrow || away) {
@@ -2111,6 +2223,8 @@ export class Palettes {
   }
 
   private commit(): void {
+    // a palette in view keeps its rail's icon once it closes
+    for (const [id, p] of Object.entries(this.layout.palettes)) if (p.shown && !this.loose.has(id)) this.layout.opened[id] = true;
     this.reconcileStacks();
     for (const side of ["left", "right"] as const) {
       this.reconcile(side);
@@ -2123,7 +2237,8 @@ export class Palettes {
         this.layout.palettes[id].order = i;
       });
     }
-    save(this.layout);
+    // while a narrow window has the palettes put away for its visit, the kept placements are what is saved
+    save(this.kept ? { ...this.layout, ...this.kept } : this.layout);
     this.place();
     for (const fn of this.listeners) fn();
   }
@@ -2816,7 +2931,8 @@ function holds(el: HTMLElement, kids: readonly HTMLElement[]): boolean {
  * Object Info's Shape, Data and Render): a compact strip and the bodies under it, the open tab
  * remembered. A tab dragged along the strip moves along it; one dragged off it comes out as a
  * palette of its own where the palettes allow (Palettes.tearOff), its button out of the strip till
- * it is back, as Vectorworks 2027 detaches palette tabs.
+ * it is back, as Vectorworks 2027 detaches palette tabs. Tabs the strip has no room for wait in a
+ * More tabs menu at its end, the one in front always in view.
  */
 class TabStrip {
   readonly el: HTMLElement;
@@ -2833,6 +2949,11 @@ class TabStrip {
   tearOff: ((tab: string, e: PointerEvent) => boolean) | null = null;
   /** set by the palettes: the strip's order after a tab is moved along it */
   reordered: ((order: readonly string[]) => void) | null = null;
+  /** the tabs the strip has no room for, in a menu at its end (fit) */
+  private readonly more: HTMLButtonElement = menuButton(
+    h("button", { cls: "pal-tab pal-tab-more", html: MORE, title: "More Tabs", attrs: { type: "button", "aria-label": "More Tabs" } }),
+    () => this.inStrip().filter((id) => this.buttons.get(id)?.hidden).map((id): Row => ({ label: this.panel(id).label, run: () => this.show(id) })),
+  );
 
   constructor(
     private readonly key: string,
@@ -2860,6 +2981,8 @@ class TabStrip {
     this.active = first;
     this.el = h("div", { cls: "pal-tabbed" }, this.strip, this.bodies);
     this.render();
+    // the strip narrows and widens with its palette, and fits its tabs again
+    new ResizeObserver(() => this.fit()).observe(this.strip);
   }
 
   /** The tab in front of the strip. */
@@ -2908,7 +3031,7 @@ class TabStrip {
     const ids = this.inStrip();
     if (!ids.includes(this.active)) this.active = ids[0] ?? "";
     // moved only when they change, so a field being typed in keeps its focus and a list its scroll
-    const buttons = ids.map((id) => this.buttons.get(id)!);
+    const buttons = [...ids.map((id) => this.buttons.get(id)!), this.more];
     if (!holds(this.strip, buttons)) this.strip.replaceChildren(...buttons);
     // the bodies of the tabs out of the strip are in their own palettes
     const bodies = ids.map((id) => this.panel(id).body);
@@ -2919,6 +3042,24 @@ class TabStrip {
       btn.classList.toggle("active", on);
       btn.setAttribute("aria-selected", String(on));
       this.panel(id).body.hidden = !on;
+    }
+    this.fit();
+  }
+
+  /**
+   * Shows as many tabs along the strip as it has room for, the one in front always among them, and
+   * leaves the rest to the More tabs menu at its end, so no tab is cut short.
+   */
+  private fit(): void {
+    const ids = this.inStrip();
+    for (const id of ids) this.buttons.get(id)!.hidden = false;
+    this.more.hidden = true;
+    // a strip out of sight (its palette closed or rolled up) has no width to fit: its observer fits it once it has
+    if (this.strip.clientWidth === 0 || this.strip.scrollWidth <= this.strip.clientWidth + 1) return;
+    this.more.hidden = false;
+    for (const id of ids.slice().reverse()) {
+      if (this.strip.scrollWidth <= this.strip.clientWidth + 1) return;
+      if (id !== this.active) this.buttons.get(id)!.hidden = true;
     }
   }
 

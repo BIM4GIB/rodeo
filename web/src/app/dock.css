@@ -813,13 +813,13 @@
   min-height: 0;
 }
 
+/* the tabs that have no room wait in the More tabs menu at the strip's end (TabStrip.fit) */
 .pal-tabs {
   display: flex;
   gap: 2px;
   flex: none;
   padding: 0 8px 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: hidden;
 }
 
 .pal-tab {
@@ -856,6 +856,19 @@
   box-shadow: inset 0 0 0 1px var(--ring);
 }
 
+/* the tabs a strip has no room for, in a menu at its end (TabStrip.fit) */
+.pal-tab-more {
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 5px;
+  color: var(--text-3);
+}
+
+.pal-tab-more svg {
+  width: 14px;
+  height: 14px;
+}
+
 .pal-tab-bodies {
   flex: 1;
   min-height: 0;
@@ -869,6 +882,52 @@
   overflow: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* a palette's body, or a tab's, fades out along an edge with more beyond it, so a section cut off
+   at the foot reads as more to scroll to: the fades follow its scroll (a browser that can't follow
+   a scroll in CSS shows none) */
+@property --pal-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --pal-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes pal-fade-top {
+  from {
+    --pal-fade-top: 0px;
+  }
+
+  8%,
+  to {
+    --pal-fade-top: 32px;
+  }
+}
+
+@keyframes pal-fade-bottom {
+  from,
+  92% {
+    --pal-fade-bottom: 32px;
+  }
+
+  to {
+    --pal-fade-bottom: 0px;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .pal-body,
+  .pal-tab-body {
+    mask-image: linear-gradient(transparent, black var(--pal-fade-top), black calc(100% - var(--pal-fade-bottom)), transparent);
+    animation: pal-fade-top linear both, pal-fade-bottom linear both;
+    animation-timeline: scroll(self), scroll(self);
+  }
 }
 
 /* a tabbed palette scrolls inside its tabs, under the tab strip */
