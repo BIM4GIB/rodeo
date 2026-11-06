@@ -120,188 +120,51 @@ index 86e48f0..c6c4992 100644
          phase: options.phase.map(PhaseOption::into_request).transpose()?,
      })
  }
-diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
-index 03d4f31..e1fe29b 100644
---- a/src/ifc/saved_meshes.rs
-+++ b/src/ifc/saved_meshes.rs
-@@ -28,8 +28,8 @@
- use super::IfcModel;
- use super::entities::{BrepTriangle, IfcEntity, PropertyValue, SolidShape};
- use super::export_content::{
--    BEAM_BOX_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE, SPACE_OUTLINE_SAVED_MESH,
--    SPACE_OUTLINE_SOURCE_PROPERTY,
-+    BEAM_BOX_BODY_SOURCE, INSTANCE_TURNED_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE,
-+    SPACE_OUTLINE_SAVED_MESH, SPACE_OUTLINE_SOURCE_PROPERTY,
- };
- use std::collections::{BTreeMap, BTreeSet};
- 
-@@ -142,11 +142,12 @@ pub fn attach_scoped_with_control(
-         let profile_resolved = set.properties.iter().any(|p| {
-             p.name == "ProfileResolved" && matches!(p.value, PropertyValue::Boolean(true))
-         });
--        // A beam RE-328 draws as its box along its line is a stand-in for
--        // its saved mesh, as the record box is.
-+        // A beam RE-328 draws as its box along its line, and a family instance
-+        // turned off the model's axes (RE-87), are stand-ins for their saved
-+        // mesh, as the record box is.
-         if !matches!(
-             text("BodySource"),
--            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE)
-+            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE | INSTANCE_TURNED_BODY_SOURCE)
-         ) || profile_resolved
-         {
-             continue;
-@@ -203,8 +204,10 @@ pub fn attach_scoped_with_control(
-                 return Ok(());
+diff --git a/src/ifc/export_pipeline.rs b/src/ifc/export_pipeline.rs
+index f405fc8..aa6f216 100644
+--- a/src/ifc/export_pipeline.rs
++++ b/src/ifc/export_pipeline.rs
+@@ -220,6 +220,8 @@ pub enum ExportNote {
+         /// Of those, elements keeping their box because part of their saved
+         /// graphics did not decode.
+         partial: usize,
++        /// Of the `replaced`, those drawn from a partial saved mesh (RE-224).
++        partial_admitted: usize,
+         /// Triangles written in all.
+         triangles: usize,
+     },
+@@ -334,6 +336,7 @@ impl fmt::Display for ExportNote {
+                 candidates,
+                 replaced,
+                 partial,
++                partial_admitted,
+                 triangles,
+             } => {
+                 let what = if *scope == SavedMeshScope::All {
+@@ -344,7 +347,14 @@ impl fmt::Display for ExportNote {
+                 write!(
+                     f,
+                     "{replaced} of {candidates} {what} drawn from their saved graphics ({triangles} triangles); {partial} kept their box, their saved graphics not decoding whole"
+-                )
++                )?;
++                if *partial_admitted > 0 {
++                    write!(
++                        f,
++                        "; {partial_admitted} of the drawn ones from their decoded faces alone (a few faces failed)"
++                    )?;
++                }
++                Ok(())
              }
-             let IfcEntity::BuildingElement {
-+                ifc_type,
-                 location_feet: Some(origin),
-                 rotation_radians,
-+                extrusion,
-                 solid_shape,
-                 property_set: Some(set),
-                 ..
-@@ -232,6 +235,40 @@ pub fn attach_scoped_with_control(
-             if triangles.is_empty() {
-                 return Ok(());
-             }
-+            // A body with a curved-profile face must lie in its record box and
-+            // fill most of it on each axis; otherwise it is only part of the
-+            // element, and the box stays. Where the owner left out hidden
-+            // components, the record box also holds geometry Revit does not
-+            // draw in 3D, so one short axis is allowed.
-+            if element.meshes.curved_extension_faces > 0
-+                && !fills_record_box(
-+                    &vertices,
-+                    &triangles,
-+                    extrusion.as_ref(),
-+                    element.meshes.excluded_visibility_branches > 0,
-+                )
-+            {
-+                return Ok(());
-+            }
-+            // A curved-profile shell admitted only by the seam tolerance (the
-+            // exact rim refuses it) must have no triangle longer than half its
-+            // box's diagonal; the seam tolerance is not allowed to draw a body
-+            // that spans across its element.
-+            if element.meshes.seam_admitted_shell
-+                && has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
-+            {
-+                return Ok(());
-+            }
-+            // A railing's saved mesh is taken only where it fills its record box
-+            // (RE-303): every vertex within the box and each extent of the box
-+            // reached, to within 0.5 ft. A railing whose graphics leave a part
-+            // out, with no decoder diagnostic to say so, keeps its box.
-+            if ifc_type.as_str() == "IFCRAILING"
-+                && !railing_mesh_fills_box(&vertices, extrusion.as_ref())
-+            {
-+                report.partial += 1;
-+                return Ok(());
-+            }
-             report.replaced += 1;
-             report.triangles += triangles.len();
-             *solid_shape = Some(SolidShape::TriangulatedFaceSet {
-@@ -250,3 +287,98 @@ pub fn attach_scoped_with_control(
-     )?;
-     Ok(report)
- }
-+
-+/// Whether the body's vertices (in the element's frame, the record box
-+/// centred on x and y, from z = 0 to its height) lie within the box to 0.5 ft
-+/// and span at least 70% of it on every axis. With `hidden_excluded` (the
-+/// owner left out components Revit hides in 3D), one axis may fall short, but
-+/// then no triangle may be longer than half the box's diagonal: a body that
-+/// is only part of the element must not span across it.
-+fn fills_record_box(
-+    vertices: &[[f64; 3]],
-+    triangles: &[BrepTriangle],
-+    extrusion: Option<&crate::ifc::entities::Extrusion>,
-+    hidden_excluded: bool,
-+) -> bool {
-+    const TOLERANCE: f64 = 0.5;
-+    const MIN_FILL: f64 = 0.7;
-+    let Some(x) = extrusion else {
-+        return false;
-+    };
-+    let size = [x.width_feet, x.depth_feet, x.height_feet];
-+    if !size.iter().all(|s| s.is_finite() && *s > 0.) || vertices.is_empty() {
-+        return false;
-+    }
-+    let lo = [-size[0] / 2., -size[1] / 2., 0.];
-+    let hi = [size[0] / 2., size[1] / 2., size[2]];
-+    let mut min = [f64::INFINITY; 3];
-+    let mut max = [f64::NEG_INFINITY; 3];
-+    for v in vertices {
-+        for k in 0..3 {
-+            if !v[k].is_finite() || v[k] < lo[k] - TOLERANCE || v[k] > hi[k] + TOLERANCE {
-+                return false;
-+            }
-+            min[k] = min[k].min(v[k]);
-+            max[k] = max[k].max(v[k]);
-+        }
-+    }
-+    let short = (0..3)
-+        .filter(|&k| (max[k] - min[k]) < MIN_FILL * size[k])
-+        .count();
-+    match short {
-+        0 => true,
-+        1 => hidden_excluded && !has_giant_triangle(vertices, triangles, extrusion),
-+        _ => false,
-+    }
-+}
-+
-+/// Whether some triangle of the body has an edge longer than half the
-+/// diagonal of its record box.
-+fn has_giant_triangle(
-+    vertices: &[[f64; 3]],
-+    triangles: &[BrepTriangle],
-+    extrusion: Option<&crate::ifc::entities::Extrusion>,
-+) -> bool {
-+    let Some(x) = extrusion else {
-+        return false;
-+    };
-+    let limit = (x.width_feet.powi(2) + x.depth_feet.powi(2) + x.height_feet.powi(2)).sqrt() / 2.;
-+    let length = |a: u32, b: u32| {
-+        let (p, q) = (vertices[a as usize], vertices[b as usize]);
-+        (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
-+    };
-+    triangles.iter().any(|t| {
-+        length(t.0, t.1) > limit || length(t.1, t.2) > limit || length(t.2, t.0) > limit
-+    })
-+}
-+
-+/// Whether `vertices`, in the element's frame (origin at its location, the
-+/// box's x and y centred on it, its z from 0 up), lie within `extrusion`'s box
-+/// and reach each of its faces, to within [`RAILING_BOX_TOLERANCE_FEET`].
-+fn railing_mesh_fills_box(
-+    vertices: &[[f64; 3]],
-+    extrusion: Option<&crate::ifc::entities::Extrusion>,
-+) -> bool {
-+    let Some(e) = extrusion else {
-+        return false;
-+    };
-+    let half = [e.width_feet / 2.0, e.depth_feet / 2.0];
-+    let tol = RAILING_BOX_TOLERANCE_FEET;
-+    let lo = [-half[0], -half[1], 0.0];
-+    let hi = [half[0], half[1], e.height_feet];
-+    let mut min = [f64::INFINITY; 3];
-+    let mut max = [f64::NEG_INFINITY; 3];
-+    for v in vertices {
-+        for k in 0..3 {
-+            min[k] = min[k].min(v[k]);
-+            max[k] = max[k].max(v[k]);
-+        }
-+    }
-+    (0..3).all(|k| min[k] >= lo[k] - tol && max[k] <= hi[k] + tol)
-+        && (0..3).all(|k| min[k] <= lo[k] + tol && max[k] >= hi[k] - tol)
-+}
-+
-+/// How far a railing's saved mesh may stop short of its record box, or reach
-+/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
-+/// their graphics on every railing measured on the sample projects.
-+const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;
+             Self::SavedMeshesSkipped { error } => {
+                 write!(f, "saved graphics not read, bodies unchanged: {error}")
+@@ -560,6 +570,7 @@ pub fn run_export_with_limits_and_control(
+                         candidates: report.candidates,
+                         replaced: report.replaced,
+                         partial: report.partial,
++                        partial_admitted: report.partial_admitted,
+                         triangles: report.triangles,
+                     });
+                 }
 diff --git a/src/research.rs b/src/research.rs
 index 9e098d1..e061f19 100644
 --- a/src/research.rs
@@ -1825,3 +1688,264 @@ index 199cbbe..5edb347 100644
  fn transform(p: &mut Primitive, m: [[f64; 4]; 4]) -> Result<()> {
      let a = [m[0][0], m[1][0], m[2][0]];
      let b = [m[0][1], m[1][1], m[2][1]];
+diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
+index 03d4f31..e97317e 100644
+--- a/src/ifc/saved_meshes.rs
++++ b/src/ifc/saved_meshes.rs
+@@ -30,4 +30,4 @@ use super::entities::{BrepTriangle, IfcEntity, PropertyValue, SolidShape};
+ use super::export_content::{
+-    BEAM_BOX_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE, SPACE_OUTLINE_SAVED_MESH,
+-    SPACE_OUTLINE_SOURCE_PROPERTY,
++    BEAM_BOX_BODY_SOURCE, INSTANCE_TURNED_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE,
++    SPACE_OUTLINE_SAVED_MESH, SPACE_OUTLINE_SOURCE_PROPERTY,
+ };
+@@ -49,2 +49,6 @@ pub struct SavedMeshReport {
+     pub partial: usize,
++    /// Of the `replaced` elements, those drawn from a partial saved mesh whose
++    /// decoded faces fill the record box and are the body minus a few small
++    /// pieces (see [`partial_failures_admissible`] and the checks after it).
++    pub partial_admitted: usize,
+     /// Triangles written in all.
+@@ -53,2 +57,36 @@ pub struct SavedMeshReport {
+ 
++/// Most failed faces a partial element may have, and their largest share of
++/// its decoded faces.
++const PARTIAL_MAX_FAILED_FACES: usize = 4;
++const PARTIAL_MAX_FAILED_SHARE: f64 = 0.10;
++
++/// The face-decode failures a partial element may carry (RE-224 admission):
++/// a face whose surface pointer or UV boundary did not resolve, a trimmed face
++/// past its triangle budget, or a surface sampled outside its envelope. A
++/// trimmed face that needs a finer interior lattice is not among them: on the
++/// public reference models the only partial meshes that passed the count rule were
++/// sanitary terminals whose one such face was not Revit's body, so they stay
++/// boxed.
++const PARTIAL_FACE_FAILURES: [&str; 4] = [
++    "missing surface pointer target",
++    "disconnected UV boundary",
++    "trimmed face exceeds its budget",
++    "surface coordinates outside envelope",
++];
++
++/// Whether a partial element's failed face diagnostics are few enough, and all
++/// of a kind in [`PARTIAL_FACE_FAILURES`], to admit its decoded faces as the
++/// body: at most [`PARTIAL_MAX_FAILED_FACES`] and at most
++/// [`PARTIAL_MAX_FAILED_SHARE`] of its decoded primitives.
++fn partial_failures_admissible(failed: &[&String], decoded: usize) -> bool {
++    let count = failed.len();
++    count <= PARTIAL_MAX_FAILED_FACES
++        && (count as f64) <= PARTIAL_MAX_FAILED_SHARE * decoded as f64
++        && failed.iter().all(|diagnostic| {
++            PARTIAL_FACE_FAILURES
++                .iter()
++                .any(|kind| diagnostic.contains(kind))
++        })
++}
++
+ /// Which bounding-box bodies [`attach_scoped_with_control`] replaces.
+@@ -144,7 +182,8 @@ pub fn attach_scoped_with_control(
+         });
+-        // A beam RE-328 draws as its box along its line is a stand-in for
+-        // its saved mesh, as the record box is.
++        // A beam RE-328 draws as its box along its line, and a family instance
++        // turned off the model's axes (RE-87), are stand-ins for their saved
++        // mesh, as the record box is.
+         if !matches!(
+             text("BodySource"),
+-            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE)
++            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE | INSTANCE_TURNED_BODY_SOURCE)
+         ) || profile_resolved
+@@ -193,10 +232,18 @@ pub fn attach_scoped_with_control(
+             // them Revit's body). Only branches left out for their view semantics
+-            // leave it whole.
+-            let partial = element.meshes.diagnostics.iter().any(|diagnostic| {
+-                !diagnostic
+-                    .ends_with(crate::native_graphics_traversal::NESTED_DETAIL_FILTER_DIAGNOSTIC)
+-                    && !diagnostic
++            // leave it whole. A partial mesh whose few failed faces leave its
++            // decoded faces the body is admitted further down, after the checks
++            // that follow.
++            let failed: Vec<&String> = element
++                .meshes
++                .diagnostics
++                .iter()
++                .filter(|diagnostic| {
++                    !diagnostic.ends_with(
++                        crate::native_graphics_traversal::NESTED_DETAIL_FILTER_DIAGNOSTIC,
++                    ) && !diagnostic
+                         .ends_with(crate::native_graphics_traversal::VIEW_COMPONENT_DIAGNOSTIC)
+-            });
+-            if partial {
++                })
++                .collect();
++            let partial = !failed.is_empty();
++            if partial && !partial_failures_admissible(&failed, primitives.len()) {
+                 report.partial += 1;
+@@ -205,4 +252,6 @@ pub fn attach_scoped_with_control(
+             let IfcEntity::BuildingElement {
++                ifc_type,
+                 location_feet: Some(origin),
+                 rotation_radians,
++                extrusion,
+                 solid_shape,
+@@ -234,2 +283,51 @@ pub fn attach_scoped_with_control(
+             }
++            // A body with a curved-profile face must lie in its record box and
++            // fill most of it on each axis; otherwise it is only part of the
++            // element, and the box stays. Where the owner left out hidden
++            // components, the record box also holds geometry Revit does not
++            // draw in 3D, so one short axis is allowed.
++            if element.meshes.curved_extension_faces > 0
++                && !fills_record_box(
++                    &vertices,
++                    &triangles,
++                    extrusion.as_ref(),
++                    element.meshes.excluded_visibility_branches > 0,
++                )
++            {
++                return Ok(());
++            }
++            // A curved-profile shell admitted only by the seam tolerance (the
++            // exact rim refuses it) must have no triangle longer than half its
++            // box's diagonal; the seam tolerance is not allowed to draw a body
++            // that spans across its element.
++            if element.meshes.seam_admitted_shell
++                && has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
++            {
++                return Ok(());
++            }
++            // A railing's saved mesh is taken only where it fills its record box
++            // (RE-303): every vertex within the box and each extent of the box
++            // reached, to within 0.5 ft. A railing whose graphics leave a part
++            // out, with no decoder diagnostic to say so, keeps its box.
++            if ifc_type.as_str() == "IFCRAILING"
++                && !railing_mesh_fills_box(&vertices, extrusion.as_ref())
++            {
++                report.partial += 1;
++                return Ok(());
++            }
++            // RE-224 partial admission (a few failed faces, see above): the
++            // decoded faces must fill the record box on every axis, each vertex
++            // within it to 0.5 ft, with no triangle spanning it, and the element
++            // must not be a railing (its own rule above). Anything else keeps its
++            // box, counted as partial.
++            if partial {
++                if ifc_type.as_str() == "IFCRAILING"
++                    || !fills_record_box(&vertices, &triangles, extrusion.as_ref(), false)
++                    || has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
++                {
++                    report.partial += 1;
++                    return Ok(());
++                }
++                report.partial_admitted += 1;
++            }
+             report.replaced += 1;
+@@ -252 +350,108 @@ pub fn attach_scoped_with_control(
+ }
++
++/// Whether the body's vertices (in the element's frame, the record box
++/// centred on x and y, from z = 0 to its height) lie within the box to 0.5 ft
++/// and span at least 70% of it on every axis. With `hidden_excluded` (the
++/// owner left out components Revit hides in 3D), one axis may fall short, but
++/// then no triangle may be longer than half the box's diagonal: a body that
++/// is only part of the element must not span across it.
++fn fills_record_box(
++    vertices: &[[f64; 3]],
++    triangles: &[BrepTriangle],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++    hidden_excluded: bool,
++) -> bool {
++    const TOLERANCE: f64 = 0.5;
++    const MIN_FILL: f64 = 0.7;
++    let Some(x) = extrusion else {
++        return false;
++    };
++    let size = [x.width_feet, x.depth_feet, x.height_feet];
++    if !size.iter().all(|s| s.is_finite() && *s > 0.) || vertices.is_empty() {
++        return false;
++    }
++    let lo = [-size[0] / 2., -size[1] / 2., 0.];
++    let hi = [size[0] / 2., size[1] / 2., size[2]];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            if !v[k].is_finite() || v[k] < lo[k] - TOLERANCE || v[k] > hi[k] + TOLERANCE {
++                return false;
++            }
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    let short = (0..3)
++        .filter(|&k| (max[k] - min[k]) < MIN_FILL * size[k])
++        .count();
++    match short {
++        0 => true,
++        1 => hidden_excluded && !has_giant_triangle(vertices, triangles, extrusion),
++        _ => false,
++    }
++}
++
++/// Whether some triangle of the body has an edge longer than half the
++/// diagonal of its record box.
++fn has_giant_triangle(
++    vertices: &[[f64; 3]],
++    triangles: &[BrepTriangle],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    let Some(x) = extrusion else {
++        return false;
++    };
++    let limit = (x.width_feet.powi(2) + x.depth_feet.powi(2) + x.height_feet.powi(2)).sqrt() / 2.;
++    let length = |a: u32, b: u32| {
++        let (p, q) = (vertices[a as usize], vertices[b as usize]);
++        (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
++    };
++    // A flat panel lying in a plane parallel to a side of the box (an
++    // appliance's side wall) is drawn by long triangles of its own; only a
++    // triangle crossing the box out of such a plane counts.
++    let axis_flat = |t: &BrepTriangle| {
++        let (a, b, c) = (vertices[t.0 as usize], vertices[t.1 as usize], vertices[t.2 as usize]);
++        (0..3).any(|k| (a[k] - b[k]).abs() <= AXIS_FLAT_FEET && (a[k] - c[k]).abs() <= AXIS_FLAT_FEET)
++    };
++    triangles.iter().any(|t| {
++        (length(t.0, t.1) > limit || length(t.1, t.2) > limit || length(t.2, t.0) > limit)
++            && !axis_flat(t)
++    })
++}
++
++/// How far a triangle's vertices may differ along one axis for it to count as
++/// lying in a plane parallel to a side of the record box.
++const AXIS_FLAT_FEET: f64 = 0.003;
++
++/// Whether `vertices`, in the element's frame (origin at its location, the
++/// box's x and y centred on it, its z from 0 up), lie within `extrusion`'s box
++/// and reach each of its faces, to within [`RAILING_BOX_TOLERANCE_FEET`].
++fn railing_mesh_fills_box(
++    vertices: &[[f64; 3]],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    let Some(e) = extrusion else {
++        return false;
++    };
++    let half = [e.width_feet / 2.0, e.depth_feet / 2.0];
++    let tol = RAILING_BOX_TOLERANCE_FEET;
++    let lo = [-half[0], -half[1], 0.0];
++    let hi = [half[0], half[1], e.height_feet];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    (0..3).all(|k| min[k] >= lo[k] - tol && max[k] <= hi[k] + tol)
++        && (0..3).all(|k| min[k] <= lo[k] + tol && max[k] >= hi[k] - tol)
++}
++
++/// How far a railing's saved mesh may stop short of its record box, or reach
++/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
++/// their graphics on every railing measured on the sample projects.
++const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;

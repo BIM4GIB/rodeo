@@ -17,9 +17,11 @@ model's levels, elements, geometry and parameters with it, in the import's worke
   edge whose fixed parameter drifts, and meshes ruled faces between arc, ellipse and Hermite
   profiles, refusing (keeping the box) one whose edges disagree with its neighbours by more than
   0.003 ft or which doesn't fill its box (one short axis allowed where the owner left out parts
-  Revit hides in 3D, if no triangle spans more than half the box). Trimmed faces mesh inside their
-  boundary loops.
+  Revit hides in 3D, if no triangle spans more than half the box, a flat triangle lying parallel
+  to a side of the box excepted). Trimmed faces mesh inside their boundary loops. An element with
+  up to four faces (at most a tenth) that did not decode is drawn from the rest where they fill its
+  box on every axis with no triangle spanning it; railings excepted.
 - Built with rustc 1.97.1 and wasm-bindgen 0.2.118 (`--target web --out-name rvt`).
-- `rvt_bg.wasm` sha256 `ad80276a1f8fc1d768d2801609f76601ec859be6d159075ea432b832d533f3c0`.
+- `rvt_bg.wasm` sha256 `bab34a36910f21f877266f78c69755db5b83f0bf06755568f4390e9f2cf3ad10`.
 
 Rebuild with `scripts/rvt-wasm.sh [tag]`. These files are generated: don't edit them.

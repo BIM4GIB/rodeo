@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T22:40:00Z",
+    "revit-appliances",
+    "More Revit appliances and fixtures come in",
+    `A few more Revit fixtures now come in as Revit drew them, instead of see-through boxes.
+- Appliances with flat side panels, such as ovens, are drawn whole.
+- An element with one or two faces Rodeo can't read yet is drawn from the rest, where those fill its space.
+- Wall-hung urinals in MEP models are drawn.`,
+    "walls",
+  ),
+  release(
     "2026-11-06T22:30:00Z",
     "vectorworks-2013",
     "Vectorworks 2013 drawings open",
