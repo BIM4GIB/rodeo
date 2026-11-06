@@ -108,7 +108,7 @@ function pageOf(d: EntryDetail, reload: () => Promise<void>): HTMLElement {
   const side = h(
     "aside",
     { cls: "gal-side" },
-    h("h1", { cls: "gal-title", text: e.title }),
+    h("h1", { cls: "gal-title", text: e.title, attrs: { translate: "no" } }),
     byline(e),
     licenceLine(e),
     h("p", { cls: "gal-meta", text: metaText(e) }),
@@ -194,7 +194,7 @@ function metaText(e: GalleryEntry): string {
 
 /** The drawing this one was forked from, linked while that drawing is still in the gallery. */
 function forkedFromLine(f: ForkedFrom): HTMLElement {
-  const from = f.path ? h("a", { text: f.title, attrs: { href: f.path, "data-nav": "" } }) : h("span", { text: f.title });
+  const from = f.path ? h("a", { text: f.title, attrs: { translate: "no", href: f.path, "data-nav": "" } }) : h("span", { text: f.title, attrs: { translate: "no" } });
   return h("p", { cls: "gal-forkof-line" }, "Forked from ", from, ` by ${f.creditName}`);
 }
 
@@ -220,7 +220,7 @@ function treeOf(nodes: readonly RemixNode[]): HTMLElement {
       h(
         "li",
         {},
-        h("a", { text: n.card.title, attrs: { href: n.card.path, "data-nav": "" } }),
+        h("a", { text: n.card.title, attrs: { translate: "no", href: n.card.path, "data-nav": "" } }),
         h("span", { cls: "gal-muted", text: ` by ${n.card.creditName} · ${forksOf(n.card.forks)}` }),
         n.children.length > 0 ? treeOf(n.children) : null,
       ),

@@ -247,7 +247,7 @@ function chatView(start: DrawingRef | null): Chat {
 
   // ---- chrome ----------------------------------------------------------------------
 
-  const title = h("button", { cls: "ag-title", attrs: { type: "button", title: "Conversations" } }, h("span", { cls: "ag-title-text", text: thread.title }), h("span", { cls: "ag-chev", html: ICONS.chevron }));
+  const title = h("button", { cls: "ag-title", attrs: { type: "button", title: "Conversations" } }, h("span", { cls: "ag-title-text", text: thread.title, attrs: { translate: "no" } }), h("span", { cls: "ag-chev", html: ICONS.chevron }));
   const newBtn = iconButton(ICONS.plus, "New chat");
   const creditBtn = h("button", { cls: "ag-credit", attrs: { type: "button", title: "AI credit: top up and see what was used" }, hidden: true });
   const head = h("div", { cls: "ag-head" }, title, h("span", { cls: "ag-spacer" }), creditBtn, newBtn);
@@ -918,7 +918,7 @@ function chatView(start: DrawingRef | null): Chat {
           pending.splice(i, 1);
           renderChips();
         });
-        return h("span", { cls: "ag-chip" }, h("span", { cls: "ag-chip-name", text: f.name }), x);
+        return h("span", { cls: "ag-chip" }, h("span", { cls: "ag-chip-name", text: f.name, attrs: { translate: "no" } }), x);
       }),
     );
   }
@@ -979,7 +979,7 @@ function chatView(start: DrawingRef | null): Chat {
       "span",
       { cls: "ag-where-here", attrs: { title: bound ? `This chat's agent works in ${bound.name()}, whichever tab is in front` : "Open or start a drawing for the agent to work in" } },
       h("span", { cls: "ag-where-icon", html: ICONS.file }),
-      h("span", { cls: "ag-where-name", text: name || "No drawing open" }),
+      h("span", { cls: "ag-where-name", text: name || "No drawing open", attrs: { translate: "no" } }),
     );
     const chipsEl = others.map((c) => {
       const d = c.drawing()!;
@@ -988,7 +988,7 @@ function chatView(start: DrawingRef | null): Chat {
         "button",
         { cls: `ag-where-other ${state}`, attrs: { type: "button", title: `${tabMark(d)?.title ?? ""}. Bring ${d.name()} to the front.` } },
         h("span", { cls: "ag-where-mark", html: ICONS[state] }),
-        h("span", { cls: "ag-where-name", text: fileBase(d.name()) }),
+        h("span", { cls: "ag-where-name", text: fileBase(d.name()), attrs: { translate: "no" } }),
       );
       b.addEventListener("click", () => d.show());
       return b;

@@ -272,11 +272,11 @@ Object Info names any object. Names are unique in a drawing; emptied, the object
 
 ### Language
 
-Rodeo's interface comes in English and Simplified Chinese (简体中文). It starts in your browser's language when it has it, and otherwise in English. To change it, use the globe at the end of the start screen's footer, or the Language list in **Edit › Preferences…** › General. The change is immediate, keeps the open drawing as it is, and is remembered in this browser.
+Rodeo's interface comes in English, Bahasa Indonesia, Deutsch, Español, Français, Italiano, Nederlands, Polski, Português (Brasil), Tiếng Việt, Türkçe, Русский, Українська, 日本語, 简体中文, 繁體中文 and 한국어. It starts in your browser's language when it has it, and otherwise in English. To change it, use the globe at the end of the start screen's footer, or the Language list in **Edit › Preferences…** › General. The change is immediate, keeps the open drawing as it is, and is remembered in this browser; the gallery and the converter follow it.
 
-Only the interface is translated. Your drawing's own text (layer, class and resource names, record fields, worksheets, text objects) stays as it was written, and files you save or export are the same whatever the interface's language.
+Menus, tools, palettes, dialogs, messages (the server's too), What's New and the converter and gallery pages are translated, and the agents in the Agents panel reply in the interface's language. Your drawing's own text (layer, class and resource names, record fields, worksheets, text objects) stays as it was written, and files you save or export are the same whatever the interface's language.
 
-**Limits:** some messages, mostly rarer ones and those built from several parts, still show in English. The What's New window stays in English. Traditional Chinese isn't offered yet. Translations are welcome: see "Translating Rodeo" in CONTRIBUTING.md.
+**Limits:** the translations were made with AI and not every language has been read through by a native speaker yet; corrections are welcome (see "Translating Rodeo" in CONTRIBUTING.md). Right-to-left languages (Arabic, Hebrew, Persian) aren't offered yet. Text added since a language was last updated shows in English until it is translated. Messages put together from several parts sometimes read stiffly.
 
 ### The Preferences dialog
 

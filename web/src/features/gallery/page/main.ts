@@ -4,12 +4,16 @@
 // and the dialogs both use.
 
 import { h } from "../../../app/dom.ts";
+import { startLanguage } from "../../../app/i18n.ts";
 import { errorMessage } from "../../../app/toast.ts";
 import { account, onUser, refreshUser, serverConfig } from "../../../platform/api.ts";
 import type { ServerConfig, User } from "../../../platform/protocol.ts";
 import { LIMITS, homeMeta, missingMeta, parseGalleryPath } from "../rules.ts";
 import { showEntry } from "./detail.ts";
 import { showList } from "./list.ts";
+
+// the interface in the language chosen in the editor (or the browser's), as the page builds
+void startLanguage();
 
 /** Two branches meeting in a stem: static markup, so it may be set as HTML. */
 const FORK_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="4" cy="3.2" r="1.7"/><circle cx="12" cy="3.2" r="1.7"/><circle cx="8" cy="12.8" r="1.7"/><path d="M4 4.9v1.2c0 1.9 4 2.1 4 4.4M12 4.9v1.2c0 1.9-4 2.1-4 4.4"/></svg>`;
@@ -205,7 +209,7 @@ function renderAccount(u: User | null): void {
         "span",
         { cls: "gal-me", title: u.email },
         h("span", { cls: "gal-avatar", text: initial, attrs: { "aria-hidden": "true" } }),
-        h("span", { cls: "gal-me-name", text: u.name || u.email }),
+        h("span", { cls: "gal-me-name", text: u.name || u.email, attrs: { translate: "no" } }),
       ),
     );
     return;

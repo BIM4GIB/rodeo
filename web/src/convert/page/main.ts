@@ -5,6 +5,7 @@
 // downloads and its problems; the file picked also shows a preview and its facts.
 
 import { h } from "../../app/dom.ts";
+import { startLanguage } from "../../app/i18n.ts";
 import { MAX_PNG_SIDE, svgToPng } from "../../export/png.ts";
 import { zipFiles } from "../../export/zip.ts";
 import { summaryLine } from "../describe.ts";
@@ -13,6 +14,9 @@ import type { DrawingSummary, Unit } from "../types.ts";
 import { handOff } from "./handoff.ts";
 import type { PreviewMesh } from "./preview3d.ts";
 import type { FromWorker, ToWorker } from "./worker.ts";
+
+// the interface in the language chosen in the editor (or the browser's), as the page builds
+void startLanguage();
 
 /** The localStorage key of the format picked last. */
 const CHOICE_KEY = "openvwx.convert.to";

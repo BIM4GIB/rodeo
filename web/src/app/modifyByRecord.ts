@@ -310,7 +310,7 @@ export async function modifyByRecordDialog(): Promise<void> {
   const fillRecords = (): void => {
     const keep = record.value ? record.options[record.selectedIndex]?.text : keepRecord;
     const formats = formatsOf(doc, reach(doc, scopeSel.checked, groups.checked));
-    record.replaceChildren(...formats.map((f) => h("option", { value: String(f.format), text: f.name })));
+    record.replaceChildren(...formats.map((f) => h("option", { attrs: { translate: "no" }, value: String(f.format), text: f.name })));
     const same = formats.find((f) => f.name === keep);
     if (same) record.value = String(same.format);
     fillFields();
@@ -319,7 +319,7 @@ export async function modifyByRecordDialog(): Promise<void> {
     const keep = recordField.value || keepField;
     keepRecord = keepField = "";
     const fields = record.value === "" ? [] : (doc.recordFormatFields(Number(record.value)) ?? []);
-    recordField.replaceChildren(...fields.map((f) => h("option", { value: f.name, text: f.name })));
+    recordField.replaceChildren(...fields.map((f) => h("option", { attrs: { translate: "no" }, value: f.name, text: f.name })));
     // else the field most objects hold a number in
     const objects = reach(doc, scopeSel.checked, groups.checked);
     const counts = fields.map((f) => objects.filter((o) => numberOf(doc, o.id, Number(record.value), f.name) !== null).length);

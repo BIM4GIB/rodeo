@@ -5150,7 +5150,7 @@ export class Session implements EditSession {
     if (!rec) throw new Error(`no record format #${format}`);
     const fmt = readFormat(rec.data);
     if (fmt.parametric) throw new Error(`"${name}" holds a plug-in's parameters, which go with the plug-in`);
-    if (fmt.fields.some((f) => !f.kind)) throw new Error(`"${name}" has a field openvwx can't read`);
+    if (fmt.fields.some((f) => !f.kind)) throw new Error(`"${name}" has a field Rodeo can't read`);
     const own = rec.children.find((c) => c.type === RECORD);
     const defaults = own ? readValues(own.data, fmt) : null;
     if (!own || !defaults) throw new Error(`the record format "${name}" has no default values`);
@@ -8148,7 +8148,7 @@ function cameraRecordThrough(d: Uint8Array, fmt: FormatDef, m: Affine): Uint8Arr
  * the parent links must describe a pre-order tree.
  */
 function readClipboard(data: ClipboardData, drawing: string): PasteItem[] {
-  if (data?.format !== CLIPBOARD_FORMAT || !Array.isArray(data.records)) throw new Error("clipboard holds no openvwx objects");
+  if (data?.format !== CLIPBOARD_FORMAT || !Array.isArray(data.records)) throw new Error("clipboard holds no Rodeo objects");
   // copied from the drawing it goes into, which numbers everything in it the same way
   const here = data.drawing === drawing;
   const items: PasteItem[] = [];

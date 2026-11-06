@@ -110,7 +110,7 @@ export function mountDocTabs(stage: HTMLElement, actions: DocTabActions): () => 
         "div",
         { cls: `doc-tab${t.front ? " front" : ""}${t.dirty ? " dirty" : ""}`, attrs: { role: "tab", "aria-selected": String(t.front), tabindex: t.front ? "0" : "-1", title } },
         ...marks,
-        h("span", { cls: "doc-tab-name", text: t.name }),
+        h("span", { cls: "doc-tab-name", text: t.name, attrs: { translate: "no" } }),
         h("span", { cls: "doc-tab-dot", attrs: { title: "Unsaved changes" } }),
         close,
       );

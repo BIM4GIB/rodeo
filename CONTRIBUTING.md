@@ -155,9 +155,10 @@ npx tsx scripts/i18n.ts count zh-CN
 In the dev server, `openvwxMissingText()` in the browser console lists the
 text the page showed without a translation.
 
-To add a language, add its file and a line to `LANGUAGES` in `i18n.ts` (the
-code, its name in itself, and how it writes a label's colon), and teach
-`browserLanguage()` its codes.
+To add a language, add its file and a line to `KNOWN` in `i18n.ts` (the code,
+its name in itself, and how it writes a label's colon), and its code to the
+language check in the head of `index.html`, `gallery.html` and
+`convert.html`. A language shows in the pickers once its file is there.
 
 ## Style
 

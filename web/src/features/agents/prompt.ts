@@ -2,6 +2,7 @@
 // work with the tools, and the open drawing's state when a run starts. The API's names are listed
 // so a model knows what exists; api_docs gives the details.
 
+import { language } from "../../app/i18n.ts";
 import { store } from "../../app/state.ts";
 import { methodNames } from "./apidocs.ts";
 import { docMembers, editMethods } from "./tools.ts";
@@ -73,10 +74,17 @@ ${apiNote()}`;
  */
 export function stateNote(): string {
   const s = store.session;
-  if (!s) return "## Now\nNo drawing is open.";
+  if (!s) return `## Now\nNo drawing is open.${languageNote()}`;
   const layer = s.doc.layers().find((l) => l.id === store.activeLayerId);
   return `## Now
-The drawing is ${s.doc.info.fileName} (${s.doc.info.units}); the active layer is ${layer ? `"${layer.name}" (${layer.id})` : "none"}; ${store.selection.size} object${store.selection.size === 1 ? " is" : "s are"} selected; the editor shows the ${store.view3d ? "3D view" : "plan"}.`;
+The drawing is ${s.doc.info.fileName} (${s.doc.info.units}); the active layer is ${layer ? `"${layer.name}" (${layer.id})` : "none"}; ${store.selection.size} object${store.selection.size === 1 ? " is" : "s are"} selected; the editor shows the ${store.view3d ? "3D view" : "plan"}.${languageNote()}`;
+}
+
+/** The interface's language, when it isn't English: the user reads the replies in it. */
+function languageNote(): string {
+  const lang = language();
+  if (lang.code === "en") return "";
+  return `\nThe user's Rodeo is in ${lang.name} (${lang.code}): reply in that language unless they write in another. The drawing's own names (layers, classes, objects) stay as they are.`;
 }
 
 function apiNote(): string {

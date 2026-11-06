@@ -33,13 +33,13 @@ function scopeControls(doc: VwxDocument): { folder: HTMLSelectElement; format: H
     { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Symbol Folder" } },
     h("option", { value: NONE, text: "None" }),
     h("option", { value: ALL, text: "All" }),
-    ...folders.map((f) => h("option", { value: f, text: f })),
+    ...folders.map((f) => h("option", { attrs: { translate: "no" }, value: f, text: f })),
   );
   folder.value = ALL;
   const format = h(
     "select",
     { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Record Format" } },
-    ...doc.recordFormats().map((f) => h("option", { value: String(f.format), text: f.name })),
+    ...doc.recordFormats().map((f) => h("option", { attrs: { translate: "no" }, value: String(f.format), text: f.name })),
   );
   const field = (label: string, el: HTMLElement): HTMLElement => h("label", { cls: "menu-dialog-field" }, h("span", { cls: "menu-dialog-label", text: label }), el);
   return { folder, format, body: [field("Symbol Folder", folder), field("Record Format", format)] };
@@ -63,7 +63,7 @@ function valueControl(doc: VwxDocument, f: RecordField): { el: HTMLElement; read
   }
   if (f.kind === "class" || f.kind === "layer") {
     const names = f.kind === "class" ? doc.classes().map((c) => c.name) : doc.layers().map((l) => l.name);
-    const sel = h("select", { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": f.name } }, ...names.map((n) => h("option", { value: n, text: n })));
+    const sel = h("select", { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": f.name } }, ...names.map((n) => h("option", { attrs: { translate: "no" }, value: n, text: n })));
     sel.value = names.includes(String(f.value)) ? String(f.value) : (names[0] ?? "");
     return { el: sel, read: () => sel.value };
   }
@@ -104,7 +104,7 @@ export async function changeOneFieldDialog(): Promise<void> {
     valueSlot.replaceChildren(...(control ? [control.el] : []));
   };
   const showFields = (): void => {
-    fieldList.replaceChildren(...fields().map((f) => h("option", { value: f.name, text: f.name })));
+    fieldList.replaceChildren(...fields().map((f) => h("option", { attrs: { translate: "no" }, value: f.name, text: f.name })));
     showValue();
   };
   format.addEventListener("change", showFields);

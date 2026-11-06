@@ -67,7 +67,7 @@ export function card(c: GalleryCard, badge?: string): HTMLElement {
     h(
       "div",
       { cls: "gal-card-body" },
-      h("h3", { text: c.title }),
+      h("h3", { text: c.title, attrs: { translate: "no" } }),
       credit,
       h(
         "p",

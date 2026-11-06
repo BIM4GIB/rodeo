@@ -215,14 +215,15 @@ function lengthInput(mm: number, onChange: (mm: number) => void): HTMLInputEleme
 }
 
 function selectInput(
-  options: readonly { value: string; label: string; disabled?: boolean }[],
+  options: readonly { value: string; label: string; disabled?: boolean; own?: boolean }[],
   current: string,
   onChange: (v: string) => void,
 ): HTMLSelectElement {
   const sel = h(
     "select",
     { cls: "select" },
-    ...options.map((o) => h("option", { text: o.label, disabled: o.disabled, attrs: { value: o.value } })),
+    // `own`: a name from the drawing, shown as it is in any language
+    ...options.map((o) => h("option", { text: o.label, disabled: o.disabled, attrs: o.own ? { translate: "no", value: o.value } : { value: o.value } })),
   );
   sel.value = current;
   sel.addEventListener("change", () => {
@@ -238,8 +239,9 @@ function shared<T>(values: readonly T[]): T | null {
   return values.every((v) => v === first) ? first : null;
 }
 
-function classOptions(doc: VwxDocument): { value: string; label: string }[] {
-  return doc.classes().map((c) => ({ value: String(c.index), label: c.name }));
+function classOptions(doc: VwxDocument): { value: string; label: string; own?: boolean }[] {
+  // the None class reads in the interface's language, as Vectorworks shows it
+  return doc.classes().map((c) => ({ value: String(c.index), label: c.name, own: c.name !== "None" }));
 }
 
 function layerLabel(l: LayerInfo): string {
@@ -307,7 +309,7 @@ function emptyPanel(doc: VwxDocument): HTMLElement {
     note("Nothing selected"),
     section(
       "Active",
-      field("Layer", h("span", { cls: "value", text: layerText })),
+      field("Layer", h("span", { cls: "value", text: layerText, attrs: layer?.kind === "design" && layer !== open?.layer ? { translate: "no" } : undefined })),
       field(
         "Class",
         selectInput(classOptions(doc), String(store.activeClassIndex), (v) => setActiveClass(Number(v))),
@@ -664,7 +666,7 @@ function symbolSection(doc: VwxDocument, o: ObjectInfo): HTMLElement {
   const name = defs.find((d) => d.index === current)?.name;
   const options: HTMLElement[] = [h("option", { text: "Choose a symbol…", disabled: true, attrs: { value: "" } })];
   for (const [folder, items] of groupByFolder(defs)) {
-    const choices = items.map((d) => h("option", { text: d.name, attrs: { value: String(d.index) } }));
+    const choices = items.map((d) => h("option", { text: d.name, attrs: { translate: "no", value: String(d.index) } }));
     if (folder === "") options.push(...choices);
     else options.push(h("optgroup", { attrs: { label: folder } }, ...choices));
   }
@@ -1426,7 +1428,7 @@ function attachRecordField(doc: VwxDocument, id: string, attached: readonly Obje
     "select",
     { cls: "select", attrs: { "aria-label": "Attach a record" } },
     h("option", { text: "Attach a record…", disabled: true, attrs: { value: "", selected: "" } }),
-    ...formats.map((f) => h("option", { text: f.name, attrs: { value: String(f.format) } })),
+    ...formats.map((f) => h("option", { text: f.name, attrs: { translate: "no", value: String(f.format) } })),
   );
   select.addEventListener("change", () => {
     const format = Number(select.value);

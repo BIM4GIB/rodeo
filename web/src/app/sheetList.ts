@@ -166,7 +166,7 @@ async function sheetListDialog(doc: VwxDocument, canSheet: boolean): Promise<She
   const no = h("input", { cls: "menu-dialog-input", attrs: { type: "text", "aria-label": "Sheet No." } });
   const title = h("input", { cls: "menu-dialog-input", attrs: { type: "text", "aria-label": "Title" } });
   const fill = (sel: HTMLSelectElement, entries: readonly SheetEntry[], at: number): void => {
-    sel.replaceChildren(...entries.map((e, i) => h("option", { text: label(e), attrs: { value: String(i) } })));
+    sel.replaceChildren(...entries.map((e, i) => h("option", { text: label(e), attrs: { translate: "no", value: String(i) } })));
     if (entries.length) sel.selectedIndex = Math.max(0, Math.min(at, entries.length - 1));
   };
   const picked = (): SheetEntry | undefined => proposed[right.selectedIndex];

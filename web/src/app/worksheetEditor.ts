@@ -72,7 +72,7 @@ export async function editWorksheet(index?: number): Promise<void> {
   const picker = h(
     "select",
     { cls: "ws-picker", attrs: { "aria-label": "Worksheet" } },
-    ...sheets.map(([i, name]) => h("option", { value: String(i), text: name })),
+    ...sheets.map(([i, name]) => h("option", { attrs: { translate: "no" }, value: String(i), text: name })),
   );
   const ref = h("span", { cls: "ws-ref", attrs: { "aria-live": "polite" } });
   const entry = h("input", { cls: "ws-entry", attrs: { type: "text", "aria-label": "Cell contents", spellcheck: "false", autocomplete: "off" } });

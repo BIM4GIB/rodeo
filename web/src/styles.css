@@ -29,18 +29,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* while a language other than English loads (index.html, i18n.ts) the page waits unseen, and shows after 3 s whatever happens */
-html.i18n-pending body {
-  visibility: hidden;
-  animation: i18n-reveal 0s 3s forwards;
-}
-
-@keyframes i18n-reveal {
-  to {
-    visibility: visible;
-  }
-}
-
 button,
 input,
 select,
@@ -941,8 +929,14 @@ code {
   overflow: hidden;
 }
 
+/* a step wider than the whole hint (a long one, a wordier language) ends in "…" rather than cut;
+   the keys after it go first */
 .mode-step {
   flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
 }
 

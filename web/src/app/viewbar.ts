@@ -394,7 +394,7 @@ export function mountViewBar(deps: ViewBarDeps): void {
     const design = layers.filter((l) => l.kind === "design");
     const sheets = layers.filter((l) => l.kind === "sheet");
     const option = (id: string, label: string): HTMLOptionElement =>
-      h("option", { text: label, attrs: { value: id } });
+      h("option", { text: label, attrs: { translate: "no", value: id } });
     const groups: HTMLElement[] = [];
     if (design.length) groups.push(h("optgroup", { attrs: { label: "Design layers" } }, ...design.map((l) => option(l.id, l.name))));
     if (sheets.length) groups.push(h("optgroup", { attrs: { label: "Sheet layers" } }, ...sheets.map((l) => option(l.id, l.name))));
@@ -410,7 +410,7 @@ export function mountViewBar(deps: ViewBarDeps): void {
   const syncClasses = (): void => {
     const doc = store.session?.doc;
     classSelect.replaceChildren(
-      ...(doc?.classes() ?? []).map((c) => h("option", { text: c.name, attrs: { value: String(c.index) } })),
+      ...(doc?.classes() ?? []).map((c) => h("option", { text: c.name, attrs: c.name === "None" ? { value: String(c.index) } : { translate: "no", value: String(c.index) } })),
     );
     classSelect.value = String(store.activeClassIndex);
     classSelect.disabled = !doc;

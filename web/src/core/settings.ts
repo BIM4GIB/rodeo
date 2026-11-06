@@ -157,7 +157,7 @@ function setSlot(h: Uint8Array, at: number, slot: number, text: string): void {
 export function unitsPatch(h: Uint8Array, name: string): { at: number; bytes: Uint8Array } {
   const u = UNIT_SETS.find((s) => s.name === name);
   if (!u) throw new Error(`unknown unit "${name}"`);
-  if (unitsName(h) === null) throw new Error("this file keeps its units where openvwx can't change them");
+  if (unitsName(h) === null) throw new Error("this file keeps its units where Rodeo can't change them");
   const p = h.slice(0, UNITS_END);
   const dv = new DataView(p.buffer);
   dv.setFloat64(PER_INCH, u.perInch, true);

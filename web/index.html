@@ -23,13 +23,14 @@
       }
       try {
         var lang = localStorage.getItem("openvwx.language");
-        if (lang === null) {
-          var asked = (navigator.languages || [navigator.language])[0] || "";
-          lang = /^zh(-cn|-sg|-hans.*)?$/i.test(asked) ? "zh-CN" : "en";
+        var tags = navigator.languages || [navigator.language];
+        for (var i = 0; lang === null && i < tags.length; i++) {
+          var known = /^(en|id|de|es|fr|it|nl|pl|pt|vi|tr|ru|uk|ja|zh|ko)\b/i.exec(tags[i]);
+          if (known) lang = known[1].toLowerCase();
         }
-        if (lang !== "en") document.documentElement.classList.add("i18n-pending");
+        if (lang && lang !== "en") document.documentElement.classList.add("i18n-pending");
       } catch {
-        // storage blocked: English, or the browser's language once i18n.ts has it
+        // storage blocked: the browser's language, once i18n.ts has read it
       }
     </script>
     <link rel="stylesheet" href="./src/styles.css" />

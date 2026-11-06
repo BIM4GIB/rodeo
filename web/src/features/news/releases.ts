@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T09:39:00Z",
+    "languages",
+    "Rodeo in 17 languages",
+    `Rodeo's interface now comes in German, Spanish, French, Italian, Portuguese (Brazil), Dutch, Polish, Turkish, Russian, Ukrainian, Japanese, Korean, Traditional and Simplified Chinese, Vietnamese and Indonesian, as well as English.
+- Rodeo starts in your browser's language when it has it. Change it any time with the globe at the end of the start screen's footer, or in Edit › Preferences › General.
+- Menus, tools, palettes, dialogs, the server's messages, What's New, and the gallery and converter pages are all translated; the odd new message may show in English until it is.
+- The agents in the Agents panel reply in the language you picked.
+- Corrections from native speakers are welcome on GitHub: CONTRIBUTING.md explains how.`,
+    "language",
+  ),
+  release(
     "2026-11-07T07:45:00Z",
     "revit-chairs-sinks",
     "Revit chairs and sinks come in",

@@ -9,12 +9,24 @@
     <meta name="theme-color" content="#1d1d1d" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <!-- the editor's theme, before the first paint -->
+    <!-- the editor's theme, before the first paint; a language other than English hides the page until
+         i18n.ts has translated it (tokens.css shows it after 3 s whatever happens) -->
     <script>
       try {
         document.documentElement.dataset.theme = localStorage.getItem("openvwx.theme") || "dark";
       } catch {
         document.documentElement.dataset.theme = "dark";
+      }
+      try {
+        var lang = localStorage.getItem("openvwx.language");
+        var tags = navigator.languages || [navigator.language];
+        for (var i = 0; lang === null && i < tags.length; i++) {
+          var known = /^(en|id|de|es|fr|it|nl|pl|pt|vi|tr|ru|uk|ja|zh|ko)\b/i.exec(tags[i]);
+          if (known) lang = known[1].toLowerCase();
+        }
+        if (lang && lang !== "en") document.documentElement.classList.add("i18n-pending");
+      } catch {
+        // storage blocked: the browser's language, once i18n.ts has read it
       }
     </script>
     <link rel="stylesheet" href="./src/features/gallery/page/page.css" />

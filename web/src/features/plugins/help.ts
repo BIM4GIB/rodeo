@@ -27,7 +27,7 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
     title: "Running",
     blocks: [
       ["p", `Run (${shortcutText("⌘↩")}) runs the code once: its top level, then each menu item it added, in order. Stop ends a run. Save (${shortcutText("⌘S")}) stores the code, and an enabled plug-in starts again with it.`],
-      ["p", "An enabled plug-in's top level runs when openvwx starts, so keep side effects in menu items. Its menu items stay in the Plug-ins menu."],
+      ["p", "An enabled plug-in's top level runs when Rodeo starts, so keep side effects in menu items. Its menu items stay in the Plug-ins menu."],
       ["code", 'openvwx.menu.add("Count by Class", async () => {\n  const layer = await openvwx.activeLayer();\n  const objects = await openvwx.doc.objects(layer);\n  await openvwx.ui.alert("Count", String(objects.length) + " objects");\n});'],
     ],
   },

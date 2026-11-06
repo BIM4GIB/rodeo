@@ -37,7 +37,7 @@ export async function attachRecordDialog(): Promise<void> {
   const select = h(
     "select",
     { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Record format" } },
-    ...formats.map((f) => h("option", { text: f.name, value: String(f.format) })),
+    ...formats.map((f) => h("option", { attrs: { translate: "no" }, text: f.name, value: String(f.format) })),
   );
   if (lastFormat !== null && formats.some((f) => f.format === lastFormat)) select.value = String(lastFormat);
   const note = h("p", { cls: "muted" });
@@ -92,7 +92,7 @@ export async function detachRecordDialog(): Promise<void> {
   const select = h(
     "select",
     { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Record format" } },
-    ...formats.map((f) => h("option", { text: f.name, value: String(f.format) })),
+    ...formats.map((f) => h("option", { attrs: { translate: "no" }, text: f.name, value: String(f.format) })),
   );
   const note = h("p", { cls: "muted" });
   const sync = (): void => {

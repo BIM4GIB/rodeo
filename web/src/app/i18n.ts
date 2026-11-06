@@ -24,15 +24,34 @@ export interface Language {
   readonly colon: string;
 }
 
-export const LANGUAGES: readonly Language[] = [
-  { code: "en", name: "English", colon: ":" },
-  { code: "zh-CN", name: "简体中文", colon: "：" },
-];
-
-const KEY = "openvwx.language";
-
 /** the files, loaded when their language is chosen */
 const FILES = import.meta.glob<Record<string, string>>("../i18n/*.json", { import: "default" });
+
+/** English first (what the source is written in), then by each language's own name */
+const KNOWN: readonly Language[] = [
+  { code: "en", name: "English", colon: ":" },
+  { code: "id", name: "Bahasa Indonesia", colon: ":" },
+  { code: "de", name: "Deutsch", colon: ":" },
+  { code: "es", name: "Español", colon: ":" },
+  { code: "fr", name: "Français", colon: "\u00a0:" },
+  { code: "it", name: "Italiano", colon: ":" },
+  { code: "nl", name: "Nederlands", colon: ":" },
+  { code: "pl", name: "Polski", colon: ":" },
+  { code: "pt-BR", name: "Português (Brasil)", colon: ":" },
+  { code: "vi", name: "Tiếng Việt", colon: ":" },
+  { code: "tr", name: "Türkçe", colon: ":" },
+  { code: "ru", name: "Русский", colon: ":" },
+  { code: "uk", name: "Українська", colon: ":" },
+  { code: "ja", name: "日本語", colon: "：" },
+  { code: "zh-CN", name: "简体中文", colon: "：" },
+  { code: "zh-TW", name: "繁體中文", colon: "：" },
+  { code: "ko", name: "한국어", colon: ":" },
+];
+
+/** the languages there is a file for: a new language is a file in web/src/i18n and a line above */
+export const LANGUAGES: readonly Language[] = KNOWN.filter((l) => l.code === "en" || `../i18n/${l.code}.json` in FILES);
+
+const KEY = "openvwx.language";
 
 /** what a text is translated to, for each attribute translated as text is */
 const ATTRS = ["title", "placeholder", "aria-label"] as const;
@@ -44,9 +63,13 @@ interface Pattern {
   readonly re: RegExp;
   /** the longest run of plain text in the key, which a text must contain to match */
   readonly need: string;
+  /** how much of the key is plain text: of two that match, the one with more is the closer */
+  readonly plain: number;
   readonly to: string;
   /** it is only a joint between its {n}s ("{0} to {1}"): it applies only when the words in them translate too */
   readonly weak: boolean;
+  /** the {n}s the key quotes, `Delete story "{0}"?`: a name, kept as it is */
+  readonly names: ReadonlySet<string>;
 }
 
 /** The patterns, filed by the whole word a text matching them must start with, or else end with. */
@@ -59,6 +82,8 @@ interface Patterns {
 
 let current: Language = LANGUAGES[0];
 let words = new Map<string, string>();
+/** every translation in the file: text that is one is already in the language */
+let shownWords = new Set<string>();
 let patterns: Patterns = noPatterns();
 /** looked-up text and what it became (null: not translated), cleared when it grows large */
 let memo = new Map<string, string | null>();
@@ -68,6 +93,8 @@ const listeners = new Set<(lang: Language) => void>();
 /** the English of each translated text node, and what was shown in its place */
 const textShown = new WeakMap<Text, { en: string; shown: string }>();
 const attrShown = new WeakMap<Element, Map<string, { en: string; shown: string }>>();
+/** the page's title (the browser tab), when translated */
+let titleShown: { en: string; shown: string } | null = null;
 
 function stored(): string | null {
   try {
@@ -78,14 +105,16 @@ function stored(): string | null {
   }
 }
 
-/** The language the browser asks for, when it is one Rodeo has; Traditional Chinese isn't yet. */
+/** The first language the browser asks for that Rodeo has: by its code, else its first part ("es-MX" is "es"). */
 function browserLanguage(): string {
   for (const tag of navigator.languages ?? [navigator.language]) {
     const t = tag.toLowerCase();
-    if (t === "en" || t.startsWith("en-")) return "en";
-    if (t === "zh" || t === "zh-cn" || t === "zh-sg" || t.startsWith("zh-hans")) return "zh-CN";
-    const exact = LANGUAGES.find((l) => l.code.toLowerCase() === t || l.code.toLowerCase() === t.split("-")[0]);
-    if (exact) return exact.code;
+    const base = t.split("-")[0];
+    // Taiwan, Hong Kong and Macau write Traditional Chinese, the rest Simplified; Portugal reads Brazil's
+    if (base === "zh") return /^zh-(tw|hk|mo|hant)/.test(t) ? "zh-TW" : "zh-CN";
+    if (base === "pt") return "pt-BR";
+    const known = LANGUAGES.find((l) => l.code.toLowerCase() === t) ?? LANGUAGES.find((l) => l.code.toLowerCase() === base);
+    if (known) return known.code;
   }
   return "en";
 }
@@ -120,6 +149,7 @@ function file(map: Map<string, Pattern[]>, key: string, p: Pattern): void {
 
 function load(entries: Record<string, string>): void {
   words = new Map();
+  shownWords = new Set(Object.values(entries));
   patterns = noPatterns();
   memo = new Map();
   // the Mode bar and screen tips show a hint's parts apart ("Click to place · Shift snaps"): each part
@@ -140,15 +170,18 @@ function load(entries: Record<string, string>): void {
     }
     const parts = en.split(/\{\d\}/);
     const order = [...en.matchAll(/\{(\d)\}/g)].map((m) => Number(m[1]));
-    // each {n} captures as group gn, whatever order the key has them in; a {n} again must match the same
+    // each {n} captures as group gn, whatever order the key has them in; a {n} again must match the same.
+    // One that ends the key can be empty: it holds a further sentence or nothing ("No caps made.{0}")
     const named = new Set<number>();
-    const hole = (n: number): string => (named.has(n) ? `\\k<g${n}>` : (named.add(n), `(?<g${n}>[\\s\\S]+?)`));
-    const re = new RegExp(`^${parts.map(escape).reduce((acc, part, k) => `${acc}${hole(order[k - 1])}${part}`)}$`);
+    const hole = (n: number, end: boolean): string =>
+      named.has(n) ? `\\k<g${n}>` : (named.add(n), `(?<g${n}>[\\s\\S]${end ? "*" : "+"}?)`);
+    const re = new RegExp(`^${parts.map(escape).reduce((acc, part, k) => `${acc}${hole(order[k - 1], k === parts.length - 1 && !part)}${part}`)}$`);
     const need = parts.reduce((a, b) => (b.length > a.length ? b : a), "");
     // a key that is all {n} and spaces would split any text at its spaces
     if (!need.trim()) continue;
     const joint = !/[A-Za-z]/.test(parts[0]) && !/[A-Za-z]/.test(parts[parts.length - 1]) && parts.join("").replace(/[^A-Za-z]/g, "").length < 6;
-    const p = { re, need, to, weak: joint };
+    const names = new Set([...en.matchAll(/["“‘']\{(\d)\}["”’']/g)].map((m) => m[1]));
+    const p = { re, need, plain: parts.join("").length, to, weak: joint, names };
     // filed by a whole word at the start or end ("Delete {0}", "{0} days ago"): one a {n} runs on from could be any
     const [head, tail] = [parts[0], parts[parts.length - 1]];
     const first = /^[^A-Za-z]*([A-Za-z]+)[^A-Za-z]/.exec(head)?.[1];
@@ -173,15 +206,16 @@ function word(text: string): string | undefined {
   return undefined;
 }
 
-/** A trimmed text's translation, patterns included; null when the language has none. */
-function lookup(text: string): string | null {
+/** A trimmed text's translation, patterns included; null when the language has none. `whole`: not a part of one. */
+function lookup(text: string, whole = true): string | null {
   const found = word(text);
   if (found !== undefined) return found;
   if (text.length > 400) return null;
   const [start, end] = [firstWord(text), lastWord(text)];
   const candidates = [...((start && patterns.first.get(start)) || []), ...((end && patterns.last.get(end)) || []), ...patterns.rest];
-  // the most specific first: the longest plain text
-  candidates.sort((a, b) => b.need.length - a.need.length);
+  // the most specific first: the most plain text ("Cut {0} objects onto {1}; the line misses {2} more."
+  // before "Cut {0} objects onto {1}.", whose {1} would take the rest)
+  candidates.sort((a, b) => b.plain - a.plain);
   for (const p of candidates) {
     if (!text.includes(p.need)) continue;
     const m = p.re.exec(text);
@@ -191,7 +225,8 @@ function lookup(text: string): string | null {
     return p.to.replace(/\{(\d)\}/g, (_, n: string) => {
       const part = groups[`g${n}`] ?? "";
       const inner = part.trim();
-      return inner && /[A-Za-z]/.test(inner) ? part.replace(inner, word(inner) ?? inner) : part;
+      // what fills it looked up too, a word or a pattern of its own ("3 objects"), unless it's a quoted name
+      return inner && !p.names.has(n) && /[A-Za-z]/.test(inner) ? part.replace(inner, lookup(inner, false) ?? inner) : part;
     });
   }
   // a menu path, "Modify › Convert › Convert to Group": each step as the menus have it
@@ -199,6 +234,19 @@ function lookup(text: string): string | null {
   if (steps.length > 1) {
     const each = steps.map((step, k) => (k % 2 ? step : (word(step) ?? step)));
     if (each.some((step, k) => step !== steps[k])) return each.join("");
+  }
+  // a message put together from parts, "3 viewports updated; 1 left as it was.": each part as it reads
+  if (whole) {
+    const stop = /[^.]\.$/.test(text);
+    const parts = (stop ? text.slice(0, -1) : text).split("; ");
+    if (stop || parts.length > 1) {
+      const each = parts.map((part) => lookup(part, false));
+      if (each.some((part) => part !== null)) {
+        const wide = current.colon === "：";
+        const joined = each.map((part, k) => (part ?? parts[k]).replace(/。$|(?<!\.)\.$/, "")).join(wide ? "；" : "; ");
+        return stop ? `${joined}${wide ? "。" : "."}` : joined;
+      }
+    }
   }
   return null;
 }
@@ -214,9 +262,11 @@ if (missed) (globalThis as { openvwxMissingText?: () => string[] }).openvwxMissi
 
 /** `text` translated, its spaces at either end kept; null when the language has nothing for it. */
 function translated(text: string): string | null {
-  // no words, or the language's own already (CJK: what this page shows or code put together from it)
-  if (current.code === "en" || !/[A-Za-z]/.test(text) || /[\u3000-\u9fff\uff00-\uffef]/.test(text)) return null;
+  // no words, or the language's own already (Chinese, Japanese or Korean: what this page shows, or code put together from it)
+  if (current.code === "en" || !/[A-Za-z]/.test(text) || /[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]/.test(text)) return null;
   const trimmed = text.trim();
+  // a translation shown already, copied on by code (a label read back into a tooltip): one that is also English is read as English
+  if (shownWords.has(trimmed) && !words.has(trimmed)) return null;
   let to = memo.get(trimmed);
   if (to === undefined) {
     // text laid out over lines in the markup is looked up as one line
@@ -264,6 +314,19 @@ function translateAttr(el: Element, name: string): void {
   if (!seen) attrShown.set(el, (seen = new Map()));
   seen.set(name, { en: value, shown: to });
   el.setAttribute(name, to);
+}
+
+function translateTitle(): void {
+  const now = document.title;
+  if (titleShown && now === titleShown.shown) return;
+  const to = translated(now);
+  titleShown = to === null || to === now ? null : { en: now, shown: to };
+  if (titleShown) document.title = titleShown.shown;
+}
+
+function restoreTitle(): void {
+  if (titleShown && document.title === titleShown.shown) document.title = titleShown.en;
+  titleShown = null;
 }
 
 /** Translates `root` and everything in it that isn't a person's own text. */
@@ -330,14 +393,17 @@ function retranslateTree(root: Element): void {
 
 function observe(): void {
   if (observer) return;
+  const title = document.querySelector("title");
   observer = new MutationObserver((records) => {
     for (const r of records) {
-      if (r.type === "childList") r.addedNodes.forEach(translateTree);
+      if (title && title.contains(r.target)) translateTitle();
+      else if (r.type === "childList") r.addedNodes.forEach(translateTree);
       else if (r.type === "characterData") translateText(r.target as Text);
       else if (r.type === "attributes" && r.attributeName && r.target instanceof Element && !kept(r.target)) translateAttr(r.target, r.attributeName);
     }
   });
   observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: [...ATTRS] });
+  if (title) observer.observe(title, { subtree: true, childList: true, characterData: true });
 }
 
 const native = { alert: window.alert.bind(window), confirm: window.confirm.bind(window), prompt: window.prompt.bind(window) };
@@ -361,8 +427,12 @@ async function apply(lang: Language): Promise<void> {
   if (lang.code === "en") {
     observer?.disconnect();
     observer = null;
-    if (was.code !== "en") restoreTree(document.body);
+    if (was.code !== "en") {
+      restoreTree(document.body);
+      restoreTitle();
+    }
     words = new Map();
+    shownWords = new Set();
     patterns = noPatterns();
     memo = new Map();
     for (const fn of listeners) fn(lang);
@@ -371,6 +441,8 @@ async function apply(lang: Language): Promise<void> {
   observe();
   if (was.code === "en") translateTree(document.body);
   else retranslateTree(document.body);
+  restoreTitle();
+  translateTitle();
   for (const fn of listeners) fn(lang);
 }
 

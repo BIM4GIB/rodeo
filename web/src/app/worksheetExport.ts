@@ -64,7 +64,7 @@ export async function exportWorksheetDialog(): Promise<void> {
   }
   const select = (label: string): HTMLSelectElement => h("select", { cls: "menu-dialog-input menu-dialog-select wide", attrs: { "aria-label": label } });
   const sheet = select("Worksheet");
-  for (const [index, name] of sheets) sheet.append(h("option", { value: String(index), text: name }));
+  for (const [index, name] of sheets) sheet.append(h("option", { attrs: { translate: "no" }, value: String(index), text: name }));
   const picked = selectedWorksheet();
   sheet.value = String(picked !== null && sheets.some(([i]) => i === picked) ? picked : sheets[0][0]);
   const format = select("Format");

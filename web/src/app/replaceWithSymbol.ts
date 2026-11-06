@@ -57,7 +57,7 @@ export async function replaceWithSymbolDialog(): Promise<void> {
     "select",
     { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Symbol" } },
     ...[...groupByFolder(defs)].map(([folder, list]) => {
-      const options = list.map((d) => h("option", { value: String(d.index), text: d.name }));
+      const options = list.map((d) => h("option", { attrs: { translate: "no" }, value: String(d.index), text: d.name }));
       return folder ? h("optgroup", { attrs: { label: folder } }, ...options) : options;
     }).flat(),
   );
