@@ -709,6 +709,18 @@ export class View3D {
     return this.framedState(VIEW_DIRS[preset], width, height);
   }
 
+  /** The standard view `state` looks from: its eye in that view's direction from the point it orbits, within a hair; null when it is in none. */
+  standardViewOf(state: CameraState): ViewPreset | null {
+    const toward = new THREE.Vector3(...state.position).sub(new THREE.Vector3(...state.target));
+    if (!(toward.lengthSq() > 0)) return null;
+    toward.normalize();
+    for (const [preset, dir] of Object.entries(VIEW_DIRS) as [ViewPreset, [number, number, number]][]) {
+      // within about 0.8°
+      if (toward.dot(new THREE.Vector3(...dir).normalize()) > 0.9999) return preset;
+    }
+    return null;
+  }
+
   /** Where the camera would stand looking along `toward` (from the model to the eye), framing the visible model in a picture `width` × `height`; the view stays as it is. */
   framedState(toward: Vec3, width: number, height: number): CameraState {
     const was = this.cameraState();

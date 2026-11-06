@@ -64,15 +64,65 @@
   opacity: 0.6;
 }
 
+/* each pane's chip, in its top-left corner: what it shows, and a menu to change that or close it */
+.pane-chip {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--chrome-border);
+  border-radius: var(--radius);
+  background: var(--chrome);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.pane-chip:hover {
+  color: var(--text);
+}
+
+/* the active pane's, in the accent as its ring is */
+.pane-chip.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.pane-chip-view::before {
+  content: "·";
+  margin-right: 4px;
+  color: var(--text-3);
+}
+
+.pane-chip svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+}
+
+/* clear of the rulers along the live plan's top and left */
+.stage.rulers .pane-chip {
+  margin: 16px 0 0 16px;
+}
+
 .pane-divider[hidden],
 .pane-picture[hidden],
-.pane-ring[hidden] {
+.pane-ring[hidden],
+.pane-chip[hidden],
+.pane-chip-view[hidden] {
   display: none;
 }
 
 /* before a drawing is open, the welcome shows: no panes */
 .stage.no-doc .pane-divider,
 .stage.no-doc .pane-picture,
-.stage.no-doc .pane-ring {
+.stage.no-doc .pane-ring,
+.stage.no-doc .pane-chip {
   display: none;
 }

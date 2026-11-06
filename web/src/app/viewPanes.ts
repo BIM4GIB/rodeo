@@ -3,12 +3,14 @@
 // first (with three or four, the large one, on whichever side the arrangement puts it) and a 3D view
 // in each of the others (Front, Right and an isometric view to start with). One pane is active,
 // ringed in the accent: the render mode, the zoom and Fit act on it, as they act on the one view
-// shown alone, and Top/Plan, 3D View and the standard views turn it into a plan or a 3D view. The
-// live plan (drawing, editing) is in the plan pane last made active, and the live 3D view (orbiting,
-// picking, walking) in the 3D pane last made active; every other pane shows the drawing from where
-// its view was left, drawn again as it changes. A click in a pane makes it the active one (that click
-// does nothing else). The dividers drag, a double-click on one shares the area evenly, and the
-// arrangement is kept in this browser and with saved workspaces.
+// shown alone; Top/Plan, 3D View and the standard views make the pane of their kind the active one,
+// turning the active pane into one only when no pane is. The live plan (drawing, editing) is in the
+// plan pane last made active, and the live 3D view (orbiting, picking, walking) in the 3D pane last
+// made active; every other pane shows the drawing from where its view was left, drawn again as it
+// changes. A click in a pane showing a picture makes it the active one (that click does nothing
+// else). Each pane has a chip in its corner naming what it shows, whose menu shows the plan or the
+// 3D view there, turns it to a standard view or closes it. The dividers drag, a double-click on one
+// shares the area evenly, and the arrangement is kept in this browser and with saved workspaces.
 //
 // View > Multiple View Panes has Vectorworks' commands too: Enable Multiple View Panes goes from
 // one pane to the last arrangement of several and back; Split Horizontally and Split Vertically
@@ -20,7 +22,8 @@
 
 import "./viewPanes.css";
 import { h } from "./dom.ts";
-import type { Row } from "./menu.ts";
+import { UI_ICON } from "./icons.ts";
+import { menuButton, type Row } from "./menu.ts";
 import { store } from "./state.ts";
 import type { ViewPreset } from "./view3d.ts";
 
@@ -327,9 +330,9 @@ const CLOSE: Partial<Record<PaneLayout, readonly (Change | null)[]>> = {
   fourBottom: [null, ["threeBottom", [0, 2, 3]], ["threeBottom", [0, 1, 3]], ["threeBottom", [0, 1, 2]]],
 };
 
-/** What `table` makes of the active pane, or null. */
-function changeOf(table: Partial<Record<PaneLayout, readonly (Change | null)[]>>): Change | null {
-  return table[layout]?.[activePane()] ?? null;
+/** What `table` makes of pane `i` (the active one unless said), or null. */
+function changeOf(table: Partial<Record<PaneLayout, readonly (Change | null)[]>>, i = activePane()): Change | null {
+  return table[layout]?.[i] ?? null;
 }
 
 /**
@@ -361,14 +364,24 @@ export function splitPane(upright: boolean): void {
   if (change) rearrange(change);
 }
 
-export function canClosePane(): boolean {
-  return changeOf(CLOSE) !== null;
+export function canClosePane(i = activePane()): boolean {
+  return changeOf(CLOSE, i) !== null;
 }
 
-/** Close Active View Pane: its room goes to its neighbours. */
-export function closePane(): void {
-  const change = changeOf(CLOSE);
-  if (change) rearrange(change);
+/**
+ * Close Active View Pane, or a pane's chip's Close Pane: pane `i`'s room goes to its neighbours.
+ * Down to one pane, that pane shows what it showed: store.view3d says which before the panes are
+ * put in place, so they keep the 3D view or hide it.
+ */
+export function closePane(i = activePane()): void {
+  const change = changeOf(CLOSE, i);
+  if (!change) return;
+  const [next, from] = change;
+  const to3d = next === "single" ? kinds[from[0]] === "3d" : store.view3d;
+  const flip = to3d !== store.view3d;
+  store.view3d = to3d;
+  rearrange(change);
+  if (flip) store.emit("view3d");
 }
 
 /** Enable Multiple View Panes: one pane, or back to the last arrangement of several (two side by side at first). */
@@ -388,7 +401,7 @@ function commandRows(enabled: () => boolean): Row[] {
     { label: "Enable Multiple View Panes", enabled, checked: multiPane, run: toggleMultiplePanes },
     { label: "Split Horizontally", enabled: () => enabled() && canSplitPane(false), run: () => splitPane(false) },
     { label: "Split Vertically", enabled: () => enabled() && canSplitPane(true), run: () => splitPane(true) },
-    { label: "Close Active View Pane", enabled: () => enabled() && canClosePane(), run: closePane },
+    { label: "Close Active View Pane", enabled: () => enabled() && canClosePane(), run: () => closePane() },
     {
       label: "Create Floating View Pane",
       enabled: () => enabled() && store.session !== null,
@@ -402,8 +415,8 @@ function commandRows(enabled: () => boolean): Row[] {
         void import("./floatingPanes.ts").then((m) => m.closeFloatingPanes());
       },
     },
-    // Rodeo's panes always show the same layer and class visibilities and clip cube
-    { label: "Use Same Visibilities in All Panes", enabled: () => false, checked: () => true },
+    // Rodeo's panes always show the same layer and class visibilities and clip cube: nothing to turn off or on
+    { label: "Use Same Visibilities in All Panes", enabled: () => false },
     "-",
   ];
 }
@@ -504,6 +517,10 @@ export interface PaneHooks {
   activate(index: number): void;
   /** the panes have moved or changed size: the pictures are to be drawn again */
   placed(): void;
+  /** the standard view 3D pane `index` looks from, by name ("Right Isometric"), or null (a plan, or a view turned from them) */
+  view(index: number): string | null;
+  /** the rows of pane `index`'s chip menu */
+  menu(index: number): readonly Row[];
 }
 
 /** The canvases the panes without a live view show their picture on, by pane. */
@@ -528,10 +545,24 @@ export function pictureOf(i: number): HTMLCanvasElement | null {
   return multiPane() && i >= 0 && i < paneCount() && i !== live && i !== livePlan ? (pictures[i] ?? null) : null;
 }
 
+/** the chip naming each pane, in its top-left corner */
+const chips: HTMLButtonElement[] = [];
+/** names the chips again (relabelPanes), once the panes are mounted */
+let relabel: (() => void) | null = null;
+/** how far a chip stands in from its pane's corner, and below what it steps under, CSS px */
+const CHIP_INSET = 8;
+/** what a chip mustn't sit under: the View bar, the Onscreen View Control's cube and the bars over the drawing while editing */
+const CHIP_OBSTACLES = "#viewbar > .pill, .ovc:not([hidden]) .ovc-cube, .edit-bars > :not([hidden])";
+
+/** Names the panes' chips again: called as the live 3D view moves, so a 3D pane's chip follows its view. */
+export function relabelPanes(): void {
+  relabel?.();
+}
+
 /**
  * Lays the panes out in `wrap`: the drawing's canvas and its text editors in the first, the 3D
- * view's host in the live pane, a picture in each other 3D pane, the dividers between them and
- * the ring round the active one.
+ * view's host in the live pane, a picture in each other 3D pane, the dividers between them, the
+ * ring round the active one and each pane's chip.
  */
 export function mountPanes(wrap: HTMLElement, hooks: PaneHooks): void {
   const canvas = wrap.querySelector<HTMLElement>("#canvas")!;
@@ -549,7 +580,24 @@ export function mountPanes(wrap: HTMLElement, hooks: PaneHooks): void {
     });
     pictures[i] = c;
   }
-  wrap.append(...pictures, across, along, ring);
+  // each pane's chip: what it shows, and a menu to show the other kind there, a standard view, or close it
+  const kindTexts: HTMLElement[] = [];
+  const viewTexts: HTMLElement[] = [];
+  /** what each chip says now, in English, so it is written again only when that changes */
+  const said: string[] = [];
+  for (let i = 0; i <= 3; i++) {
+    kindTexts[i] = h("span", { cls: "pane-chip-kind" });
+    viewTexts[i] = h("span", { cls: "pane-chip-view", hidden: true });
+    const chip = h("button", {
+      cls: "pane-chip",
+      html: UI_ICON.caret,
+      title: "This pane's view: show the plan or the 3D view here, pick a standard view, or close the pane",
+      attrs: { type: "button" },
+    });
+    chip.prepend(kindTexts[i], viewTexts[i]);
+    chips[i] = menuButton(chip, () => hooks.menu(i));
+  }
+  wrap.append(...pictures, ...chips, across, along, ring);
 
   const put = (el: HTMLElement, r: { left: number; top: number; width: number; height: number } | null): void => {
     for (const k of ["left", "top", "width", "height"] as const) el.style[k] = r ? `${r[k]}px` : "";
@@ -563,6 +611,50 @@ export function mountPanes(wrap: HTMLElement, hooks: PaneHooks): void {
     const bottom = (f.y + f.h) * H - (f.y + f.h < 1 ? GAP : 0);
     return { left, top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
   };
+  // the chips: shown with several panes, saying "Plan", "3D" or "3D · Right Isometric", the active pane's in the accent
+  const labelChips = (): void => {
+    for (let i = 0; i <= 3; i++) {
+      const hide = !multiPane() || i >= paneCount();
+      if (chips[i].hidden !== hide) chips[i].hidden = hide;
+      if (hide) continue;
+      chips[i].classList.toggle("active", i === activePane());
+      const kind = kinds[i] ?? "plan";
+      const view = kind === "3d" ? hooks.view(i) : null;
+      const text = `${kind}|${view ?? ""}`;
+      if (said[i] === text) continue;
+      said[i] = text;
+      kindTexts[i].textContent = kind === "3d" ? "3D" : "Plan";
+      viewTexts[i].hidden = view === null;
+      if (view !== null) {
+        // translated as View > Standard Views names it (i18n.ts)
+        viewTexts[i].setAttribute("data-i18n", `View › ${view}`);
+        viewTexts[i].textContent = view;
+      }
+    }
+  };
+  // each chip in its pane's top-left corner, stepping below the View bar, the cube or an editing bar it would sit under
+  const placeChips = (f: readonly Frac[], W: number, H: number): void => {
+    const obstacles = [...document.querySelectorAll<HTMLElement>(CHIP_OBSTACLES)].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    for (let i = 0; i < f.length; i++) {
+      const chip = chips[i];
+      if (chip.hidden) continue;
+      const pane = px(f[i], W, H);
+      let top = pane.top + CHIP_INSET;
+      chip.style.left = `${pane.left + CHIP_INSET}px`;
+      chip.style.top = `${top}px`;
+      for (let tries = 0; tries < obstacles.length; tries++) {
+        const r = chip.getBoundingClientRect();
+        const hit = obstacles.find((o) => o.left < r.right && o.right > r.left && o.top < r.bottom && o.bottom > r.top);
+        if (!hit) break;
+        top += hit.bottom + CHIP_INSET - r.top;
+        chip.style.top = `${top}px`;
+      }
+    }
+  };
+  const chipsOnly = (): void => {
+    labelChips();
+    placeChips(fractions(layout, shareX, shareY), wrap.clientWidth, wrap.clientHeight);
+  };
   const ringOnly = (): void => {
     const f = fractions(layout, shareX, shareY);
     const W = wrap.clientWidth;
@@ -570,6 +662,8 @@ export function mountPanes(wrap: HTMLElement, hooks: PaneHooks): void {
     ring.hidden = !multiPane();
     put(ring, multiPane() ? px(f[activePane()], W, H) : null);
     for (const g of ringListeners) g();
+    labelChips();
+    placeChips(f, W, H);
   };
   const apply = (): void => {
     const f = fractions(layout, shareX, shareY);
@@ -606,7 +700,10 @@ export function mountPanes(wrap: HTMLElement, hooks: PaneHooks): void {
     hooks.placed();
   };
   place = apply;
+  relabel = labelChips;
   store.on("view3d", ringOnly);
+  // the View bar changes width with the layer and class names; editing bars come and go with the drawing
+  store.on(["session", "layer", "class"], chipsOnly);
   new ResizeObserver(apply).observe(wrap);
   apply();
 

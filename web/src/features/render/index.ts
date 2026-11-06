@@ -8,6 +8,7 @@
 
 import { appContext, on3d, registerMenu, registerPalette } from "../../app/ext.ts";
 import { store } from "../../app/state.ts";
+import { threeDOnScreen } from "../../app/viewTargets.ts";
 import { reportFailure } from "../../app/reports.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
 import type { RenderHook } from "../../app/view3d.ts";
@@ -104,7 +105,7 @@ registerMenu("File › Export", () => [
   {
     // a 360° picture from the 3D view's eye
     label: "Export Panorama…",
-    enabled: () => store.session !== null && store.view3d,
+    enabled: threeDOnScreen,
     run: exportPanorama,
   },
   ...(config()?.render

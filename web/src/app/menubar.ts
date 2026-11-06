@@ -77,6 +77,7 @@ import { importWorksheetFile } from "./worksheetImport.ts";
 import { exportShapefileDialog } from "./shapefileExport.ts";
 import { set3dViewDialog } from "./set3dView.ts";
 import { rotate3dViewDialog } from "./rotate3dView.ts";
+import { planOnScreen, threeDOnScreen } from "./viewTargets.ts";
 import {
   canCompose,
   canConvertToGroup,
@@ -675,7 +676,15 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Fit to Window", keys: "⌘0", enabled: hasDoc, run: () => actions.fit() },
         { label: "Fit to Objects", keys: "⌘6", enabled: hasDoc, run: () => actions.fitObjects() },
         { label: "Fit to Page Area", enabled: () => canFitToPage(scene), run: () => fitToPage(scene, view) },
-        { label: "Normal Scale", enabled: () => hasDoc() && !store.view3d, run: () => normalScale(scene, view) },
+        {
+          label: "Normal Scale",
+          enabled: planOnScreen,
+          run: () => {
+            // with several panes, the live plan's pane made the active one
+            if (store.view3d) actions.topPlan();
+            normalScale(scene, view);
+          },
+        },
         { label: "Zoom to Selection", enabled: hasSelection, run: () => zoomToSelection(scene, view) },
         { label: "Previous View", enabled: hasPreviousView, run: () => previousView(view) },
         { label: "Next View", enabled: hasNextView, run: () => nextView(view) },
@@ -691,14 +700,18 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Look at Working Plane", enabled: hasDoc, run: () => void lookAtPlane() },
         { label: "Onscreen View Control", items: viewControlRows },
         { label: "Multiple View Panes", items: () => paneRows(() => true) },
-        { label: "Rendering", enabled: () => store.view3d, items: renderModeRows(actions, false) },
-        { label: "Renderworks Style", enabled: () => store.view3d, items: () => renderStyleRows(actions) },
+        { label: "Rendering", enabled: threeDOnScreen, items: renderModeRows(actions, false) },
+        { label: "Renderworks Style", enabled: threeDOnScreen, items: () => renderStyleRows(actions) },
         { label: "Projection", enabled: hasDoc, items: () => projectionRows(actions) },
         {
           label: "Clip Cube",
-          enabled: () => store.view3d,
+          enabled: threeDOnScreen,
           checked: () => store.viz3d.clip.on,
-          run: () => setViz({ clip: { ...store.viz3d.clip, on: !store.viz3d.clip.on } }),
+          run: () => {
+            // with several panes, the live 3D view's pane made the active one, to drag the cube in
+            if (!store.view3d) actions.toggle3d();
+            setViz({ clip: { ...store.viz3d.clip, on: !store.viz3d.clip.on } });
+          },
         },
         { label: "Create Viewport…", enabled: canCreateViewport, run: () => void createViewportDialog() },
         {

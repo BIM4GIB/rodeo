@@ -26,9 +26,10 @@ import type { RenderMode, ViewPreset } from "./view3d.ts";
 import { visibilityListButton } from "./visibilityList.ts";
 import { appContext } from "./ext.ts";
 import { canRotatePlan, hasPlanRotation, planRotated, planRotationDegrees, rotatedPlan, setPlanRotationDegrees, startRotatePlan, unrotatedPlan } from "./planRotation.ts";
-import { paneRows } from "./viewPanes.ts";
+import { multiPane, onPanes, paneRows, toggleMultiplePanes } from "./viewPanes.ts";
+import { planOnScreen, threeDOnScreen } from "./viewTargets.ts";
 import { quickPrefRows } from "./quickPrefs.ts";
-import { activePlane, onWorkingPlanes, workingPlaneRows } from "./workingPlanes.ts";
+import { workingPlaneRows } from "./workingPlanes.ts";
 import { renderStyleRows } from "../features/render/styles.ts";
 
 /** The standard views, in the order View > Standard Views lists them. */
@@ -143,6 +144,30 @@ async function customPerspectiveDialog(project: (patch: Partial<typeof store.viz
   if (lens !== null) project({ projection: "perspective", lens, twoPoint: false });
 }
 
+/** More view options › Set Plan Rotation…: the plan's rotation typed, degrees counter-clockwise about the drawing's origin. */
+async function planRotationDialog(): Promise<void> {
+  const input = h("input", {
+    cls: "menu-dialog-input",
+    value: String(Number(planRotationDegrees().toFixed(2))),
+    attrs: { type: "text", inputmode: "decimal", "aria-label": "Rotation" },
+  });
+  const deg = await showDialog<number>({
+    title: "Set Plan Rotation",
+    okLabel: "Set",
+    body: [
+      h("p", { cls: "muted", text: "The plan turns on screen by this many degrees counter-clockwise, about the drawing's origin; nothing in the drawing moves. 0 unrotates it." }),
+      h("label", { cls: "menu-dialog-field" }, h("span", { cls: "menu-dialog-label", text: "Rotation" }), input, h("span", { cls: "menu-dialog-unit", text: "°" })),
+    ],
+    check: () => {
+      const text = input.value.trim().replace(/°$/, "");
+      const v = Number(text);
+      if (text === "" || !Number.isFinite(v)) return { error: "Rotation: enter an angle in degrees.", focus: input };
+      return { value: v };
+    },
+  });
+  if (deg !== null) setPlanRotationDegrees(deg);
+}
+
 /** How the 3D view is looked at and drawn, shared by the View bar and the View menu. */
 export interface View3dActions {
   /** shows the 3D view (building it when needed) from a standard direction */
@@ -198,6 +223,10 @@ export interface ViewBarDeps extends View3dActions {
   fit(): void;
   fitObjects(): void;
   toggle3d(): void;
+  /** the top bar's 2D: the plan alone, in one pane */
+  planAlone(): void;
+  /** the top bar's 3D: the 3D view alone, in one pane */
+  view3dAlone(): void;
 }
 
 function barButton(icon: string, title: string, run: () => void): HTMLButtonElement {
@@ -246,13 +275,17 @@ export function mountViewBar(deps: ViewBarDeps): void {
   const fitBtn = setIcon("btn-fit", UI_ICON.fit, deps.fit);
   const zoomField = h("input", {
     cls: "zoom-field",
-    title: "Zoom",
+    title: "Zoom of the 2D plan, as a percentage: type one to set it",
     attrs: { type: "text", inputmode: "decimal", "aria-label": "Zoom percentage", spellcheck: "false" },
   });
   zoomField.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       const pct = parseFloat(zoomField.value);
-      if (Number.isFinite(pct) && pct > 0) zoomBy(view, pct / 100 / view.scale);
+      if (Number.isFinite(pct) && pct > 0) {
+        // with several panes, the live plan's pane made the active one
+        if (store.view3d) deps.topPlan();
+        zoomBy(view, pct / 100 / view.scale);
+      }
       zoomField.value = percent(view.scale);
       zoomField.blur();
     } else if (e.key === "Escape") {
@@ -274,37 +307,58 @@ export function mountViewBar(deps: ViewBarDeps): void {
     { label: "Fit to Window", keys: menuKeyOf("View › Fit to Window"), run: deps.fit },
     { label: "Fit to Objects", keys: menuKeyOf("View › Fit to Objects"), run: deps.fitObjects },
     { label: "Fit to Page Area", enabled: () => canFitToPage(scene), run: () => fitToPage(scene, view) },
-    { label: "Normal Scale", enabled: () => !store.view3d, run: () => normalScale(scene, view) },
+    {
+      label: "Normal Scale",
+      enabled: planOnScreen,
+      run: () => {
+        if (store.view3d) deps.topPlan();
+        normalScale(scene, view);
+      },
+    },
   ]);
   zoomMenu.classList.add("caret-only");
   byId("vb-zoom").append(zoomField, zoomMenu);
 
-  // projection: the 2D drawing, or the 3D view of the design layers
+  // the views: the plan alone, the 3D view alone, or the two in panes as last arranged (Split)
   const planBtn = byId<HTMLButtonElement>("btn-plan");
   const view3dBtn = byId<HTMLButtonElement>("btn-3d");
+  const splitBtn = h("button", {
+    cls: "seg-btn",
+    text: "Split",
+    title: "Split: the plan and the 3D view in panes, as last arranged",
+    attrs: { type: "button", id: "btn-split", "aria-pressed": "false", "data-i18n": "View › Split" },
+  });
+  view3dBtn.after(splitBtn);
+  planBtn.parentElement?.setAttribute("aria-label", "Views");
+  planBtn.title = "2D: the plan alone, in one pane";
+  view3dBtn.title = "3D: the 3D view alone, in one pane";
   planBtn.addEventListener("click", () => {
     planBtn.blur();
-    if (store.view3d) deps.toggle3d();
+    deps.planAlone();
   });
   view3dBtn.addEventListener("click", () => {
     view3dBtn.blur();
-    if (!store.view3d) deps.toggle3d();
+    deps.view3dAlone();
+  });
+  splitBtn.addEventListener("click", () => {
+    splitBtn.blur();
+    if (!multiPane()) toggleMultiplePanes();
   });
   const standardBtn = barMenu(UI_ICON.standardViews, "", "Standard views", () => standardViewRows(deps));
   const renderBtn = barMenu(UI_ICON.render, "", "Render mode", () => renderModeRows(deps));
-  const projectionBtn = barMenu(UI_ICON.projection, "", "Projection", () => projectionRows(deps));
-  // the active plane: the layer plane or a working plane, and what sets and shows it
-  const planeBtn = barMenu(UI_ICON.workingPlane, "", "Active plane", () => workingPlaneRows(() => appContext()?.palettes.show("workingPlanes")));
-  // Window > View Panes: the plan and the 3D view in one pane or two
+  // View > Multiple View Panes: the plan and the 3D view in one pane or several
   const panesBtn = barMenu(UI_ICON.viewPanes, "", "View panes", () => paneRows(() => store.session !== null));
-  // Quick Preferences: the preferences turned on and off most, without the Preferences dialog
-  const quickBtn = barMenu(UI_ICON.quickPrefs, "", "Quick preferences", quickPrefRows);
-  // View > Rotate Plan's button, and its angle typed
-  const rotateBtn = h("button", { cls: "bar-btn", html: TOOL_ICON.rotateplan, title: "Rotate Plan", attrs: { type: "button", "aria-label": "Rotate Plan" } });
-  rotateBtn.addEventListener("click", () => {
-    rotateBtn.blur();
-    startRotatePlan();
-  });
+  // the rest in one menu: the projection, the active plane, the plan's rotation and the Quick Preferences
+  const moreBtn = barMenu(UI_ICON.more, "", "More view options", () => [
+    { label: "Projection", enabled: () => store.session !== null, items: () => projectionRows(deps) },
+    { label: "Active Plane", enabled: () => store.session !== null, items: () => workingPlaneRows(() => appContext()?.palettes.show("workingPlanes")) },
+    "-",
+    { label: "Rotate Plan", enabled: canRotatePlan, run: startRotatePlan },
+    { label: "Set Plan Rotation…", enabled: canRotatePlan, run: () => void planRotationDialog() },
+    "-",
+    { label: "Quick Preferences", items: quickPrefRows },
+  ]);
+  // the plan's rotation, typed: in the bar only while the plan is rotated
   const planAngle = h("input", {
     cls: "zoom-field plan-angle",
     title: "Plan rotation: degrees counter-clockwise, about the drawing's origin (0 unrotates)",
@@ -313,6 +367,7 @@ export function mountViewBar(deps: ViewBarDeps): void {
   const showPlanAngle = (): void => {
     const deg = planRotationDegrees();
     planAngle.value = `${Number(deg.toFixed(2))}°`;
+    planAngle.hidden = !planRotated();
   };
   planAngle.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -328,7 +383,7 @@ export function mountViewBar(deps: ViewBarDeps): void {
   });
   planAngle.addEventListener("focus", () => planAngle.select());
   planAngle.addEventListener("blur", showPlanAngle);
-  byId("tb-view").append(standardBtn, renderBtn, projectionBtn, rotateBtn, planAngle, planeBtn, panesBtn, quickBtn);
+  byId("tb-view").append(standardBtn, renderBtn, panesBtn, moreBtn, planAngle);
 
   // the drawing's saved views, and saving the current one
   const { savedViews } = deps;
@@ -418,24 +473,32 @@ export function mountViewBar(deps: ViewBarDeps): void {
   store.on(["session", "layer"], syncLayers);
   store.on(["session", "class"], syncClasses);
 
+  const pressed = (btn: HTMLButtonElement, on: boolean): void => {
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", String(on));
+  };
+  /** the zoom field's tooltip as last set, so it is set (and translated) again only when it changes */
+  let zoomTitle = "";
   const sync = (): void => {
     const s = store.session;
     undoBtn.disabled = !s?.canUndo();
     redoBtn.disabled = !s?.canRedo();
-    for (const btn of [fitBtn, zoomMenu, planBtn, view3dBtn, standardBtn, projectionBtn, savedBtn, layerOptions, classOptions, layerVis, classVis, planeBtn, panesBtn]) {
+    for (const btn of [fitBtn, zoomMenu, planBtn, view3dBtn, splitBtn, standardBtn, savedBtn, layerOptions, classOptions, layerVis, classVis, panesBtn, moreBtn]) {
       btn.disabled = !s;
     }
-    renderBtn.disabled = !s || !store.view3d;
-    zoomField.disabled = !s || store.view3d;
-    rotateBtn.disabled = planAngle.disabled = !canRotatePlan();
+    // the render mode while a 3D view is on screen, the zoom while the plan is, alone or in a pane
+    renderBtn.disabled = !threeDOnScreen();
+    zoomField.disabled = !planOnScreen();
+    const title = zoomField.disabled ? "Zoom of the 2D plan: show the plan to set it" : "Zoom of the 2D plan, as a percentage: type one to set it";
+    if (title !== zoomTitle) zoomField.title = zoomTitle = title;
+    planAngle.disabled = !canRotatePlan();
     if (document.activeElement !== planAngle) showPlanAngle();
-    planBtn.classList.toggle("active", !store.view3d);
-    view3dBtn.classList.toggle("active", store.view3d);
-    planBtn.setAttribute("aria-pressed", String(!store.view3d));
-    view3dBtn.setAttribute("aria-pressed", String(store.view3d));
+    pressed(planBtn, !multiPane() && !store.view3d);
+    pressed(view3dBtn, !multiPane() && store.view3d);
+    pressed(splitBtn, multiPane());
   };
   store.on(["session", "selection", "view3d", "layer"], sync);
-  onWorkingPlanes(() => planeBtn.classList.toggle("active", activePlane() !== null));
+  onPanes(sync);
   store.on("view", () => {
     if (document.activeElement !== planAngle) showPlanAngle();
     if (document.activeElement !== zoomField) zoomField.value = percent(view.scale);

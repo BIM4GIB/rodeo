@@ -70,7 +70,7 @@ import { exportKmlDialog } from "./kmlExport.ts";
 import { exportUsdDialog } from "./usdExport.ts";
 import { importPdf, importPdfFile } from "./pdfImport.ts";
 import { importMetafile, importMetafileFile, isMetafile } from "./emfImport.ts";
-import { openContextMenu } from "./menu.ts";
+import { openContextMenu, type Row } from "./menu.ts";
 import { confirmDialog, mountMenuBar } from "./menubar.ts";
 import { drawingRows, mountDocTabs, type DocTab, type DocTabActions } from "./docTabs.ts";
 import { mountMenuStrip } from "./menuStrip.ts";
@@ -243,6 +243,8 @@ import { RotateTool } from "./tools/rotate.ts";
 import { View } from "./view.ts";
 import { installViewHistory } from "./viewHistory.ts";
 import {
+  canClosePane,
+  closePane,
   livePane,
   livePlanPane,
   mountPanes,
@@ -252,6 +254,7 @@ import {
   paneCount,
   paneKind,
   pictureOf,
+  relabelPanes,
   setLivePane,
   setLivePlanPane,
   setPaneKind,
@@ -259,7 +262,7 @@ import {
   startView,
   type PaneKind,
 } from "./viewPanes.ts";
-import { mountModeBar, mountViewBar } from "./viewbar.ts";
+import { mountModeBar, mountViewBar, STANDARD_VIEWS } from "./viewbar.ts";
 import type { CameraState, PaneLook, RenderMode, View3D, ViewPreset } from "./view3d.ts";
 import { mountWelcome, recentSource } from "./welcome.ts";
 import {
@@ -979,7 +982,7 @@ export class App {
         standardView: (preset) => void this.standardView(preset),
         topPlan: () => this.topPlan(),
         renderMode: () => this.renderMode3d,
-        setRenderMode: (mode) => this.setRenderMode(mode),
+        setRenderMode: (mode) => this.chooseRenderMode(mode),
         duplicateArray: () => void duplicateArrayDialog(this.scene),
         createSymbol: () => void createSymbolDialog(this.scene),
         saveView: () => void saveViewDialog(panels.savedViews),
@@ -1001,10 +1004,12 @@ export class App {
       fit: () => this.fit(true),
       fitObjects: () => this.fitObjects(),
       toggle3d: () => this.toggle3d(),
+      planAlone: () => this.planAlone(),
+      view3dAlone: () => void this.view3dAlone(),
       standardView: (preset) => void this.standardView(preset),
       topPlan: () => this.topPlan(),
       renderMode: () => this.renderMode3d,
-      setRenderMode: (mode) => this.setRenderMode(mode),
+      setRenderMode: (mode) => this.chooseRenderMode(mode),
     });
     mountModeBar(this.controller);
     mountStatusBar();
@@ -1013,12 +1018,12 @@ export class App {
       view3d: () => this.view3d,
       standardView: (preset) => this.standardView(preset),
       lookAlong: async (toward) => {
-        if (!store.view3d) await this.show3d();
+        if (!store.view3d) await this.focus3d();
         if (store.view3d) this.view3d?.lookAlong(toward);
       },
       topPlan: () => this.topPlan(),
       show3d: async () => {
-        if (!store.view3d) await this.show3d();
+        if (!store.view3d) await this.focus3d();
       },
       zoom: (factor) => {
         if (store.view3d) this.view3d?.zoomBy(factor);
@@ -1073,7 +1078,7 @@ export class App {
     const steer = async (picked: boolean): Promise<void> => {
       const n = navigationFor(store.tool);
       stage.classList.toggle("steering", n !== null);
-      if (n && store.session && !store.view3d) await this.show3d();
+      if (n && store.session && !store.view3d) await this.focus3d();
       const v = this.view3d;
       if (!v) return;
       v.setNavigation(n?.nav ?? "orbit", n?.sensitivity);
@@ -1179,6 +1184,8 @@ export class App {
         this.queuePictures(true);
         this.queuePlanPictures();
       },
+      view: (i) => this.paneView(i),
+      menu: (i) => this.paneMenu(i),
     });
     onPanes(() => (this.panesApplied = this.applyPanes()));
     // Reset Multiple View Panes: the live 3D view back to its pane's standard view too, once it's shown
@@ -1196,13 +1203,11 @@ export class App {
     stage.classList.toggle("two-panes", multiPane());
     // the plan panes' pictures follow the drawing, not the live plan's zoom
     store.on(["session", "file", "selection", "layer", "class", "display", "attrs"], () => this.queuePlanPictures());
-    // with several panes, a click in the inactive live plan or live 3D pane makes it active, and does nothing else
+    // with several panes, a press in the inactive live plan or live 3D pane makes it active first, then does what a press there does
     const activate =
       (to3d: boolean) =>
-      (e: PointerEvent): void => {
+      (): void => {
         if (!multiPane() || store.view3d === to3d || (to3d ? livePane() : livePlanPane()) < 0) return;
-        e.stopImmediatePropagation();
-        e.preventDefault();
         store.view3d = to3d;
         store.emit("view3d");
         this.requestDraw();
@@ -1241,9 +1246,8 @@ export class App {
       documentBytes: async () => (store.session ? documentBytes(store.session) : null),
       fit: () => this.fit(),
       show3d: async () => {
-        // several panes, none of them 3D: the active one becomes the 3D view
-        if (multiPane() && livePane() < 0) await this.turnActivePane("3d");
-        else if (!store.view3d) await this.show3d();
+        // with several panes, the live 3D view's pane made the active one (the active pane turned into one when none is)
+        await this.focus3d();
         // the model waits for a pause in the edits (onDocChange): a look or render asked for now has the edits made so far
         clearTimeout(this.rebuild3dTimer);
         this.update3d();
@@ -1669,10 +1673,14 @@ export class App {
     }
   }
 
-  /** View > Standard Views: the 3D view (built when needed) seen from a standard direction; with several panes, the active pane's. */
+  /**
+   * View > Standard Views: the 3D view (built when needed) seen from a standard direction; with
+   * several panes, the live 3D view's, its pane made the active one (the active pane turned into a
+   * 3D view when no pane is one).
+   */
   private async standardView(preset: ViewPreset): Promise<void> {
-    if (multiPane() && store.session) return this.turnActivePane("3d", preset);
-    if (!store.view3d) await this.show3d();
+    if (multiPane() && store.session && livePane() < 0) return this.turnActivePane("3d", preset);
+    await this.focus3d();
     if (store.view3d) this.view3d?.setView(preset);
   }
 
@@ -1683,7 +1691,7 @@ export class App {
       return;
     }
     this.sectionKind = kind;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (this.controller.activeId !== "section2d") this.sectionFrom = this.controller.activeId;
     this.controller.setTool("section2d");
   }
@@ -1691,7 +1699,7 @@ export class App {
   /** Modify > Hatch…: once a hatch is chosen, the Hatch tool takes its origin and turn on the 2D drawing, then hands back. */
   private async startHatch(): Promise<void> {
     if (!(await chooseHatch())) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("hatch");
   }
@@ -1699,7 +1707,7 @@ export class App {
   /** Modify > Drafting Aids > Create Dividing Lines…: the Dividing Lines tool takes its two clicks on the 2D drawing, then hands back. */
   private startDividing(): void {
     if (!startDividingLines()) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("dividing");
   }
@@ -1707,7 +1715,7 @@ export class App {
   /** Modify > Align > Align/Distribute Leader Lines…: once the dialog is set, the Leader Lines tool takes the reference line's two clicks on the 2D drawing, then hands back. */
   private async startLeaders(): Promise<void> {
     if (!(await startAlignLeaders())) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("alignleaders");
   }
@@ -1715,7 +1723,7 @@ export class App {
   /** Modify > Rotate 3D…: for Next Mouse Click, the center is clicked on the 2D drawing, then the tool hands back. */
   private startRotate3D(): void {
     void rotate3DDialog(this.scene, () => {
-      if (store.view3d) this.toggle3d();
+      if (store.view3d) this.topPlan();
       if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
       this.controller.setTool("rotate3dcentre");
     });
@@ -1724,15 +1732,27 @@ export class App {
   /** AEC > Roof Face…: once the dialog is set, the Roof Face tool takes the axis' clicks on the 2D drawing, then hands back. */
   private async startRoofFace(): Promise<void> {
     if (!(await roofFaceDialog())) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("roofaxis");
   }
 
-  /** View > Standard Views > Top/Plan: back to the 2D drawing; with several panes, the active pane becomes a plan. */
+  /**
+   * View > Standard Views > Top/Plan: back to the 2D drawing; with several panes, the live plan's
+   * pane made the active one (the active pane turned into a plan when no pane is one).
+   */
   private topPlan(): void {
-    if (multiPane() && store.session) void this.turnActivePane("plan");
-    else if (store.view3d) this.toggle3d();
+    if (multiPane() && store.session) {
+      if (livePlanPane() < 0) void this.turnActivePane("plan");
+      else this.setActive3d(false);
+      this.requestDraw();
+      return;
+    }
+    if (!store.view3d) return;
+    this.view3d?.hide();
+    store.view3d = false;
+    store.emit("view3d");
+    this.requestDraw();
   }
 
   /**
@@ -1784,20 +1804,63 @@ export class App {
     store.emit("view3d");
   }
 
-  /** View > 3D View: shows or hides the 3D view of the visible design layers; with several panes, turns the active pane into the other kind. */
+  /**
+   * View > 3D View and the 3 key: shows or hides the 3D view of the visible design layers; with
+   * several panes, makes the live plan's pane or the live 3D view's the active one, as Top/Plan and
+   * the standard views do.
+   */
   toggle3d(): void {
-    if (multiPane() && store.session) {
-      void this.turnActivePane(store.view3d ? "plan" : "3d");
-      return;
-    }
-    if (store.view3d) {
-      this.view3d?.hide();
-      store.view3d = false;
-      store.emit("view3d");
+    if (store.view3d) this.topPlan();
+    else void this.focus3d();
+  }
+
+  /**
+   * Shows the 3D view: alone, or with several panes the live 3D view's pane made the active one (the
+   * active pane turned into a 3D view when no pane is one).
+   */
+  private async focus3d(): Promise<void> {
+    if (!store.session) return;
+    if (!multiPane()) {
+      if (!store.view3d) await this.show3d();
+    } else if (livePane() < 0) {
+      await this.turnActivePane("3d");
+    } else if (this.view3d?.visible) {
+      this.setActive3d(true);
       this.requestDraw();
     } else {
-      void this.show3d();
+      await this.show3d();
     }
+  }
+
+  /** The top bar's 2D: the plan alone, in one pane (from several, the live plan, at its zoom and place). */
+  private planAlone(): void {
+    if (!multiPane()) {
+      this.topPlan();
+      return;
+    }
+    this.setActive3d(false);
+    setPaneLayout("single");
+    this.requestDraw();
+  }
+
+  /** The top bar's 3D: the 3D view alone, in one pane (from several, the live 3D view, its camera kept). */
+  private async view3dAlone(): Promise<void> {
+    if (multiPane() && livePane() >= 0 && this.view3d?.visible) {
+      this.setActive3d(true);
+      setPaneLayout("single");
+      return;
+    }
+    if (multiPane()) setPaneLayout("single");
+    await this.focus3d();
+  }
+
+  /** View > Rendering and the render mode pop-up: with several panes, the live 3D view's pane made the active one first. */
+  private chooseRenderMode(mode: RenderMode): void {
+    if (multiPane() && livePane() >= 0 && this.view3d?.visible) {
+      this.setActive3d(true);
+      this.requestDraw();
+    }
+    this.setRenderMode(mode);
   }
 
   private async show3d(): Promise<void> {
@@ -2015,10 +2078,10 @@ export class App {
   }
 
   /**
-   * With several panes, Top/Plan, 3D View and the standard views act on the active pane: it becomes
-   * a plan, starting as the live plan is, or a 3D view seen from `preset` (isometric when none),
-   * and takes the live view of its kind; the live view of the other kind it held moves to another
-   * pane of that kind, when there is one.
+   * With several panes, the active pane becomes a plan, starting as the live plan is, or a 3D view
+   * seen from `preset` (isometric when none), and takes the live view of its kind; the live view of
+   * the other kind it held moves to another pane of that kind, when there is one. Top/Plan, 3D View
+   * and the standard views do this when no pane shows their kind; a pane's chip, whenever asked.
    */
   private async turnActivePane(kind: PaneKind, preset?: ViewPreset): Promise<void> {
     const i = store.view3d ? livePane() : livePlanPane();
@@ -2053,8 +2116,52 @@ export class App {
     this.queuePlanPictures();
   }
 
-  /** Draws the pictures of the 3D panes without the live view again, soon, when what they show has changed (or `force`). */
+  /** Makes pane `i` the active one: the live view of its kind moves there first when it shows a picture. */
+  private focusPane(i: number): void {
+    if (pictureOf(i)) {
+      if (paneKind(i) === "plan") this.activatePlanPane(i);
+      else this.activatePane(i);
+    } else {
+      this.setActive3d(i === livePane());
+    }
+    this.requestDraw();
+  }
+
+  /** A pane's chip menu: pane `i` made active, then showing the plan or the 3D view (seen from `preset`, when given). */
+  private async showInPane(i: number, kind: PaneKind, preset?: ViewPreset): Promise<void> {
+    this.focusPane(i);
+    await this.turnActivePane(kind, preset);
+  }
+
+  /** The standard view 3D pane `i` looks from, by name, for its chip; null for a plan or a view turned from them. */
+  private paneView(i: number): string | null {
+    const v = this.view3d;
+    if (paneKind(i) !== "3d" || !v) return null;
+    const state = i === livePane() ? v.cameraState() : this.paneCams.get(i);
+    const preset = state ? v.standardViewOf(state) : startView(i);
+    return STANDARD_VIEWS.find(([p]) => p === preset)?.[1] ?? null;
+  }
+
+  /** The menu of pane `i`'s chip: what it shows, the standard views (a 3D pane's), and closing it. */
+  private paneMenu(i: number): Row[] {
+    const rows: Row[] = [
+      { label: "Show Plan Here", checked: () => paneKind(i) === "plan", run: () => void this.showInPane(i, "plan") },
+      { label: "Show 3D Here", checked: () => paneKind(i) === "3d", run: () => void this.showInPane(i, "3d") },
+    ];
+    if (paneKind(i) === "3d") {
+      rows.push("-", ...STANDARD_VIEWS.map(([preset, label]): Row => ({ label, i18n: `View › ${label}`, run: () => void this.showInPane(i, "3d", preset) })));
+    }
+    rows.push("-", { label: "Close Pane", enabled: () => canClosePane(i), run: () => closePane(i) });
+    return rows;
+  }
+
+  /**
+   * Names the panes' chips again, then draws the pictures of the 3D panes without the live view
+   * again, soon, when what they show has changed (or `force`). Called after every frame of the
+   * live 3D view, so its pane's chip follows it.
+   */
   private queuePictures(force = false): void {
+    relabelPanes();
     const v = this.view3d;
     if (!multiPane() || !v?.visible || (!force && v.lookVersion === this.picturedAt)) return;
     clearTimeout(this.picturesTimer);
