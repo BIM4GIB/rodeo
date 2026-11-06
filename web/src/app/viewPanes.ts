@@ -1,4 +1,4 @@
-// Window > View Panes, as Vectorworks' multiple view panes: the drawing area as one pane, or as two,
+// View > Multiple View Panes, as Vectorworks' multiple view panes: the drawing area as one pane, or as two,
 // three or four, all drawn at once, each a plan or a 3D view. A new arrangement has the plan in the
 // first (with three or four, the large one, on whichever side the arrangement puts it) and a 3D view
 // in each of the others (Front, Right and an isometric view to start with). One pane is active,
@@ -401,7 +401,7 @@ function commandRows(enabled: () => boolean): Row[] {
     { label: "Enable Multiple View Panes", enabled, checked: multiPane, run: toggleMultiplePanes },
     { label: "Split Horizontally", enabled: () => enabled() && canSplitPane(false), run: () => splitPane(false) },
     { label: "Split Vertically", enabled: () => enabled() && canSplitPane(true), run: () => splitPane(true) },
-    { label: "Close Active View Pane", enabled: () => enabled() && canClosePane(), run: () => closePane() },
+    { label: "Close Active View Pane", why: () => "Only one view pane is open", enabled: () => enabled() && canClosePane(), run: () => closePane() },
     {
       label: "Create Floating View Pane",
       enabled: () => enabled() && store.session !== null,
@@ -416,12 +416,12 @@ function commandRows(enabled: () => boolean): Row[] {
       },
     },
     // Rodeo's panes always show the same layer and class visibilities and clip cube: nothing to turn off or on
-    { label: "Use Same Visibilities in All Panes", enabled: () => false },
+    { label: "Use Same Visibilities in All Panes", why: () => "Rodeo's panes always share their visibilities", enabled: () => false },
     "-",
   ];
 }
 
-/** The arrangements, each with a picture of itself, the current one highlighted: Window > View Panes and the View bar's pop-up. */
+/** The arrangements, each with a picture of itself, the current one highlighted: View > Multiple View Panes and the View bar's pop-up. */
 export function paneRows(enabled: () => boolean): Row[] {
   const rows: Row[] = commandRows(enabled);
   let panes = 1;

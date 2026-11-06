@@ -6,6 +6,7 @@
 
 import { documentSource, registerMenu, registerPalette, registerRecentFiles, registerWelcome } from "../../app/ext.ts";
 import { store } from "../../app/state.ts";
+import { STEP, whyNot } from "../../app/menuReasons.ts";
 import { serverConfig } from "../../platform/api.ts";
 import { isCloudSource } from "../../platform/cloudSource.ts";
 import { CAN_EDIT } from "../../platform/protocol.ts";
@@ -56,6 +57,7 @@ registerMenu(
             items: [
               {
                 label: "People and Links…",
+                why: whyNot([() => isCloudSource(documentSource()), STEP.cloud], [canShare, "Only the owner or an editor can share it"]),
                 enabled: canShare,
                 run: () => {
                   const open = openCloudDrawing();

@@ -1176,7 +1176,7 @@ export class App {
       this.requestDraw();
     });
     new ResizeObserver(() => this.renderer.resize()).observe(byId("canvas-wrap"));
-    // Window > View Panes: the plan and 3D views in two, three or four panes
+    // View > Multiple View Panes: the plan and 3D views in two, three or four panes
     mountPanes(byId("canvas-wrap"), {
       resized: () => this.renderer.resize(),
       activate: (i) => (paneKind(i) === "plan" ? this.activatePlanPane(i) : this.activatePane(i)),
@@ -1961,7 +1961,7 @@ export class App {
   }
 
   /**
-   * Window > View Panes: several panes show the 3D view beside the plan (built now if it isn't yet)
+   * View > Multiple View Panes: several panes show the 3D view beside the plan (built now if it isn't yet)
    * when any of them is a 3D one, the active pane staying active, the other panes starting from
    * their standard views; one pane hides the 3D view unless it is the active one.
    */

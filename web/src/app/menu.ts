@@ -23,6 +23,11 @@ export interface Item {
   readonly items?: readonly Row[] | (() => readonly Row[]);
   /** the key its label is translated by where the label alone could mean something else (i18n.ts): "Menu › Window" */
   readonly i18n?: string;
+  /**
+   * why the row is off, read while it is: the one step that makes it work ("Select two or more objects first"),
+   * shown under the row and as its tooltip; null gives none (menuReasons.ts has the shared reasons)
+   */
+  readonly why?: () => string | null;
 }
 
 const ARROW = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -49,6 +54,24 @@ const phoneQuery = typeof matchMedia === "function" ? matchMedia("(max-width: 56
 /** Whether this window is a phone now, read as a menu opens or a submenu is tapped. */
 function isPhone(): boolean {
   return phoneQuery?.matches ?? false;
+}
+
+/** The reason an off row without its own `why` gives (menubar.ts sets it: open a drawing first, while none is open). */
+let fallbackWhy: () => string | null = () => null;
+
+/** Sets the reason off rows without their own `why` give. */
+export function setFallbackWhy(why: () => string | null): void {
+  fallbackWhy = why;
+}
+
+/** Whether a row's button is off: greyed, and a click only shows why. */
+function isOff(btn: HTMLElement): boolean {
+  return btn.getAttribute("aria-disabled") === "true";
+}
+
+/** Shows an off row's reason line at once, as a click or tap on it does. */
+function showWhy(btn: HTMLElement): void {
+  btn.classList.add("menu-why-shown");
 }
 
 /** A menu panel and the submenu panels it can open. */
@@ -124,8 +147,8 @@ function place(el: HTMLElement, box: DOMRect, beside: boolean, wide: boolean): v
   }
 }
 
-/** A row's button: its check mark or icon, label, shortcut and submenu arrow, and the function that re-reads its state. */
-function rowButton(row: Item): { btn: HTMLButtonElement; update: () => void } {
+/** A row's button: its check mark or icon, label, shortcut and submenu arrow; the line under it that says why it is off; and the function that re-reads its state. */
+function rowButton(row: Item): { btn: HTMLButtonElement; reason: HTMLElement; update: () => void } {
   const check = h("span", row.icon !== undefined ? { cls: "menu-icon", html: row.icon } : { cls: "menu-check" });
   const btn = h(
     "button",
@@ -135,13 +158,28 @@ function rowButton(row: Item): { btn: HTMLButtonElement; update: () => void } {
     row.keys !== undefined ? h("kbd", { cls: "menu-keys", text: shortcutText(row.keys) }) : null,
     row.items ? h("span", { cls: "menu-arrow", html: ARROW }) : null,
   );
+  // the tooltip says the same, so the line is hidden from screen readers
+  const reason = h("div", { cls: "menu-why", attrs: { "aria-hidden": "true" }, hidden: true });
+  /** the reason on show, in English, so a translated one is not written over again */
+  let said: string | null = null;
   const update = (): void => {
-    btn.disabled = row.enabled !== undefined && !row.enabled();
+    const off = row.enabled !== undefined && !row.enabled();
+    if (off) btn.setAttribute("aria-disabled", "true");
+    else btn.removeAttribute("aria-disabled");
+    btn.classList.remove("menu-why-shown");
+    const why = off ? (row.why ?? fallbackWhy)() : null;
+    if (why !== said) {
+      said = why;
+      reason.textContent = why ?? "";
+      reason.hidden = why === null;
+      if (why === null) btn.removeAttribute("title");
+      else btn.title = why;
+    }
     const on = row.checked?.() ?? false;
     if (row.icon !== undefined) btn.classList.toggle("checked", on);
     else check.textContent = on ? "✓" : "";
   };
-  return { btn, update };
+  return { btn, reason, update };
 }
 
 /** Builds a panel of `rows` into the page, hidden; `done` runs before a chosen row does. */
@@ -180,7 +218,7 @@ export function buildPanel(rows: readonly Row[], done: () => void): Panel {
         nodes.push(h("div", { cls: "menu-sep", attrs: { role: "separator" } }));
         continue;
       }
-      const { btn, update } = rowButton(row);
+      const { btn, reason, update } = rowButton(row);
       updates.push(update);
       if (row.items) {
         btn.setAttribute("aria-haspopup", "menu");
@@ -188,12 +226,16 @@ export function buildPanel(rows: readonly Row[], done: () => void): Panel {
       } else {
         btn.addEventListener("pointerenter", closeSub);
         btn.addEventListener("click", () => {
+          if (isOff(btn)) {
+            showWhy(btn);
+            return;
+          }
           btn.blur();
           done();
           row.run?.();
         });
       }
-      nodes.push(btn);
+      nodes.push(btn, reason);
     }
     return { nodes, updates };
   };
@@ -209,7 +251,7 @@ export function buildPanel(rows: readonly Row[], done: () => void): Panel {
       if (isPhone()) return;
       if (child && sub === child) return;
       closeSub();
-      if (btn.disabled) return;
+      if (isOff(btn)) return;
       if (typeof items === "function") {
         child?.remove();
         child = buildPanel(items(), done);
@@ -219,13 +261,23 @@ export function buildPanel(rows: readonly Row[], done: () => void): Panel {
       child?.open(btn, true);
     });
     btn.addEventListener("click", () => {
+      if (isOff(btn)) {
+        showWhy(btn);
+        return;
+      }
       if (isPhone()) drill(label, items);
     });
   };
 
   /** A submenu inside a drilled screen: a tap always drills down into it. */
   const drillInto: Submenu = (label, items, btn) => {
-    btn.addEventListener("click", () => drill(label, items));
+    btn.addEventListener("click", () => {
+      if (isOff(btn)) {
+        showWhy(btn);
+        return;
+      }
+      drill(label, items);
+    });
   };
 
   /** Puts `screen` in place of the rows on show, their state read afresh and the panel placed again. */

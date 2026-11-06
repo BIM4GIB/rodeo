@@ -12,6 +12,7 @@ import { threeDOnScreen } from "../../app/viewTargets.ts";
 import { reportFailure } from "../../app/reports.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
 import type { RenderHook } from "../../app/view3d.ts";
+import { need, whyIn } from "../../app/menuReasons.ts";
 import { config } from "../account/config.ts";
 import { renderPalette } from "./palette.ts";
 // its Object Info and right-click menu, for animation paths a drawing holds
@@ -82,10 +83,10 @@ registerMenu("Model", () => [
     label: "Create Animation",
     enabled: () => store.session !== null,
     items: [
-      { label: "Create Walkthrough Path from Selection", enabled: () => store.selection.size === 1, run: () => createAnimation("walkthrough") },
+      { label: "Create Walkthrough Path from Selection", why: whyIn("Select one path first"), enabled: () => store.selection.size === 1, run: () => createAnimation("walkthrough") },
       { label: "Create Walkthrough Path from Saved Views…", enabled: () => store.session !== null, run: () => createAnimation("views") },
       { label: "Create Orbit Path…", enabled: () => store.session !== null, run: () => createAnimation("orbit") },
-      { label: "Create Spin Path", enabled: () => store.selection.size > 0, run: () => createAnimation("spin") },
+      { label: "Create Spin Path", why: need.selection, enabled: () => store.selection.size > 0, run: () => createAnimation("spin") },
     ],
   },
 ]);
@@ -93,6 +94,7 @@ registerMenu("Model", () => [
 registerMenu("File › Export", () => [
   {
     label: "Render Image…",
+    why: need.threeD,
     enabled: () => store.session !== null,
     run: renderImage,
   },
@@ -105,6 +107,7 @@ registerMenu("File › Export", () => [
   {
     // a 360° picture from the 3D view's eye
     label: "Export Panorama…",
+    why: need.threeD,
     enabled: threeDOnScreen,
     run: exportPanorama,
   },

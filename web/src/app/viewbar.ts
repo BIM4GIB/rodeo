@@ -9,6 +9,7 @@ import { hasNextView, hasPreviousView, nextView, previousView } from "./viewHist
 import { byId, h } from "./dom.ts";
 import { TOOL_ICON, UI_ICON, visibilityIcon } from "./icons.ts";
 import { menuButton, type Row } from "./menu.ts";
+import { STEP, need, whyIn, whyNot } from "./menuReasons.ts";
 import { showDialog } from "./menubar.ts";
 import { menuKeyOf } from "./menuKeys.ts";
 import { displayModeRows } from "./displayModes.ts";
@@ -189,7 +190,7 @@ export function standardViewRows(actions: View3dActions): Row[] {
         unrotatedPlan();
       },
     },
-    { label: "Rotated Top/Plan", enabled: () => hasPlanRotation() && canRotatePlan(), checked: () => !store.view3d && planRotated(), run: rotatedPlan },
+    { label: "Rotated Top/Plan", why: whyIn("Rotate the plan first: View › Rotate Plan"), enabled: () => hasPlanRotation() && canRotatePlan(), checked: () => !store.view3d && planRotated(), run: rotatedPlan },
     ...STANDARD_VIEWS.map(([preset, label]) => ({
       label,
       i18n: `View › ${label}`,
@@ -250,6 +251,13 @@ function barMenu(icon: string, label: string, title: string, rows: () => readonl
   return menuButton(btn, rows);
 }
 
+/** Sets `el`'s tooltip when it changes, so a tooltip the interface translated is not written over at every sync. */
+function retitle(el: HTMLElement, title: string): void {
+  if (el.dataset.tip === title) return;
+  el.dataset.tip = title;
+  el.title = title;
+}
+
 
 function setIcon(id: string, icon: string, run: () => void): HTMLButtonElement {
   const btn = byId<HTMLButtonElement>(id);
@@ -301,14 +309,15 @@ export function mountViewBar(deps: ViewBarDeps): void {
   const zoomMenu = barMenu("", "", "Zoom options", () => [
     { label: "Zoom In", keys: menuKeyOf("View › Zoom In"), run: () => zoomBy(view, ZOOM_STEP) },
     { label: "Zoom Out", keys: menuKeyOf("View › Zoom Out"), run: () => zoomBy(view, 1 / ZOOM_STEP) },
-    { label: "Zoom to Selection", enabled: () => store.selection.size > 0, run: () => zoomToSelection(scene, view) },
-    { label: "Previous View", keys: menuKeyOf("View › Previous View"), enabled: hasPreviousView, run: () => previousView(view) },
-    { label: "Next View", keys: menuKeyOf("View › Next View"), enabled: hasNextView, run: () => nextView(view) },
+    { label: "Zoom to Selection", why: need.selection, enabled: () => store.selection.size > 0, run: () => zoomToSelection(scene, view) },
+    { label: "Previous View", why: whyNot([() => !store.view3d, STEP.plan], [hasPreviousView, "There's no earlier view"]), keys: menuKeyOf("View › Previous View"), enabled: hasPreviousView, run: () => previousView(view) },
+    { label: "Next View", why: whyNot([() => !store.view3d, STEP.plan], [hasNextView, "There's no later view"]), keys: menuKeyOf("View › Next View"), enabled: hasNextView, run: () => nextView(view) },
     { label: "Fit to Window", keys: menuKeyOf("View › Fit to Window"), run: deps.fit },
     { label: "Fit to Objects", keys: menuKeyOf("View › Fit to Objects"), run: deps.fitObjects },
-    { label: "Fit to Page Area", enabled: () => canFitToPage(scene), run: () => fitToPage(scene, view) },
+    { label: "Fit to Page Area", why: need.sheetActive, enabled: () => canFitToPage(scene), run: () => fitToPage(scene, view) },
     {
       label: "Normal Scale",
+      why: need.plan,
       enabled: planOnScreen,
       run: () => {
         if (store.view3d) deps.topPlan();
@@ -488,6 +497,7 @@ export function mountViewBar(deps: ViewBarDeps): void {
     }
     // the render mode while a 3D view is on screen, the zoom while the plan is, alone or in a pane
     renderBtn.disabled = !threeDOnScreen();
+    retitle(renderBtn, !renderBtn.disabled ? "Render mode" : s ? "Render mode: show the 3D view first" : "Render mode: open or start a drawing first");
     zoomField.disabled = !planOnScreen();
     const title = zoomField.disabled ? "Zoom of the 2D plan: show the plan to set it" : "Zoom of the 2D plan, as a percentage: type one to set it";
     if (title !== zoomTitle) zoomField.title = zoomTitle = title;

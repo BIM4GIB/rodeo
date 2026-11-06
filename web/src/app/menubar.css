@@ -48,13 +48,46 @@
   cursor: default;
 }
 
-.menu-item:hover:not(:disabled),
+.menu-item:hover:not([aria-disabled="true"]),
 .menu-item.checked {
   background: var(--fill-strong);
 }
 
-.menu-item:disabled {
+.menu-item[aria-disabled="true"] {
   opacity: 0.4;
+}
+
+/*
+ * why an off row is off (menu.ts rowButton): a muted line under it, as wide as the panel and never
+ * widening it (a long reason wraps). It opens when the pointer has rested on the row a moment, so a
+ * sweep across the menu doesn't make it jump, and at once on focus or a click or tap.
+ */
+.menu-why {
+  width: 0;
+  min-width: 100%;
+  max-height: 0;
+  overflow: hidden;
+  padding: 0 8px 0 24px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.menu-item[aria-disabled="true"]:hover + .menu-why,
+.menu-why:hover {
+  max-height: 4.2em;
+  padding-bottom: 4px;
+  transition:
+    max-height 0s 0.4s,
+    padding-bottom 0s 0.4s;
+}
+
+.menu-item[aria-disabled="true"]:focus-visible + .menu-why,
+.menu-item.menu-why-shown[aria-disabled="true"] + .menu-why {
+  max-height: 4.2em;
+  padding-bottom: 4px;
+  transition: none;
 }
 
 /* a row with an icon (the top bar's tool groups) */
@@ -96,7 +129,7 @@
   letter-spacing: 0.02em;
 }
 
-.menu-item:hover:not(:disabled) .menu-keys {
+.menu-item:hover:not([aria-disabled="true"]) .menu-keys {
   color: var(--text-2);
 }
 
@@ -159,11 +192,11 @@
 
 /* a touch screen has no hover: a row lights while it is pressed, not where a tap last left the pointer */
 @media (hover: none) {
-  .menu-item:not(.checked):hover:not(:disabled) {
+  .menu-item:not(.checked):hover:not([aria-disabled="true"]) {
     background: none;
   }
 
-  .menu-item:active:not(:disabled) {
+  .menu-item:active:not([aria-disabled="true"]) {
     background: var(--fill-strong);
   }
 }

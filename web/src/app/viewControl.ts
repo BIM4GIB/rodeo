@@ -15,6 +15,7 @@ import { h } from "./dom.ts";
 import { appContext } from "./ext.ts";
 import { documentGeoref, onGeoref } from "./georef.ts";
 import { openContextMenu, type Row } from "./menu.ts";
+import { whyNot } from "./menuReasons.ts";
 import { store } from "./state.ts";
 import type { View3D, ViewPreset } from "./view3d.ts";
 import { activePaneRect, onActivePane } from "./viewPanes.ts";
@@ -149,9 +150,9 @@ function setSettings(next: Partial<Settings>): void {
 export function viewControlRows(): Row[] {
   return [
     { label: "Show Onscreen View Control", checked: () => settings.show, run: () => setSettings({ show: !settings.show }) },
-    { label: "Show Axes", enabled: () => settings.show, checked: () => settings.axes, run: () => setSettings({ axes: !settings.axes }) },
-    { label: "Show Cube", enabled: () => settings.show, checked: () => settings.cube, run: () => setSettings({ cube: !settings.cube }) },
-    { label: "Show Compass Ring", enabled: () => settings.show && documentGeoref() !== null, checked: () => settings.compass, run: () => setSettings({ compass: !settings.compass }) },
+    { label: "Show Axes", why: () => "Turn on Show Onscreen View Control first", enabled: () => settings.show, checked: () => settings.axes, run: () => setSettings({ axes: !settings.axes }) },
+    { label: "Show Cube", why: () => "Turn on Show Onscreen View Control first", enabled: () => settings.show, checked: () => settings.cube, run: () => setSettings({ cube: !settings.cube }) },
+    { label: "Show Compass Ring", why: whyNot([() => settings.show, "Turn on Show Onscreen View Control first"], [() => documentGeoref() !== null, "Set the drawing's location first: File › Document Settings › Georeferencing…"]), enabled: () => settings.show && documentGeoref() !== null, checked: () => settings.compass, run: () => setSettings({ compass: !settings.compass }) },
     {
       label: "Position",
       items: CORNERS.map(([c, label]): Row => ({ label, checked: () => settings.position === c, run: () => setSettings({ position: c }) })),

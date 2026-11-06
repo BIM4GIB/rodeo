@@ -16,6 +16,7 @@ import "./workingPlanes.css";
 import { editInline, h } from "./dom.ts";
 import { appContext, on3d } from "./ext.ts";
 import type { Row } from "./menu.ts";
+import { whyIn } from "./menuReasons.ts";
 import { showDialog } from "./menubar.ts";
 import { store } from "./state.ts";
 import { toast } from "./toast.ts";
@@ -297,13 +298,13 @@ export function workingPlaneMenuRows(): Row[] {
   return [
     { label: "Set Working Plane", checked: () => choosing, enabled: doc, run: () => void chooseFace() },
     { label: "Look at Working Plane", enabled: doc, run: () => void lookAtPlane() },
-    { label: "Save Working Plane…", enabled: () => doc() && active !== null, run: () => void savePlaneDialog() },
-    { label: "Previous Working Plane", enabled: () => doc() && canPreviousPlane(), run: () => stepPlane(false) },
-    { label: "Next Working Plane", enabled: () => doc() && canNextPlane(), run: () => stepPlane(true) },
+    { label: "Save Working Plane…", why: whyIn("Set a working plane first: Modify › Working Plane › Set Working Plane"), enabled: () => doc() && active !== null, run: () => void savePlaneDialog() },
+    { label: "Previous Working Plane", why: whyIn("There's no earlier working plane"), enabled: () => doc() && canPreviousPlane(), run: () => stepPlane(false) },
+    { label: "Next Working Plane", why: whyIn("There's no later working plane"), enabled: () => doc() && canNextPlane(), run: () => stepPlane(true) },
     "-",
     { label: "Align Working Plane with Current View", enabled: doc, run: alignPlaneWithView },
-    { label: "Align Working Plane with Layer Plane", enabled: () => doc() && active !== null, run: alignPlaneWithLayer },
-    { label: "Align Working Plane X Axis with Layer Plane", enabled: () => doc() && active !== null, run: alignPlaneXWithLayer },
+    { label: "Align Working Plane with Layer Plane", why: whyIn("Set a working plane first: Modify › Working Plane › Set Working Plane"), enabled: () => doc() && active !== null, run: alignPlaneWithLayer },
+    { label: "Align Working Plane X Axis with Layer Plane", why: whyIn("Set a working plane first: Modify › Working Plane › Set Working Plane"), enabled: () => doc() && active !== null, run: alignPlaneXWithLayer },
     "-",
     turnRow(0, true),
     turnRow(0, false),

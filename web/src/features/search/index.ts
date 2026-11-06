@@ -9,6 +9,7 @@ import { shortcutText } from "../../app/menu.ts";
 import { allMenus } from "../../app/menubar.ts";
 import { onMenuKeys } from "../../app/menuKeys.ts";
 import { store } from "../../app/state.ts";
+import { need } from "../../app/menuReasons.ts";
 import { SEARCH_ICON } from "./glyphs.ts";
 import { openSearch } from "./palette.ts";
 import { drawQueryHighlights, openQuery } from "./queryBar.ts";
@@ -25,6 +26,7 @@ registerMenu("Edit", () => [
   { label: "Select by Query…", enabled: () => store.session !== null, run: () => openQuery() },
   {
     label: "Find Usages…",
+    why: need.selection,
     enabled: () => store.session !== null && store.selection.size > 0,
     run: () => {
       const ctx = appContext();

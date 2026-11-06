@@ -9,6 +9,7 @@ import type { FieldKind, RecordField, RecordFieldSpec, RecordValue } from "../co
 import { attempt } from "./commands.ts";
 import { h } from "./dom.ts";
 import type { Row } from "./menu.ts";
+import { need } from "./menuReasons.ts";
 import { showDialog, type DialogCheck } from "./menubar.ts";
 import { store } from "./state.ts";
 import { formatLength, parseLength } from "./units.ts";
@@ -45,7 +46,7 @@ export function canCreateRecordFormat(): boolean {
 /** Tools > Records > Edit Record Format: the drawing's data record formats, by name. */
 export function editRecordFormatRows(): Row[] {
   const formats = store.session?.doc.recordFormats() ?? [];
-  if (formats.length === 0) return [{ label: "No record formats", enabled: () => false, run: () => undefined }];
+  if (formats.length === 0) return [{ label: "No record formats", why: need.recordFormat, enabled: () => false, run: () => undefined }];
   return formats.map((f): Row => ({ label: f.name, run: () => void editRecordFormat(f.format) }));
 }
 

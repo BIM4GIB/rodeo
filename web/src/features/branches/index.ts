@@ -9,6 +9,7 @@ import { menuButton, type Row } from "../../app/menu.ts";
 import { type DialogCheck, confirmDialog, showDialog } from "../../app/menubar.ts";
 import { store } from "../../app/state.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
+import { STEP, whyNot } from "../../app/menuReasons.ts";
 import { currentUser } from "../../platform/api.ts";
 import { CAN_EDIT } from "../../platform/protocol.ts";
 import { cloudChanged, cloudCall, cloudOffered, isVersionSource, openCloudFile } from "../cloud/cloud.ts";
@@ -44,18 +45,18 @@ function canDelete(): boolean {
 function branchRows(): Row[] {
   return [
     newRow(),
-    { label: "Switch Branch", enabled: () => familyState() !== null, items: () => switchRows() },
+    { label: "Switch Branch", why: whyNot([() => familyState() !== null, STEP.cloud]), enabled: () => familyState() !== null, items: () => switchRows() },
     "-",
     compareRow(),
     "-",
-    { label: "Rename Branch…", enabled: () => onBranch() && canEdit(), run: () => void renameBranch() },
-    { label: "Delete Branch…", enabled: () => onBranch() && canDelete(), run: () => void deleteBranch() },
+    { label: "Rename Branch…", why: whyNot([() => familyState() !== null, STEP.cloud], [onBranch, "Switch to a branch first: File › Branches › Switch Branch"], [canEdit, "Only the owner or an editor can rename it"]), enabled: () => onBranch() && canEdit(), run: () => void renameBranch() },
+    { label: "Delete Branch…", why: whyNot([() => familyState() !== null, STEP.cloud], [onBranch, "Switch to a branch first: File › Branches › Switch Branch"], [canDelete, "Only the drawing's owner or the branch's maker can delete it"]), enabled: () => onBranch() && canDelete(), run: () => void deleteBranch() },
   ];
 }
 
 /** New Branch…, which the menu and the chip both offer. */
 function newRow(): Row {
-  return { label: "New Branch…", enabled: canStart, run: () => void newBranch() };
+  return { label: "New Branch…", why: whyNot([() => familyState() !== null, STEP.cloud], [() => !isVersionSource(documentSource()), "Go back to the latest version first"], [canStart, "Only the owner or an editor can branch it"]), enabled: canStart, run: () => void newBranch() };
 }
 
 /** Compare…, which the menu and the chip both offer. */

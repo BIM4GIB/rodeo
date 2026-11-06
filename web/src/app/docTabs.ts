@@ -154,7 +154,7 @@ export function drawingRows(actions: DocTabActions): Row[] {
   return [
     ...tabs.map((t, i): Row => ({ label: t.dirty ? `${t.name} •` : t.name, checked: () => t.front, run: () => actions.select(i) })),
     "-",
-    { label: "Next Drawing", enabled: () => tabs.length > 1, run: () => step(1) },
-    { label: "Previous Drawing", enabled: () => tabs.length > 1, run: () => step(-1) },
+    { label: "Next Drawing", why: () => "Open another drawing first", enabled: () => tabs.length > 1, run: () => step(1) },
+    { label: "Previous Drawing", why: () => "Open another drawing first", enabled: () => tabs.length > 1, run: () => step(-1) },
   ];
 }

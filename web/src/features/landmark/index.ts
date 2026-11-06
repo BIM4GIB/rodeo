@@ -6,6 +6,7 @@
 
 import { registerMenu, registerPluginDrivers } from "../../app/ext.ts";
 import { store } from "../../app/state.ts";
+import { whyIn } from "../../app/menuReasons.ts";
 import { hardscape, landscapeArea } from "./areas.ts";
 import { landmarkDriver, type LandmarkKind } from "./kinds.ts";
 import { massingModel } from "./massing.ts";
@@ -56,8 +57,8 @@ registerPluginDrivers(() => drivers);
 registerMenu("Tools › Reports", () => {
   const doc = store.session?.doc;
   return [
-    { label: "Plant Schedule", enabled: () => hasAny(doc, PLANT, LAUBWERK), run: () => makeSchedule(plantSchedule) },
-    { label: "Existing Tree Schedule", enabled: () => hasAny(doc, EXISTING_TREE), run: () => makeSchedule(treeSchedule) },
-    { label: "Landscape Quantities", enabled: () => hasAny(doc, LANDSCAPE_AREA, HARDSCAPE, MASSING), run: () => makeSchedule(areaQuantities) },
+    { label: "Plant Schedule", why: whyIn("Place plants first"), enabled: () => hasAny(doc, PLANT, LAUBWERK), run: () => makeSchedule(plantSchedule) },
+    { label: "Existing Tree Schedule", why: whyIn("Place existing trees first"), enabled: () => hasAny(doc, EXISTING_TREE), run: () => makeSchedule(treeSchedule) },
+    { label: "Landscape Quantities", why: whyIn("Place landscape areas, hardscapes or massing models first"), enabled: () => hasAny(doc, LANDSCAPE_AREA, HARDSCAPE, MASSING), run: () => makeSchedule(areaQuantities) },
   ];
 });

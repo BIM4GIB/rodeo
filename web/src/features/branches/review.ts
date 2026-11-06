@@ -3,6 +3,7 @@
 // index.ts registers File › Branches first; this module's rows go after it, so it is imported here too.
 import "./index.ts";
 import { documentSource, registerMenu, registerPalette } from "../../app/ext.ts";
+import { STEP, whyNot } from "../../app/menuReasons.ts";
 import { CAN_EDIT } from "../../platform/protocol.ts";
 import { cloudOffered, isVersionSource, openCloudDrawing } from "../cloud/cloud.ts";
 import { blameOn, blamePalette, toggleBlame } from "./blameView.ts";
@@ -21,11 +22,11 @@ function canEditBranch(): boolean {
 registerMenu("File › Branches", () =>
   cloudOffered()
     ? [
-        { label: "New Merge Request…", enabled: () => onBranch() && canEditBranch(), run: () => void newMergeRequest() },
-        { label: "Merge Requests", enabled: () => familyState() !== null, run: showRequests },
-        { label: "Update from Main…", enabled: () => onBranch() && canEditBranch(), run: () => void updateFromMain() },
+        { label: "New Merge Request…", why: whyNot([() => familyState() !== null, STEP.cloud], [onBranch, "Switch to a branch first: File › Branches › Switch Branch"], [canEditBranch, "Only the owner or an editor can change it"]), enabled: () => onBranch() && canEditBranch(), run: () => void newMergeRequest() },
+        { label: "Merge Requests", why: whyNot([() => familyState() !== null, STEP.cloud]), enabled: () => familyState() !== null, run: showRequests },
+        { label: "Update from Main…", why: whyNot([() => familyState() !== null, STEP.cloud], [onBranch, "Switch to a branch first: File › Branches › Switch Branch"], [canEditBranch, "Only the owner or an editor can change it"]), enabled: () => onBranch() && canEditBranch(), run: () => void updateFromMain() },
         "-",
-        { label: "Blame", checked: blameOn, enabled: () => openCloudDrawing() !== null, run: toggleBlame },
+        { label: "Blame", why: whyNot([() => openCloudDrawing() !== null, STEP.cloud]), checked: blameOn, enabled: () => openCloudDrawing() !== null, run: toggleBlame },
       ]
     : [],
 );

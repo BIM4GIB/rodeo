@@ -1,7 +1,7 @@
 /* openvwx editor shell, after Spline's editor: dark chrome round an inset
    drawing card. Colours are tokens on :root (dark); [data-theme="light"] and
    [data-theme="system"] (theme.ts) swap them. The drawing keeps its own paper
-   colour in every theme, unless View > Dark Canvas inverts it. */
+   colour in every theme, unless View > Appearance > Dark Canvas inverts it. */
 
 @import "./tokens.css";
 
@@ -581,7 +581,7 @@ code {
   visibility: hidden;
 }
 
-/* View > Dark Canvas: the drawing's ink and paper swap, its colours keep their hue */
+/* View > Appearance > Dark Canvas: the drawing's ink and paper swap, its colours keep their hue */
 .dark-canvas .canvas-wrap {
   background: #0f0f0f;
 }
