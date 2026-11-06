@@ -1836,6 +1836,10 @@ export class App {
       this.view3d.setViz(store.viz3d);
       this.view3d.setDashes(this.dashes3d());
       this.view3d.onPick = (id, additive) => this.pick3d(id, additive);
+      // the selection drawn over the model, the objects inside the selected groups with them
+      const select = (): void => this.view3d?.setSelected(this.withParts(store.selection));
+      store.on("selection", select);
+      select();
       this.view3d.afterRender.add(() => this.queuePictures());
       view3dCreated(this.view3d);
     }
