@@ -1,4 +1,4 @@
-// AEC > Machine Design > 3D Properties…, as Vectorworks has it: the selected 3D objects' surface area, volume,
+// Tools > Machine Design > 3D Properties…, as Vectorworks has it: the selected 3D objects' surface area, volume,
 // radii of gyration and centre of mass, together, in the units chosen (meshSolid.ts measures them, as for
 // Volumetric Properties), and Calculate Mass Properties…: their mass, weight and mass moments of inertia from a
 // density or a specific gravity, in English (lb, in) or metric (kg, m) units. The radii and moments are about
@@ -114,7 +114,7 @@ async function massDialog(solid: Solid): Promise<Group | null> {
   return ok ? group : null;
 }
 
-/** AEC > Machine Design > 3D Properties…. */
+/** Tools > Machine Design > 3D Properties…. */
 export async function threeDPropertiesDialog(): Promise<void> {
   const measured = measureSelected();
   if (!measured) {

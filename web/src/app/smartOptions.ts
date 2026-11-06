@@ -50,7 +50,7 @@ const VIEW_ROWS: readonly string[] = [
   "Projection",
   "-",
   "Show Grid",
-  "Dark Canvas",
+  "Appearance",
 ];
 
 /** Gap between the ring and a segment's panel, and the least margin to the window's edge. */

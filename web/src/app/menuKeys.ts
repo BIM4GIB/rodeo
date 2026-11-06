@@ -45,6 +45,27 @@ export interface MenuCommand {
 /** Changes from the defaults: command path to its combination, "" for none. */
 type Changes = Record<string, string>;
 
+/**
+ * Commands that moved menus, by their old path and new one; a path ending " › " moves everything under it. Keys
+ * kept under an old path, in this browser or a workspace file, follow the command.
+ */
+const MOVED: readonly (readonly [string, string])[] = [
+  ["AEC › Machine Design › ", "Tools › Machine Design › "],
+  ["AEC › Electrical › ", "AEC › MEP › "],
+  ["View › Theme › ", "View › Appearance › "],
+  ["View › Dark Canvas", "View › Appearance › Dark Canvas"],
+  ["Window › Object Info", "Window › Palettes › Object Info"],
+  ["Tools › Options › Preferences…", "Edit › Preferences…"],
+];
+
+/** `path` where its command is now. */
+function movedPath(path: string): string {
+  for (const [from, to] of MOVED) {
+    if (from.endsWith(SEP) ? path.startsWith(from) : path === from) return to + path.slice(from.length);
+  }
+  return path;
+}
+
 const listeners = new Set<() => void>();
 let changes: Changes = load();
 /** the menus' commands, known once the menu bar is built */
@@ -58,13 +79,17 @@ function load(): Changes {
   }
 }
 
-/** Kept or imported changes with anything that is not a path and a ⌘ combination (or "") dropped. */
+/** Kept or imported changes with anything that is not a path and a ⌘ combination (or "") dropped, and moved commands under their new paths. */
 function clean(raw: unknown): Changes {
   const out: Changes = {};
   if (!raw || typeof raw !== "object") return out;
   for (const [path, keys] of Object.entries(raw)) {
     if (typeof keys !== "string") continue;
-    if (keys === "" || isCombination(keys)) out[path] = keys;
+    if (keys !== "" && !isCombination(keys)) continue;
+    const now = movedPath(path);
+    // a key kept under the new path wins over one under the old
+    if (now !== path && Object.hasOwn(raw, now)) continue;
+    out[now] = keys;
   }
   return out;
 }

@@ -18,6 +18,7 @@ import {
   alignToGrid,
   arrangeSelection,
   canFitToPage,
+  canPaste,
   copySelection,
   cutSelection,
   deleteObjects,
@@ -225,7 +226,7 @@ import { attachRecordDialog, canAttachRecord, canDetachRecord, detachRecordDialo
 import { canReplaceWithSymbol, replaceWithSymbolDialog } from "./replaceWithSymbol.ts";
 import { textureRows } from "./textureMapping.ts";
 import { canPreviousSelection, previousSelection } from "./selectionHistory.ts";
-import { canDeleteAllGuides, canHideGuides, canMakeGuide, canSelectGuides, canShowGuides, deleteAllGuides, makeGuide, selectGuides, showGuides } from "./guides.ts";
+import { canDeleteAllGuides, canMakeGuide, canSelectGuides, deleteAllGuides, guidesShown, hasGuidesClass, makeGuide, selectGuides, showGuides } from "./guides.ts";
 import { docTabsShown, setDocTabsShown } from "./docTabs.ts";
 import { annotatableViewport, editAnnotations, editSymbol, exitSymbol, selectedSymbol } from "./symbolEdit.ts";
 import { smartPointSettingsDialog, snapSettingsDialog } from "./panels/snapping.ts";
@@ -251,7 +252,7 @@ import { textMenuRows } from "./textMenu.ts";
 import { darkCanvas, setDarkCanvas, themeRows } from "./theme.ts";
 import { projectionRows, renderModeRows, standardViewRows, type View3dActions } from "./viewbar.ts";
 import { paneRows } from "./viewPanes.ts";
-import { lookAtPlane, workingPlaneMenuRows } from "./workingPlanes.ts";
+import { workingPlaneMenuRows } from "./workingPlanes.ts";
 import { exitGroupOptionRows } from "./exitGroup.ts";
 import { dataBarOptionRows } from "./databar.ts";
 import { savePalettePositions, workspaceRows } from "./workspaces.ts";
@@ -648,8 +649,8 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         "-",
         { label: "Cut", keys: "⌘X", enabled: hasSelection, run: cutSelection },
         { label: "Copy", keys: "⌘C", enabled: hasSelection, run: copySelection },
-        { label: "Paste", keys: "⌘V", enabled: hasLayer, run: () => void paste(view) },
-        { label: "Paste in Place", keys: "⌥⌘V", enabled: hasLayer, run: () => void pasteInPlace() },
+        { label: "Paste", keys: "⌘V", enabled: () => hasLayer() && canPaste(), run: () => void paste(view) },
+        { label: "Paste in Place", keys: "⌥⌘V", enabled: () => hasLayer() && canPaste(), run: () => void pasteInPlace() },
         { label: "Paste as Bitmap", enabled: hasLayer, run: () => actions.pasteAsBitmap() },
         { label: "Duplicate", keys: "⌘D", enabled: hasSelection, run: () => duplicateSelection(view) },
         { label: "Duplicate Array…", enabled: hasSelection, run: () => actions.duplicateArray() },
@@ -692,12 +693,12 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Zoom Line Thickness", checked: () => store.zoomLineThickness, run: () => setZoomLineThickness(!store.zoomLineThickness) },
         "-",
         { label: "3D View", keys: "3", enabled: hasDoc, checked: () => store.view3d, run: () => actions.toggle3d() },
-        { label: "Standard Views", enabled: hasDoc, items: standardViewRows(actions) },
+        // Rotated Top/Plan is the View menu's own row below, with ⌘5; the View bar's pop-up keeps it among the standard views
+        { label: "Standard Views", enabled: hasDoc, items: standardViewRows(actions).filter((r) => r === "-" || r.label !== "Rotated Top/Plan") },
         { label: "Rotate Plan", enabled: canRotatePlan, run: startRotatePlan },
         { label: "Rotated Top/Plan", keys: "⌘5", enabled: hasDoc, checked: () => !store.view3d && planRotated(), run: toggleRotatedPlan },
         { label: "Set 3D View…", enabled: hasDoc, run: () => void set3dViewDialog(scene, view) },
         { label: "Rotate 3D View…", enabled: hasDoc, run: () => void rotate3dViewDialog() },
-        { label: "Look at Working Plane", enabled: hasDoc, run: () => void lookAtPlane() },
         { label: "Onscreen View Control", items: viewControlRows },
         { label: "Multiple View Panes", items: () => paneRows(() => true) },
         { label: "Rendering", enabled: threeDOnScreen, items: renderModeRows(actions, false) },
@@ -773,8 +774,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Snap to Objects", checked: () => store.snapObjects, run: toggleSnapObjects },
         { label: "Rulers", checked: rulersShown, run: toggleRulers },
         "-",
-        { label: "Theme", items: themeRows() },
-        { label: "Dark Canvas", checked: darkCanvas, run: () => setDarkCanvas(!darkCanvas()) },
+        { label: "Appearance", items: [...themeRows(), "-", { label: "Dark Canvas", checked: darkCanvas, run: () => setDarkCanvas(!darkCanvas()) }] },
       ],
     },
     {
@@ -859,8 +859,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           enabled: hasDoc,
           items: [
             { label: "Make Guide", enabled: canMakeGuide, run: makeGuide },
-            { label: "Show Guides", enabled: canShowGuides, run: () => showGuides(true) },
-            { label: "Hide Guides", enabled: canHideGuides, run: () => showGuides(false) },
+            { label: "Show Guides", enabled: hasGuidesClass, checked: guidesShown, run: () => showGuides(!guidesShown()) },
             { label: "Select Guides", enabled: () => canSelectGuides(scene), run: () => selectGuides(scene) },
             { label: "Delete All Guides", enabled: canDeleteAllGuides, run: deleteAllGuides },
           ],
@@ -1003,21 +1002,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           ],
         },
         {
-          label: "Machine Design",
-          enabled: hasDoc,
-          items: [
-            { label: "3D Properties…", enabled: canVolumetricProperties, run: () => void threeDPropertiesDialog() },
-            { label: "Belt Length Calculator…", enabled: hasDoc, run: () => void beltLengthDialog() },
-            { label: "Centroid…", enabled: canCentroid, run: () => void centroidDialog() },
-            { label: "Chain Length Calculator…", enabled: hasDoc, run: () => void chainLengthDialog() },
-            { label: "Conversion Factors…", enabled: hasDoc, run: () => void conversionFactorsDialog() },
-            { label: "Create 3D Object From 2D", enabled: canCreate3DFrom2D, run: create3DObjectFrom2D },
-            { label: "Solution of Triangles…", enabled: hasDoc, run: () => void solutionOfTrianglesDialog() },
-            { label: "Spring Calculator…", enabled: hasDoc, run: () => void springCalculatorDialog() },
-          ],
-        },
-        {
-          label: "Electrical",
+          label: "MEP",
           enabled: hasDoc,
           items: [
             { label: "Conductor Sizing Calc…", enabled: hasDoc, run: () => void conductorSizingDialog() },
@@ -1123,6 +1108,20 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           ],
         },
         {
+          label: "Machine Design",
+          enabled: hasDoc,
+          items: [
+            { label: "3D Properties…", enabled: canVolumetricProperties, run: () => void threeDPropertiesDialog() },
+            { label: "Belt Length Calculator…", enabled: hasDoc, run: () => void beltLengthDialog() },
+            { label: "Centroid…", enabled: canCentroid, run: () => void centroidDialog() },
+            { label: "Chain Length Calculator…", enabled: hasDoc, run: () => void chainLengthDialog() },
+            { label: "Conversion Factors…", enabled: hasDoc, run: () => void conversionFactorsDialog() },
+            { label: "Create 3D Object From 2D", enabled: canCreate3DFrom2D, run: create3DObjectFrom2D },
+            { label: "Solution of Triangles…", enabled: hasDoc, run: () => void solutionOfTrianglesDialog() },
+            { label: "Spring Calculator…", enabled: hasDoc, run: () => void springCalculatorDialog() },
+          ],
+        },
+        {
           label: "Origin",
           enabled: hasDoc,
           items: [
@@ -1138,7 +1137,6 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Edit Marker List…", run: () => void editMarkerListDialog() },
             { label: "Line Thickness…", run: () => void lineThicknessDialog() },
-            { label: "Preferences…", run: () => void preferencesDialog() },
           ],
         },
         { label: "Snap Settings…", run: () => void snapSettingsDialog() },
@@ -1158,7 +1156,8 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Activate Object Info Palette", run: () => actions.activateObjectInfo() },
             "-",
-            ...palettes.menuRows(),
+            // ⌘I shows or hides Object Info, as Vectorworks' Window › Palettes › Object Info does
+            ...palettes.menuRows().map((r): Row => (r !== "-" && r.label === "Object Info" ? { ...r, keys: "⌘I" } : r)),
             "-",
             { label: "Hide Enabled Palettes", keys: "⇧⌘P", checked: () => palettes.away, run: () => palettes.toggleAway() },
             { label: "Save Palette Positions", run: () => savePalettePositions(palettes) },
@@ -1172,7 +1171,6 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Floating Palettes Can Dock to Each Other", checked: () => palettes.floatDocking, run: () => palettes.toggleFloatDocking() },
           ],
         },
-        { label: "Object Info", keys: "⌘I", checked: () => palettes.isShown("objectInfo"), run: () => palettes.show("objectInfo") },
         { label: "Smart Options", keys: "`", enabled: () => !!store.session, run: () => openSmartOptions() },
         { label: "Notification Center", run: openNotificationCenter },
         { label: "Roll Up All Palettes", run: () => palettes.collapseAll(true) },
@@ -1185,7 +1183,6 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Use Full Screen", checked: () => !!document.fullscreenElement, run: toggleFullScreen },
         { label: "Edit Group and Object Visibility Options", items: exitGroupOptionRows },
         { label: "Data Bar Options", items: dataBarOptionRows },
-        { label: "View Panes", items: () => paneRows(() => true) },
         "-",
         { label: "View Bar", checked: () => palettes.barShown("viewbar"), run: () => palettes.toggleBar("viewbar") },
         {
@@ -1212,6 +1209,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
     {
       title: "Help",
       rows: [
+        { label: "User Guide", run: () => void window.open(GUIDE_URL, "_blank", "noopener") },
         { label: "Keyboard Shortcuts…", run: () => void shortcutsDialog() },
         { label: "About Rodeo…", run: () => void aboutDialog() },
       ],
@@ -1259,6 +1257,9 @@ async function shortcutsDialog(): Promise<void> {
 
 /** Where this build's source is published. A modified copy offered over a network must point at its own source (AGPL-3.0 §13). */
 const SOURCE_URL = "https://github.com/rodeobuild/rodeo";
+
+/** The user guide, published with the source: Help > User Guide. */
+const GUIDE_URL = "https://github.com/rodeobuild/rodeo/blob/main/docs/guide/README.md";
 
 /** Help > About Rodeo… */
 async function aboutDialog(): Promise<void> {

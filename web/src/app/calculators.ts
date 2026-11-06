@@ -1,4 +1,4 @@
-// AEC > Machine Design's calculators, as Vectorworks has them: Belt Length Calculator, Chain Length
+// Tools > Machine Design's calculators, as Vectorworks has them: Belt Length Calculator, Chain Length
 // Calculator, Conversion Factors, Solution of Triangles and Spring Calculator (its sums in
 // springCalc.ts). Each works its answer out as values are typed, so Vectorworks' Solve button has
 // nothing left to do. Lengths are in the document's units (typed as the Object Info palette takes
@@ -349,7 +349,7 @@ function lengthOf(el: HTMLInputElement): number | null | undefined {
 /** Remembered between openings, as Vectorworks keeps a calculator's last values. */
 const belt = { find: "length", d1: "", d2: "", third: "", place: false };
 
-/** AEC > Machine Design > Belt Length Calculator…: an open belt's length round two pulleys, or the center distance a belt fits. */
+/** Tools > Machine Design > Belt Length Calculator…: an open belt's length round two pulleys, or the center distance a belt fits. */
 export async function beltLengthDialog(): Promise<void> {
   const find = select("Find", [
     ["length", "Belt Length"],
@@ -408,7 +408,7 @@ export async function beltLengthDialog(): Promise<void> {
 
 const chain = { find: "length", size: CHAINS[2].id, n1: "", n2: "", third: "", place: false };
 
-/** AEC > Machine Design > Chain Length Calculator…: a roller chain's length round two sprockets, or the center distance a chain fits. */
+/** Tools > Machine Design > Chain Length Calculator…: a roller chain's length round two sprockets, or the center distance a chain fits. */
 export async function chainLengthDialog(): Promise<void> {
   const find = select("Find", [
     ["length", "Chain Length"],
@@ -493,7 +493,7 @@ export async function chainLengthDialog(): Promise<void> {
 
 const conversion = { value: "1", from: "Length/inches", to: "millimeters" };
 
-/** AEC > Machine Design > Conversion Factors…: an amount in one unit, the factor to another of the same quantity and the amount in it. */
+/** Tools > Machine Design > Conversion Factors…: an amount in one unit, the factor to another of the same quantity and the amount in it. */
 export async function conversionFactorsDialog(): Promise<void> {
   const value = input("Multiply", conversion.value);
   const from = h(
@@ -545,7 +545,7 @@ export async function conversionFactorsDialog(): Promise<void> {
 
 const triangle: { kind: TriangleCase; values: Record<string, string> } = { kind: "sss", values: {} };
 
-/** AEC > Machine Design > Solution of Triangles…: the sides, angles and area of a triangle from three things known of it. */
+/** Tools > Machine Design > Solution of Triangles…: the sides, angles and area of a triangle from three things known of it. */
 export async function solutionOfTrianglesDialog(): Promise<void> {
   const kind = select(
     "Known Values",
@@ -616,7 +616,7 @@ const spring = {
   modulus: "",
 };
 
-/** AEC > Machine Design > Spring Calculator…: a round-wire helical compression spring's rate and unit stress, and the tool to draw it. */
+/** Tools > Machine Design > Spring Calculator…: a round-wire helical compression spring's rate and unit stress, and the tool to draw it. */
 export async function springCalculatorDialog(): Promise<void> {
   const unitSelect = select("Units", [
     ["in", "Inches"],

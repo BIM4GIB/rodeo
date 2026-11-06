@@ -68,7 +68,7 @@ registerMenu("View", () => [
     enabled: () => store.session !== null,
     run: () => appContext()?.palettes.show(PALETTE_ID),
   },
-]);
+], { after: "Renderworks Style" });
 
 // Render Image's choices kept as named jobs, rendered together later (batch.ts)
 registerMenu("View › Rendering", () => [

@@ -1093,7 +1093,7 @@ function saveCaretRows(): Row[] {
   const pick = (label: string): Row | undefined => rows.find((r): r is Item => r !== "-" && r.label === label);
   const groups: (Row | undefined)[][] = [
     ["Save", "Save As…", "Save to Cloud…", "Save to Google Drive…", "Save to OneDrive…"].map(pick),
-    [pick("Export"), pick("Share…"), pick("Publish…"), pick("Print…")],
+    [pick("Export"), pick("Share"), pick("Publish…"), pick("Print…")],
   ];
   const out: Row[] = [];
   for (const group of groups) {

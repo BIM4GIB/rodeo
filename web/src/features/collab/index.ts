@@ -28,11 +28,11 @@ registerTopBar(buildTopBar, "right");
 registerOverlay(drawPeers);
 registerPalette(collaboratorsPalette());
 registerMenu("Window", windowRows);
-// shown where the server offers the cloud, beside Share…
+// shown where the server offers the cloud, in File › Share after People and Links…
 registerMenu(
-  "File",
+  "File › Share",
   () => (cloudOffered() ? [{ label: "Project Sharing…", enabled: () => store.session !== null, run: () => void projectSharingDialog() }] : []),
-  { after: "Share…" },
+  { after: "People and Links…" },
 );
 
 onReady((ctx) => {

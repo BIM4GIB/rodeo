@@ -1,4 +1,4 @@
-// Spotlight Numbering (Stage > Lighting and Stage > ConnectCAD): numbers the objects of one type, a
+// Spotlight Numbering (Stage > Lighting): numbers the objects of one type, a
 // plug-in object (a lighting device, a ConnectCAD device…) or objects carrying a record, in one or more
 // of their fields at once. Each field in use has its own Start (a number, its leading zeros kept, or
 // letters), Prefix and Suffix, the same value for all or Increment by, Increment by DMX footprint for

@@ -1,4 +1,4 @@
-// AEC > Machine Design > Create 3D Object From 2D, and the memory it works from. A 2D machine part
+// Tools > Machine Design > Create 3D Object From 2D, and the memory it works from. A 2D machine part
 // whose tool has a "- 3D" twin (a gear, bearing, spring, fastener, steel section...) keeps, in a
 // 'Rodeo Machine Part' record on what it places, the twin's tool, the tool's settings as they were
 // (JSON) and where it was placed and turned. The command builds each selected part's 3D version
@@ -172,7 +172,7 @@ function remembered(id: string): Remembered | null {
 /** Create 3D Object From 2D wants something selected. */
 export const canCreate3DFrom2D = (): boolean => store.selection.size > 0;
 
-/** AEC > Machine Design > Create 3D Object From 2D: one undo step; the 3D parts made are selected. */
+/** Tools > Machine Design > Create 3D Object From 2D: one undo step; the 3D parts made are selected. */
 export function create3DObjectFrom2D(): void {
   const parts: Remembered[] = [];
   const without: string[] = [];

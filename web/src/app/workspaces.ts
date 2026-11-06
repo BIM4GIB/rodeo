@@ -46,7 +46,7 @@ interface WorkspaceFile {
   readonly toolDisplay?: string;
   /** the menus as Menus… arranged them, null for the defaults; absent in older files */
   readonly menus?: MenuLayout | null;
-  /** Window > View Panes' arrangement; absent in older files */
+  /** View > Multiple View Panes' arrangement; absent in older files */
   readonly panes?: PaneArrangement;
   /** the preferences the View bar's Quick Preferences lists; absent in older files */
   readonly quickPrefs?: string[];

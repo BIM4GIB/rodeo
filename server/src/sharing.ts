@@ -211,7 +211,7 @@ export function registerSharing(app: Hono): void {
     if (!share) fail(404, "Share link not found", "not_found");
     requireRole(share.file_id, user.id, CAN_EDIT, "Only the owner or an editor can revoke share links");
     if (get<{ x: number }>("SELECT 1 AS x FROM gallery_entries WHERE share_token = ?", token)) {
-      fail(400, "This link is the drawing's gallery page. Unpublish it from File › Publish to Gallery… instead.");
+      fail(400, "This link is the drawing's gallery page. Unpublish it from File › Share › Publish to Gallery… instead.");
     }
     run("UPDATE shares SET revoked_at = ? WHERE token = ?", nowIso(), token);
     return c.body(null, 204);

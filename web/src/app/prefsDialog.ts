@@ -171,7 +171,7 @@ export async function preferencesDialog(): Promise<void> {
       field("Interface", themePick),
       field("Language", languagePick),
       blackRow,
-      note("The drawing on black, its colours keeping their hue (View > Dark Canvas)."),
+      note("The drawing on black, its colours keeping their hue (View > Appearance > Dark Canvas)."),
     ),
     edit: h(
       "div",

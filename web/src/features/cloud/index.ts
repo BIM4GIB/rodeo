@@ -1,6 +1,6 @@
 // cloud feature: registers itself with app/ext.ts when imported. It adds the File menu's
 // cloud rows (Open from Cloud… after Open Recent, Save to Cloud… after Save As…, Version
-// History and Share… after Revert), the Version History palette, the start hub's Open from
+// History and the Share submenu after Revert), the Version History palette, the start hub's Open from
 // Cloud… and its Recent cloud drawings, the links that open drawings (?file, ?invite, ?share, ?embed) and autosave for
 // cloud drawings. Nothing shows unless the server offers cloud drawings (GET /api/config).
 
@@ -17,7 +17,7 @@ import { openShareDialog } from "./share.ts";
 import { cloudOpenButton, watchCloudRecent } from "./welcome.ts";
 import "./urls.ts";
 
-/** Share… is for a cloud drawing its user can change: an owner or an editor. */
+/** People and Links… is for a cloud drawing its user can change: an owner or an editor. */
 function canShare(): boolean {
   const s = documentSource();
   return isCloudSource(s) && CAN_EDIT.includes(s.role);
@@ -50,13 +50,19 @@ registerMenu(
     cloudOffered()
       ? [
           { label: "Version History", run: showHistory },
+          // File › Share: gallery/index.ts and collab/index.ts add their rows to it
           {
-            label: "Share…",
-            enabled: canShare,
-            run: () => {
-              const open = openCloudDrawing();
-              if (open) openShareDialog(open.id);
-            },
+            label: "Share",
+            items: [
+              {
+                label: "People and Links…",
+                enabled: canShare,
+                run: () => {
+                  const open = openCloudDrawing();
+                  if (open) openShareDialog(open.id);
+                },
+              },
+            ],
           },
         ]
       : [],

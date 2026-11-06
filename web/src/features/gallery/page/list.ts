@@ -124,7 +124,7 @@ export function showList(main: HTMLElement, params: URLSearchParams): void {
     cls: "gal-lede",
     text: "Open drawings of houses, furniture and student work. Look round them in 3D, download them, or fork one into your own drawings and make it yours.",
   });
-  const note = h("p", { cls: "gal-note", text: "Publish yours from Rodeo: File › Publish to Gallery…" });
+  const note = h("p", { cls: "gal-note", text: "Publish yours from Rodeo: File › Share › Publish to Gallery…" });
   lede.hidden = filtered;
   note.hidden = filtered;
   const chips = h("nav", { cls: "gal-chips", attrs: { "aria-label": "Filter drawings" } });
@@ -167,7 +167,7 @@ export function showList(main: HTMLElement, params: URLSearchParams): void {
   const emptyText = (): string => {
     if (view.reported) return "Nothing is reported or hidden.";
     if (view.q) return `No drawings match “${view.q}”.`;
-    if (!filtered) return "Nothing here yet. Be the first: open a cloud drawing in Rodeo and choose File › Publish to Gallery…";
+    if (!filtered) return "Nothing here yet. Be the first: open a cloud drawing in Rodeo and choose File › Share › Publish to Gallery…";
     return "No drawings here yet.";
   };
   const setHeading = (): void => {

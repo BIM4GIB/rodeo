@@ -42,7 +42,7 @@ export interface Look {
 const NO_TOOLS: ToolOverlay = { moveDelta: () => null, fillPreview: () => null, drawOverlay: () => {} };
 const NONE: ReadonlySet<string> = new Set<string>();
 const NOOP = (): void => {};
-/** View > Dark Canvas: the drawing's ink and paper swap, as the editor's canvas does it */
+/** View > Appearance > Dark Canvas: the drawing's ink and paper swap, as the editor's canvas does it */
 const INVERT = "invert(1) hue-rotate(180deg)";
 const FONT = `Arial, "Helvetica Neue", Helvetica, sans-serif`;
 /** frames wait this long (in tries of 25 ms) for images to decode, then go on without them */

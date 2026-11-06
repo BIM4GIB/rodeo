@@ -12,7 +12,7 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
     title: "What a plug-in is",
     blocks: [
       ["p", "A plug-in is a JavaScript file. It runs in its own Web Worker and reaches the drawing only through the openvwx object: every call is checked against the API, and the rest of the page is out of its reach."],
-      ["p", "Write one in the editor (Plug-ins > Plug-in Manager… > New Plug-in), import a .js file, or start from the three examples, which are installed turned off."],
+      ["p", "Write one in the editor (Tools > Plug-ins > Plug-in Manager… > New Plug-in), import a .js file, or start from the three examples, which are installed turned off."],
       ["p", "This is about honesty, not security. The worker has no page, cookies or storage to touch, and plug-ins that cannot be trusted should not be installed. It is not a sandbox that holds out a determined attacker."],
     ],
   },
@@ -90,7 +90,7 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
   {
     title: "Script Console",
     blocks: [
-      ["p", "Window > Script Console… evaluates a line with the same API: a line that is an expression gives its value; anything else runs as the body of an async function. Up and down arrows walk the history. Restart forgets the variables."],
+      ["p", "Tools > Plug-ins > Script Console… evaluates a line with the same API: a line that is an expression gives its value; anything else runs as the body of an async function. Up and down arrows walk the history. Restart forgets the variables."],
     ],
   },
 ];

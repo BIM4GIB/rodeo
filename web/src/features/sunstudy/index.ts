@@ -20,7 +20,7 @@ registerMenu("View", () => [
       toggleStudy().catch(report);
     },
   },
-]);
+], { after: "Set Sun Position…" });
 
 registerMenu("File › Export", () => [
   {

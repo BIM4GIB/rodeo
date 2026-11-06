@@ -1,4 +1,4 @@
-// The gallery in the editor: File › Publish to Gallery… and File › Browse the Gallery, a Gallery link
+// The gallery in the editor: File › Share › Publish to Gallery… and Browse the Gallery, a Gallery link
 // in the start hub's footer, the top bar's chip on a drawing forked from the gallery, and the note
 // after a fork opens (?forked=1). The gallery's own page is page/, a separate entry (gallery.html).
 
@@ -14,16 +14,14 @@ import { cloudOffered, saveDrawingToCloud } from "../cloud/cloud.ts";
 import { forkedChip } from "./forked.ts";
 import { openPublishDialog } from "./publish.ts";
 
-registerMenu(
-  "File",
-  () =>
-    cloudOffered()
-      ? [
-          { label: "Publish to Gallery…", enabled: () => store.session !== null, run: () => void publishFront() },
-          { label: "Browse the Gallery", run: () => void window.open("/gallery", "_blank", "noopener") },
-        ]
-      : [],
-  { after: "Share…" },
+// File › Share (cloud/index.ts), after a separator
+registerMenu("File › Share", () =>
+  cloudOffered()
+    ? [
+        { label: "Publish to Gallery…", enabled: () => store.session !== null, run: () => void publishFront() },
+        { label: "Browse the Gallery", run: () => void window.open("/gallery", "_blank", "noopener") },
+      ]
+    : [],
 );
 
 registerTopBar(forkedChip, "right");
@@ -34,7 +32,7 @@ registerUrlHandler("forked", () => {
   dropParams("forked");
 });
 
-/** File › Publish to Gallery…: the drawing in front, saved to the cloud first when it is not there yet. */
+/** File › Share › Publish to Gallery…: the drawing in front, saved to the cloud first when it is not there yet. */
 async function publishFront(): Promise<void> {
   const source = documentSource();
   if (isCloudSource(source)) {

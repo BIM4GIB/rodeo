@@ -234,7 +234,7 @@ function ownerPanel(e: GalleryEntry, fileId: string): HTMLElement {
     "div",
     { cls: "gal-owner" },
     h("p", { cls: "gal-panel-title", text: "This is yours." }),
-    h("p", { cls: "gal-muted", text: "Change the details, the version or the cover from File › Publish to Gallery… in Rodeo." }),
+    h("p", { cls: "gal-muted", text: "Change the details, the version or the cover from File › Share › Publish to Gallery… in Rodeo." }),
     h(
       "div",
       { cls: "gal-actions" },
