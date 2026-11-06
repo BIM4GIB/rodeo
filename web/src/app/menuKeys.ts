@@ -8,6 +8,7 @@
 import { h } from "./dom.ts";
 import { shortcutText, type Item, type Row } from "./menu.ts";
 import { showDialog } from "./menubar.ts";
+import { onLanguage, t } from "./i18n.ts";
 
 const STORAGE_KEY = "openvwx.menukeys.v1";
 const SEP = " › ";
@@ -83,17 +84,19 @@ function save(next: Changes): void {
   for (const fn of listeners) fn();
 }
 
-/** A tooltip naming the command's shortcut, "Undo (⌘Z)", or the label alone when it has none. */
+/** A tooltip naming the command's shortcut, "Undo (⌘Z)", or the label alone when it has none, in the interface's language. */
 function titleWithKey(el: HTMLElement): void {
   const label = (el.dataset.keyLabel ??= el.title.replace(/\s*\([^)]*\)$/, ""));
   const keys = menuKeyOf(el.dataset.menuKey ?? "");
-  el.title = keys ? `${label} (${shortcutText(keys)})` : label;
+  el.title = keys ? `${t(label)} (${shortcutText(keys)})` : t(label);
 }
 
 /** Re-titles every element that names a command's shortcut (data-menu-key). */
 function syncTitles(): void {
   for (const el of document.querySelectorAll<HTMLElement>("[data-menu-key]")) titleWithKey(el);
 }
+
+onLanguage(syncTitles);
 
 /** Gives `el` the tooltip `label` with the shortcut of the command at `path`, kept in step with Menu Shortcuts…. */
 export function keyTitle(el: HTMLElement, label: string, path: string): void {

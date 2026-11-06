@@ -13,12 +13,23 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <!-- the theme before the first paint (theme.ts keeps it after) -->
+    <!-- the theme before the first paint (theme.ts keeps it after); a language other than English
+         hides the page until i18n.ts has translated it (styles.css shows it after 3 s whatever happens) -->
     <script>
       try {
         document.documentElement.dataset.theme = localStorage.getItem("openvwx.theme") || "dark";
       } catch {
         document.documentElement.dataset.theme = "dark";
+      }
+      try {
+        var lang = localStorage.getItem("openvwx.language");
+        if (lang === null) {
+          var asked = (navigator.languages || [navigator.language])[0] || "";
+          lang = /^zh(-cn|-sg|-hans.*)?$/i.test(asked) ? "zh-CN" : "en";
+        }
+        if (lang !== "en") document.documentElement.classList.add("i18n-pending");
+      } catch {
+        // storage blocked: English, or the browser's language once i18n.ts has it
       }
     </script>
     <link rel="stylesheet" href="./src/styles.css" />
@@ -32,7 +43,7 @@
         <div class="tb-side tb-left">
           <button class="tb-icon" id="btn-menu" title="Menu" aria-label="Menu"></button>
           <div class="file-info">
-            <span class="file-name" id="file-name">Rodeo</span>
+            <span class="file-name" id="file-name" translate="no">Rodeo</span>
             <span class="dirty-dot" id="dirty-dot" title="Unsaved changes" hidden></span>
           </div>
         </div>
@@ -45,17 +56,17 @@
           </div>
           <div class="tb-tools" id="tb-tools" role="toolbar" aria-label="Tools"></div>
           <div class="tb-group" id="tb-undo">
-            <button class="tb-icon" id="btn-undo" title="Undo (⌘Z)" data-menu-key="Edit › Undo" aria-label="Undo"></button>
-            <button class="tb-icon" id="btn-redo" title="Redo (⇧⌘Z)" data-menu-key="Edit › Redo" aria-label="Redo"></button>
+            <button class="tb-icon" id="btn-undo" title="Undo (⌘Z)" data-key-label="Undo" data-menu-key="Edit › Undo" aria-label="Undo"></button>
+            <button class="tb-icon" id="btn-redo" title="Redo (⇧⌘Z)" data-key-label="Redo" data-menu-key="Edit › Redo" aria-label="Redo"></button>
           </div>
         </div>
         <div class="tb-side tb-right">
           <div class="tb-group" id="vb-zoom">
-            <button class="tb-icon" id="btn-fit" title="Fit (⌘0)" data-menu-key="View › Fit to Window" aria-label="Fit to window"></button>
+            <button class="tb-icon" id="btn-fit" title="Fit (⌘0)" data-key-label="Fit" data-menu-key="View › Fit to Window" aria-label="Fit to window"></button>
           </div>
           <div class="spacer"></div>
           <div class="tb-split" id="save-split" role="group" aria-label="Save and export">
-            <button class="tb-btn primary tb-split-main" id="btn-save" title="Save (⌘S)" data-menu-key="File › Save">Save</button>
+            <button class="tb-btn primary tb-split-main" id="btn-save" title="Save (⌘S)" data-key-label="Save" data-menu-key="File › Save">Save</button>
             <button class="tb-btn primary tb-split-caret" id="btn-save-menu" title="Save, export and print" aria-label="Save, export and print"></button>
           </div>
         </div>
@@ -76,8 +87,8 @@
             <div class="pill modebar" id="modebar" role="toolbar" aria-label="Mode bar"></div>
             <span class="pill sb-snaps" id="snapbar" role="group" aria-label="Snapping">
               <label class="sb-toggle" title="Snap to objects"><input type="checkbox" id="snap-objects" /><span class="sb-icon" data-icon="snap-objects"></span></label>
-              <label class="sb-toggle" title="Grid (⌘')" data-menu-key="View › Show Grid"><input type="checkbox" id="grid-show" /><span class="sb-icon" data-icon="grid-show"></span></label>
-              <label class="sb-toggle" title="Snap to grid (⇧⌘')" data-menu-key="View › Snap to Grid"><input type="checkbox" id="snap-grid" /><span class="sb-icon" data-icon="snap-grid"></span></label>
+              <label class="sb-toggle" title="Grid (⌘')" data-key-label="Grid" data-menu-key="View › Show Grid"><input type="checkbox" id="grid-show" /><span class="sb-icon" data-icon="grid-show"></span></label>
+              <label class="sb-toggle" title="Snap to grid (⇧⌘')" data-key-label="Snap to grid" data-menu-key="View › Snap to Grid"><input type="checkbox" id="snap-grid" /><span class="sb-icon" data-icon="snap-grid"></span></label>
               <button class="sb-more" id="btn-snapping" title="Snapping" aria-label="Snapping"></button>
             </span>
           </div>

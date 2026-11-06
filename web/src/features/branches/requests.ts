@@ -318,7 +318,7 @@ function commentBox(c: Comment): HTMLElement {
     "div",
     { cls: "br-comment" },
     h("div", { cls: "br-comment-head", text: `${c.authorName} · ${timeAgo(c.createdAt)}` }),
-    h("div", { cls: "br-comment-body", text: c.body }),
+    h("div", { cls: "br-comment-body", text: c.body, attrs: { translate: "no" } }),
   );
 }
 

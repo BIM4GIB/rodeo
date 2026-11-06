@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-06T22:10:00Z",
+    "language",
+    "Rodeo in Simplified Chinese",
+    `The interface can now be shown in Simplified Chinese (简体中文), and more languages can follow.
+- Rodeo starts in Chinese when your browser asks for it. Change it any time with the globe at the end of the start screen's footer, or in Edit › Preferences › General.
+- Menus, tools, palettes, dialogs and messages are translated; the change is immediate and keeps your drawing open.
+- Your drawing's own names and text stay as written, and saved files are the same in any language.
+- Translations are welcome on GitHub: CONTRIBUTING.md explains how.`,
+    "language",
+  ),
+  release(
     "2026-11-06T22:00:00Z",
     "landmark",
     "Vectorworks Landmark files open, edit and schedule",

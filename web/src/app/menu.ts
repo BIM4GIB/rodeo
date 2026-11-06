@@ -21,6 +21,8 @@ export interface Item {
   readonly icon?: string;
   /** rows of a submenu, opened on hover instead of running; a function is read each time it opens */
   readonly items?: readonly Row[] | (() => readonly Row[]);
+  /** the key its label is translated by where the label alone could mean something else (i18n.ts): "Menu › Window" */
+  readonly i18n?: string;
 }
 
 const ARROW = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -129,7 +131,7 @@ function rowButton(row: Item): { btn: HTMLButtonElement; update: () => void } {
     "button",
     { cls: "menu-item", attrs: { type: "button", role: "menuitem" } },
     check,
-    h("span", { cls: "menu-label", text: row.label }),
+    h("span", { cls: "menu-label", text: row.label, attrs: row.i18n ? { "data-i18n": row.i18n } : undefined }),
     row.keys !== undefined ? h("kbd", { cls: "menu-keys", text: shortcutText(row.keys) }) : null,
     row.items ? h("span", { cls: "menu-arrow", html: ARROW }) : null,
   );

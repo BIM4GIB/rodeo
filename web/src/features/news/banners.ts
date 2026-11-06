@@ -193,6 +193,12 @@ const ART = {
   plan3d: ink(rect(24, 13, 26, 20) + "M37 13v9M55 24h8M60 21l3 3-3 3") + house,
   // structural grid lines with bubbles, and a revision cloud with its tag
   grid: inkDash("M34 15v29M58 15v29M22 34h52") + ink(ellipse(34, 9, 5) + ellipse(58, 9, 5)) + acc(revCloud(70, 13, 24, 16, 5.5)) + afill("M98 36l4 7h-8z"),
+  // a globe, and a speech bubble saying "A" and "文"
+  language:
+    ink(ellipse(44, 24, 14) + ellipse(44, 24, 6, 14) + "M30 24h28M32 17h24M32 31h24") +
+    tint(rect(66, 9, 32, 19, 4)) +
+    acc(rect(66, 9, 32, 19, 4) + "M74 28l-3 7 9-7") +
+    ink("M71 23.5l3.8-9.5 3.8 9.5M72.5 20h4.6M84 14.5h9M88.5 12v2.5M85.5 16.5c1.8 3.6 4 5.6 7 7M91.5 16.5c-1.5 3.6-3.5 5.6-6.5 7"),
   // a megaphone, for announcements
   announce: ink("M38 20h8l16-9v26l-16-9h-8zM42 28l2 8h4l-1-8") + acc("M68 18a8 8 0 0 1 0 12M73 14a14 14 0 0 1 0 20"),
 };

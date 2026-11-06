@@ -37,6 +37,7 @@ import { gridStep } from "./snap.ts";
 import { bboxOfPoints, unionBBox } from "./geom.ts";
 import { buildGeom, fillsShape, outlineOf, type Geom } from "./shapes.ts";
 import { FONT, paintText } from "./textPaint.ts";
+import { t } from "./i18n.ts";
 
 /**
  * The selection's colour, its handles' and the tools' previews; with PRESELECT and SNAP_COLOR set by
@@ -1560,7 +1561,7 @@ export class Renderer {
       }
       ctx.setLineDash([]);
     }
-    const label = "Editing group · Esc to leave";
+    const label = t("Editing group · Esc to leave");
     ctx.font = `12px ${FONT}`;
     const w = ctx.measureText(label).width + 20;
     const x = Math.round(view.width / 2 - w / 2);

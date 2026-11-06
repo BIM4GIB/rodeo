@@ -179,7 +179,7 @@ export async function editWorksheet(index?: number): Promise<void> {
       tds.push(line);
       body.append(h("tr", { cls: db ? "db" : "" }, h("th", { cls: "ws-row", text: db ? `${r + 1} ▸` : String(r + 1), attrs: { scope: "row" } }), ...line));
     }
-    const table = h("table", { cls: "ws-grid" }, h("thead", {}, head), body);
+    const table = h("table", { cls: "ws-grid", attrs: { translate: "no" } }, h("thead", {}, head), body);
     table.addEventListener("pointerdown", (e) => {
       const td = (e.target as HTMLElement).closest("td");
       if (!td?.dataset.row) return;

@@ -57,6 +57,11 @@
   --topbar-h: 48px;
 }
 
+/* Chinese (i18n.ts sets <html lang>): the system's Chinese faces for the characters Spline Sans lacks */
+:root:lang(zh) {
+  --font: "Spline Sans", "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+}
+
 :root[data-theme="light"] {
   color-scheme: light;
   --chrome: #f6f6f6;

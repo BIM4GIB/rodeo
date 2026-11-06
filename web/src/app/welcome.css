@@ -209,6 +209,36 @@
   color: var(--text);
 }
 
+/* the language picker, at the footer's end: a globe and a list that reads as a link */
+.hub-lang {
+  order: 1;
+  margin-left: auto;
+}
+
+.hub-lang-icon {
+  display: inline-flex;
+}
+
+.hub-lang-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.hub-lang-select {
+  appearance: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hub-lang-select:focus-visible {
+  outline: 1px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+
 .hub-fine {
   margin: 0;
   max-width: 560px;

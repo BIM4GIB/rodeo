@@ -385,7 +385,7 @@ function chatView(start: DrawingRef | null): Chat {
     const el = h("div", { cls: "ag-user" });
     if (pics.length) el.append(h("div", { cls: "ag-user-pics" }, ...pics.map((url) => thumb(url, null, "Attached picture"))));
     if (names.length) el.append(h("div", { cls: "ag-user-files" }, ...names.map((n) => h("span", { cls: "ag-file", html: ICONS.file }, n))));
-    if (text) el.append(h("div", { cls: "ag-user-text", text }));
+    if (text) el.append(h("div", { cls: "ag-user-text", text, attrs: { translate: "no" } }));
     log.append(el);
     stick = true;
     follow();
@@ -415,7 +415,7 @@ function chatView(start: DrawingRef | null): Chat {
     settle(s);
     endReasoning(s);
     if (!s.text) {
-      const el = h("div", { cls: "ag-md" });
+      const el = h("div", { cls: "ag-md", attrs: { translate: "no" } });
       s.el.append(el);
       s.text = { el, src: "", timer: 0 };
     }
@@ -427,10 +427,10 @@ function chatView(start: DrawingRef | null): Chat {
   function addReasoning(s: Sink, delta: string, live = true): void {
     settle(s);
     if (!s.reasoning) {
-      const body = h("div", { cls: "ag-reason-body" });
+      const body = h("div", { cls: "ag-reason-body", attrs: { translate: "no" } });
       body.addEventListener("scroll", () => (body.dataset.pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 24 ? "1" : "0"));
       const label = h("span", { cls: "ag-reason-label", text: live ? "Thinking" : "Thought" });
-      const line = h("span", { cls: "ag-reason-line" });
+      const line = h("span", { cls: "ag-reason-line", attrs: { translate: "no" } });
       const el = h("details", { cls: `ag-reason${live ? " live" : ""}` }, h("summary", {}, label, line), body);
       s.el.append(el);
       s.reasoning = { el, body, label, line, src: "", started: Date.now(), timer: 0 };

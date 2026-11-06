@@ -1934,7 +1934,7 @@ export function mountMenuBar(button: HTMLButtonElement, deps: MenuDeps): MenuBar
   registerMenus(builtMenus);
   registerMenuLayout(builtMenus);
   button.innerHTML = UI_ICON.menu;
-  menuButton(button, () => arrangeMenus(keyedMenus()).map((def): Row => ({ label: def.title, items: def.rows })));
+  menuButton(button, () => arrangeMenus(keyedMenus()).map((def): Row => ({ label: def.title, items: def.rows, i18n: `Menu › ${def.title}` })));
   return {
     menus: () => arrangeMenus(keyedMenus()),
     drawing(x, y, under, behind = null, coincident = [], pick): void {

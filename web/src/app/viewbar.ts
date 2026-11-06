@@ -167,6 +167,7 @@ export function standardViewRows(actions: View3dActions): Row[] {
     { label: "Rotated Top/Plan", enabled: () => hasPlanRotation() && canRotatePlan(), checked: () => !store.view3d && planRotated(), run: rotatedPlan },
     ...STANDARD_VIEWS.map(([preset, label]) => ({
       label,
+      i18n: `View › ${label}`,
       enabled: () => store.session !== null,
       run: () => actions.standardView(preset),
     })),

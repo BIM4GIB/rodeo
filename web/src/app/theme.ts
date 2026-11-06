@@ -58,5 +58,5 @@ export function installTheme(): void {
 
 /** View > Theme. */
 export function themeRows(): Row[] {
-  return THEMES.map(([t, label]) => ({ label, checked: () => theme() === t, run: () => setTheme(t) }));
+  return THEMES.map(([t, label]) => ({ label, i18n: `Theme › ${label}`, checked: () => theme() === t, run: () => setTheme(t) }));
 }

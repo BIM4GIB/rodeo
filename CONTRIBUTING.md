@@ -55,6 +55,8 @@ it all the same: read it, run it, and be ready to explain any line of it.
   feature and whether Rodeo has it yet.
 - **Format findings.** Something you've learned about the `.vwx` format goes
   in [FORMAT.md](FORMAT.md), with how sure you are.
+- **Translations.** Better wording, the text a language doesn't cover yet,
+  or a new language: see [Translating Rodeo](#translating-rodeo).
 
 ## Getting started
 
@@ -120,6 +122,42 @@ the problem, describe the bytes in the issue, or build a small file yourself
   documentation to the README.
 - A change people will notice also gets an entry in
   `web/src/features/news/releases.ts`, which feeds What's New.
+
+## Translating Rodeo
+
+The source keeps its text in English, and `web/src/app/i18n.ts` translates the
+page as it shows. Each language is one JSON file in `web/src/i18n/`, mapping
+the English to the language:
+
+```json
+{
+  "Open file…": "打开文件…",
+  "{0} objects selected": "已选择 {0} 个对象",
+  "Menu › Window": "窗口"
+}
+```
+
+- `{0}`, `{1}`… stand for text filled in as Rodeo runs (a number, a name);
+  keep each one, in whatever order reads well.
+- A key like `Menu › Window` is for an English word with two meanings: the
+  menu called Window, against the plain `"Window"` (the window tool).
+- Text a person wrote (names, worksheet cells, chat) is never translated:
+  mark its element `translate="no"` when you add one.
+
+To see what a language is missing, from `web/`:
+
+```sh
+npx tsx scripts/i18n.ts missing zh-CN          # with where each text is
+npx tsx scripts/i18n.ts missing zh-CN --json   # as JSON to fill in
+npx tsx scripts/i18n.ts count zh-CN
+```
+
+In the dev server, `openvwxMissingText()` in the browser console lists the
+text the page showed without a translation.
+
+To add a language, add its file and a line to `LANGUAGES` in `i18n.ts` (the
+code, its name in itself, and how it writes a label's colon), and teach
+`browserLanguage()` its codes.
 
 ## Style
 

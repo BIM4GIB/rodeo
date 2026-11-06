@@ -61,7 +61,7 @@ export function mountViewports(root: HTMLElement, scene: Scene, view: View): voi
       h(
         "div",
         { cls: "names" },
-        h("div", { cls: "name", text: vp.name || `Viewport ${n}` }),
+        h("div", { cls: "name", text: vp.name || `Viewport ${n}`, attrs: vp.name ? { translate: "no" } : undefined }),
         h("div", { cls: "sub", text: vp.plan ? "Plan" : "Section, elevation or 3D" }),
       ),
       h("span", { cls: "badge", text: `1:${Math.round(vp.scale * 1000) / 1000}` }),
@@ -100,7 +100,7 @@ export function mountViewports(root: HTMLElement, scene: Scene, view: View): voi
         h(
           "div",
           { cls: active ? "list-head active" : "list-head" },
-          h("span", { cls: "name", text: sheet.name }),
+          h("span", { cls: "name", text: sheet.name, attrs: { translate: "no" } }),
           sheet.title ? h("span", { cls: "sub", text: sheet.title }) : null,
         ),
         ...shown.map(({ vp, n }) => row(sheet, vp, n)),

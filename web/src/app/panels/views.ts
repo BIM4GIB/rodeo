@@ -330,7 +330,7 @@ export function mountViews(root: HTMLElement, view: View): SavedViews {
   };
 
   const viewRow = (v: SavedView): HTMLElement => {
-    const nameText = h("div", { cls: "name", text: v.name, title: "Double-click to rename" });
+    const nameText = h("div", { cls: "name", text: v.name, title: "Double-click to rename", attrs: { translate: "no" } });
     const modes = h("div", { cls: "sub", text: modesText(v) });
     const names = h("div", { cls: "names" }, nameText, modes);
     const visBox = h("input", { checked: v.restoreVisibility, attrs: { type: "checkbox", "aria-label": `Restore visibility with ${v.name}` } });

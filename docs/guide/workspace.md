@@ -270,11 +270,19 @@ Object Info names any object. Names are unique in a drawing; emptied, the object
 
 ## Preferences
 
+### Language
+
+Rodeo's interface comes in English and Simplified Chinese (简体中文). It starts in your browser's language when it has it, and otherwise in English. To change it, use the globe at the end of the start screen's footer, or the Language list in **Edit › Preferences…** › General. The change is immediate, keeps the open drawing as it is, and is remembered in this browser.
+
+Only the interface is translated. Your drawing's own text (layer, class and resource names, record fields, worksheets, text objects) stays as it was written, and files you save or export are the same whatever the interface's language.
+
+**Limits:** some messages, mostly rarer ones and those built from several parts, still show in English. The What's New window stays in English. Traditional Chinese isn't offered yet. Translations are welcome: see "Translating Rodeo" in CONTRIBUTING.md.
+
 ### The Preferences dialog
 
 **Edit › Preferences…** (<kbd>⌘,</kbd>) has Vectorworks 2026's panes beside a list, kept in the browser:
 
-- **General**: the interface theme, a black background.
+- **General**: the interface theme, the language, a black background.
 - **Edit**: whether Duplicate offsets its copies a grid step or leaves them on the originals; whether the mouse wheel zooms or scrolls the drawing, Shift scrolling sideways and ⌘ or Ctrl zooming (a pinch always zooms).
 - **Display**: zoomed line thickness; Show other objects while in editing modes, which while a group is edited draws the rest of the drawing grayed, or without it neither draws nor snaps to it.
 - **Session**: tool help in the Mode bar.
