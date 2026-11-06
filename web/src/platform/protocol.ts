@@ -80,6 +80,8 @@ export interface Announcement {
   readonly url: string | null;
   /** ISO date it was posted; the list shows the newest first */
   readonly date: string;
+  /** also shown once as a bar across the top of the editor, until this date (ISO); absent or null: only in What's new */
+  readonly bannerUntil?: string | null;
 }
 
 export type FeedbackKind = "bug" | "idea" | "other";
@@ -622,7 +624,7 @@ export interface AdminOverview {
     /** the check after a file comes in, by answer: "asked", "failed", "ok", "report", "closed" */
     readonly checks: readonly Tally[];
   };
-  /** what waits in the editor's admin windows */
+  /** what waits on the admin page's Feedback and Errors tabs */
   readonly inbox: { readonly feedback: number; readonly errors: number };
 }
 
@@ -697,6 +699,199 @@ export interface AdminLedgerRow {
 export interface AdminSettings {
   /** credit each new account starts with (0: none) */
   readonly welcomeCredit: number;
+}
+
+/** Someone in the editor now (heard from in the last 3 minutes): one visitor-day row of the visits table. */
+export interface AdminLiveVisitor {
+  /** the day's visitor hash, cut short: stable between polls the same day, for keeping a dot in place */
+  readonly key: string;
+  /** the account, when signed in */
+  readonly member: { readonly id: string; readonly name: string; readonly email: string } | null;
+  /** two-letter country, city and region (Cloudflare's), when known */
+  readonly country: string | null;
+  readonly city: string | null;
+  readonly region: string | null;
+  /** roughly where (Cloudflare's, rounded to 0.1°); null when unknown, and the globe uses the country's middle */
+  readonly lat: number | null;
+  readonly lon: number | null;
+  readonly device: string;
+  readonly browser: string;
+  readonly os: string;
+  readonly entry: VisitEntry;
+  readonly referrer: string | null;
+  /** came today at, last heard from at (ISO) */
+  readonly firstAt: string;
+  readonly lastAt: string;
+  /** drawings opened today */
+  readonly opens: number;
+}
+
+/** GET /api/admin/live: who is in the editor now. The admin page asks every 10 s on its Live tab. */
+export interface AdminLive {
+  /** the server's time (ISO) */
+  readonly at: string;
+  /** newest first, at most 300; admins left out */
+  readonly visitors: readonly AdminLiveVisitor[];
+  /** people in the editor once a minute, oldest first, the last 60 minutes the server has been up (it forgets on restart) */
+  readonly recent: readonly { readonly at: string; readonly guests: number; readonly members: number }[];
+  /** today (UTC) so far */
+  readonly today: { readonly visitors: number; readonly members: number; readonly signups: number; readonly opens: number };
+  /** drawings open in a live session (cloud drawings), the people in them, and how many have two or more */
+  readonly sessions: { readonly drawings: number; readonly people: number; readonly together: number };
+}
+
+/** A place visitors came from in the period: a city where Cloudflare named one, else the country alone. */
+export interface AdminPlace {
+  readonly country: string;
+  readonly city: string | null;
+  readonly region: string | null;
+  /** the city's rough position, or null (the globe uses the country's middle) */
+  readonly lat: number | null;
+  readonly lon: number | null;
+  readonly visits: number;
+  /** different accounts */
+  readonly members: number;
+}
+
+/** A country's row in GET /api/admin/geo. */
+export interface AdminCountry {
+  /** two letters */
+  readonly code: string;
+  readonly visits: number;
+  readonly members: number;
+  /** accounts made in the period whose visit that day came from here */
+  readonly signups: number;
+  readonly opens: number;
+  /** the middle visit's minutes */
+  readonly medianMinutes: number;
+}
+
+/** GET /api/admin/geo?days=N: where the period's visitors were. Admins left out. */
+export interface AdminGeo {
+  readonly days: number;
+  /** most visits first, every country */
+  readonly countries: readonly AdminCountry[];
+  /** most visits first, at most 400 */
+  readonly places: readonly AdminPlace[];
+  /** visits with a city known, and all visits: below 1, Cloudflare's location headers are off or new */
+  readonly located: number;
+  readonly total: number;
+}
+
+/** GET /api/admin/engagement?days=N: how people use the editor over time. Admins left out. */
+export interface AdminEngagement {
+  readonly days: number;
+  /** each day of the period: accounts in the editor that day, in the 7 days to it, and the 30 days to it */
+  readonly active: readonly { readonly day: string; readonly dau: number; readonly wau: number; readonly mau: number }[];
+  /** visits by the weekday (0 Sunday) and hour (UTC) they began: 7 rows of 24 */
+  readonly hours: readonly (readonly number[])[];
+  /** how long visits lasted, shortest first: "Under 1 min", "1–5 min", "5–15 min", "15–30 min", "30–60 min", "1–2 h", "Over 2 h" */
+  readonly lengths: readonly Tally[];
+  /** drawings opened in a visit: "None", "1", "2–3", "4–9", "10 or more" */
+  readonly opensPerVisit: readonly Tally[];
+  /** the period from visiting to paying, each step a subset of the one before as far as can be known */
+  readonly funnel: readonly { readonly label: string; readonly count: number; readonly note: string | null }[];
+  /** weekly sign-up cohorts (weeks start Monday, UTC), oldest first, at most 12: of those who joined, how many were in the editor each week after (weeks[0] = the week they joined) */
+  readonly cohorts: readonly { readonly week: string; readonly size: number; readonly weeks: readonly number[] }[];
+  /** signed-in visitors a day: accounts made in the last 7 days, and older ones */
+  readonly members: readonly { readonly day: string; readonly fresh: number; readonly returning: number }[];
+}
+
+/** GET /api/admin/revenue?days=N: what the period earned and what it cost. */
+export interface AdminRevenue {
+  readonly days: number;
+  /** the credit's currency, or null when this server has no credit (then the credit fields are 0) */
+  readonly currency: string | null;
+  readonly plus: {
+    readonly paid: number;
+    readonly given: number;
+    /** the prices as the sign-up page shows them ("£2/month") */
+    readonly monthlyLabel: string;
+    readonly yearlyLabel: string;
+  };
+  /** the agents' use in the period by model, most charged first */
+  readonly models: readonly {
+    readonly model: string;
+    readonly steps: number;
+    readonly users: number;
+    /** credit taken, in the currency */
+    readonly charged: number;
+    readonly costUsd: number;
+    readonly tokensIn: number;
+    readonly tokensOut: number;
+  }[];
+  /** cloud renders made in the period */
+  readonly renders: { readonly jobs: number; readonly finished: number; readonly failed: number; readonly gpuSeconds: number; readonly charged: number };
+  /** the accounts that used the most credit in the period, at most 10 */
+  readonly topSpenders: readonly { readonly id: string; readonly name: string; readonly email: string; readonly spent: number; readonly bought: number }[];
+  /** each day of the period: credit bought, credit taken for use, and what the providers charged for that use */
+  readonly daily: readonly { readonly day: string; readonly topups: number; readonly charged: number; readonly costUsd: number }[];
+  /** the period's credit taken and the providers' cost in the same currency (at the server's rate); null without credit */
+  readonly margin: { readonly charged: number; readonly cost: number } | null;
+}
+
+/** GET /api/admin/usage?days=N: what is in the cloud and what people make with Rodeo. */
+export interface AdminUsage {
+  readonly days: number;
+  readonly files: {
+    readonly total: number;
+    /** made in the period */
+    readonly fresh: number;
+    readonly versions: number;
+    readonly bytes: number;
+    /** branches of other drawings */
+    readonly branches: number;
+    /** with a share link */
+    readonly shared: number;
+    /** shared with other accounts as members */
+    readonly withMembers: number;
+    /** by the name's extension, most first */
+    readonly kinds: readonly Tally[];
+  };
+  /** cloud drawings made each day of the period */
+  readonly daily: readonly { readonly day: string; readonly files: number; readonly versions: number }[];
+  readonly gallery: { readonly published: number; readonly hidden: number; readonly openReports: number; readonly forks: number; readonly fresh: number };
+  /** in the period */
+  readonly comments: number;
+  readonly mergeRequests: number;
+  readonly agents: {
+    /** apps people let in with OAuth, and personal agent tokens, now */
+    readonly apps: number;
+    readonly tokens: number;
+    /** accounts that used the agents in the period */
+    readonly users: number;
+  };
+}
+
+/** One step an admin took, as the log keeps it. */
+export interface AdminLogEntry {
+  readonly id: number;
+  readonly at: string;
+  readonly admin: string;
+  /** "credit.grant", "user.suspend", "announcement.post", "gallery.hide"... */
+  readonly action: string;
+  /** what it was done to: an account's email, an announcement's title, a drawing's title */
+  readonly target: string | null;
+  readonly detail: string | null;
+}
+
+/** GET /api/admin/system: the server's health and what it is set up with. */
+export interface AdminSystem {
+  readonly version: string;
+  readonly node: string;
+  /** seconds since the server started */
+  readonly uptime: number;
+  readonly memory: { readonly rss: number; readonly heapUsed: number; readonly heapTotal: number };
+  /** bytes: the database (with its WAL), and the data disk's size and free space (null where unknown) */
+  readonly storage: { readonly database: number; readonly diskTotal: number | null; readonly diskFree: number | null };
+  /** rows in the main tables */
+  readonly tables: readonly Tally[];
+  /** what is set up, each with a word on how: [name, on, note] */
+  readonly features: readonly { readonly name: string; readonly on: boolean; readonly note: string | null }[];
+  readonly admins: readonly string[];
+  readonly publicUrl: string;
+  /** whether Cloudflare's visitor location headers reached the server in the last day (cities on the globe) */
+  readonly locationHeaders: boolean;
 }
 
 /** Ask an editor to save once this many changes are unsaved, or after this long. */

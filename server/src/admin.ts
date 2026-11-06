@@ -18,6 +18,7 @@ import type {
   Tally,
 } from "../../web/src/platform/protocol.ts";
 import { deleteAccount } from "./account.ts";
+import { logAdmin } from "./adminLog.ts";
 import { isAdmin, onNewUser, planOf, requireUser, type UserRow } from "./auth.ts";
 import { config } from "./config.ts";
 import { addCredit, MICRO } from "./credit.ts";
@@ -27,27 +28,28 @@ import { saveSetting, setting } from "./settings.ts";
 import { DAY, fail, inMs, MINUTE, nowIso } from "./util.ts";
 
 /** visits from these accounts are the admins' own, and left out of the numbers */
-const NOT_ADMIN = "(user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE email IN (SELECT value FROM json_each(?))))";
+export const NOT_ADMIN = "(user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE email IN (SELECT value FROM json_each(?))))";
 const PAGE = 50;
 /** in the editor this lately counts as there now (it pings each minute while in front) */
 const ONLINE = 3 * MINUTE;
 
-function requireAdmin(c: Context): UserRow {
+export function requireAdmin(c: Context): UserRow {
   const user = requireUser(c);
   if (!isAdmin(user)) fail(403, "Only admins can see this", "forbidden");
   return user;
 }
 
-function admins(): string {
+/** the admins' emails as JSON, for NOT_ADMIN's parameter */
+export function admins(): string {
   return JSON.stringify([...config.admins]);
 }
 
 /** "2026-11-03": the UTC day `n` days before today's (0: today). */
-function dayBefore(n: number): string {
+export function dayBefore(n: number): string {
   return new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
 }
 
-function nextDay(day: string): string {
+export function nextDay(day: string): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
 }
 
@@ -414,7 +416,7 @@ export function registerAdmin(app: Hono): void {
   // Rodeo Plus for `months` more (from now, or from the end of the plan they have), or, with 0,
   // ended now. Not for a plan paid through Stripe, whose webhook would undo it.
   app.post("/api/admin/users/:id/plus", async (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const user = target(c);
     const months = (await readJson(c)).months;
     if (typeof months !== "number" || !Number.isInteger(months) || months < 0 || months > 36) fail(400, "Give a whole number of months, up to 36");
@@ -423,17 +425,20 @@ export function registerAdmin(app: Hono): void {
     }
     if (months === 0) {
       run("UPDATE users SET supporter_until = NULL, plan = 'free' WHERE id = ?", user.id);
+      logAdmin(admin, "plus.end", user.email);
     } else {
       const base = planOf(user) === "supporter" && user.supporter_until ? new Date(user.supporter_until) : new Date();
       run("UPDATE users SET supporter_until = ?, plan = 'supporter' WHERE id = ?", addMonths(base, months).toISOString(), user.id);
+      logAdmin(admin, "plus.give", user.email, `${months} ${months === 1 ? "month" : "months"}`);
     }
     return c.json(detail(user.id));
   });
 
   app.post("/api/admin/users/:id/sign-out", (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const user = target(c);
     run("DELETE FROM sessions WHERE user_id = ?", user.id);
+    logAdmin(admin, "user.signout", user.email);
     return c.json(detail(user.id));
   });
 
@@ -447,16 +452,19 @@ export function registerAdmin(app: Hono): void {
     if (suspended && (isAdmin(user) || user.id === admin.id)) fail(400, "An admin can't be suspended");
     run("UPDATE users SET suspended_at = ? WHERE id = ?", suspended ? nowIso() : null, user.id);
     if (suspended) run("DELETE FROM sessions WHERE user_id = ?", user.id);
+    logAdmin(admin, suspended ? "user.suspend" : "user.unsuspend", user.email);
     return c.json(detail(user.id));
   });
 
   // for good: the body must name the account's email, as the admin typed it to confirm
   app.delete("/api/admin/users/:id", async (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const user = target(c);
     if (isAdmin(user)) fail(400, "An admin's account can't be deleted from here");
     const typed = (await readJson(c)).email;
     if (typeof typed !== "string" || typed.trim().toLowerCase() !== user.email) fail(400, "Type the account's email to delete it");
+    // logged before the delete: releasing the account's files after it can fail, and the step still happened
+    logAdmin(admin, "user.delete", user.email);
     await deleteAccount(user);
     return c.body(null, 204);
   });
@@ -468,12 +476,13 @@ export function registerAdmin(app: Hono): void {
   });
 
   app.put("/api/admin/settings", async (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const body = await readJson(c);
     const amount = body.welcomeCredit;
     if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0 || amount > 50) fail(400, "Welcome credit must be between 0 and 50");
     const out: AdminSettings = { welcomeCredit: Math.round(amount * 100) / 100 };
     saveSetting("admin", out);
+    logAdmin(admin, "settings.welcome", null, `${out.welcomeCredit}${config.credit ? ` ${config.credit.currency.toUpperCase()}` : ""}`);
     return c.json(out);
   });
 }

@@ -510,7 +510,29 @@ CREATE INDEX IF NOT EXISTS oauth_tokens_grant ON oauth_tokens(grant_id);
 CREATE INDEX IF NOT EXISTS oauth_tokens_expires ON oauth_tokens(expires_at);
 `;
 
-const MIGRATIONS: readonly string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10];
+// The admin page's map and log (visits.ts, adminLog.ts): where a visit came from, roughly, as
+// Cloudflare's visitor location headers say (city, region, and a position rounded to 0.1°, about
+// 10 km), and every step an admin took.
+const SCHEMA_V11 = `
+ALTER TABLE visits ADD COLUMN city TEXT;
+ALTER TABLE visits ADD COLUMN region TEXT;
+ALTER TABLE visits ADD COLUMN lat REAL;
+ALTER TABLE visits ADD COLUMN lon REAL;
+CREATE INDEX visits_day ON visits(day);
+
+CREATE TABLE admin_log (
+  id INTEGER PRIMARY KEY,
+  admin_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  admin_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  detail TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX admin_log_created ON admin_log(created_at);
+`;
+
+const MIGRATIONS: readonly string[] = [SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V4, SCHEMA_V5, SCHEMA_V6, SCHEMA_V7, SCHEMA_V8, SCHEMA_V9, SCHEMA_V10, SCHEMA_V11];
 
 let conn: DatabaseSync | null = null;
 const statements = new Map<string, StatementSync>();

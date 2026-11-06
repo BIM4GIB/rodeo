@@ -3,8 +3,15 @@
 // when there is no server, as on a static host: features then stay hidden.
 
 import type {
+  AdminEngagement,
+  AdminGeo,
+  AdminLive,
+  AdminLogEntry,
   AdminOverview,
+  AdminRevenue,
   AdminSettings,
+  AdminSystem,
+  AdminUsage,
   AdminUser,
   AdminUserDetail,
   AdminUserFilter,
@@ -461,6 +468,14 @@ export const adminApi = {
   remove: async (id: string, email: string): Promise<void> => void (await request("DELETE", `/admin/users/${encodeURIComponent(id)}`, { email })),
   settings: (): Promise<AdminSettings> => json<AdminSettings>("GET", "/admin/settings"),
   saveSettings: (s: AdminSettings): Promise<AdminSettings> => json<AdminSettings>("PUT", "/admin/settings", s),
+  live: (): Promise<AdminLive> => json<AdminLive>("GET", "/admin/live"),
+  geo: (days: number): Promise<AdminGeo> => json<AdminGeo>("GET", `/admin/geo?days=${days}`),
+  engagement: (days: number): Promise<AdminEngagement> => json<AdminEngagement>("GET", `/admin/engagement?days=${days}`),
+  revenue: (days: number): Promise<AdminRevenue> => json<AdminRevenue>("GET", `/admin/revenue?days=${days}`),
+  usage: (days: number): Promise<AdminUsage> => json<AdminUsage>("GET", `/admin/usage?days=${days}`),
+  system: (): Promise<AdminSystem> => json<AdminSystem>("GET", "/admin/system"),
+  /** the steps admins took, newest first, 50 at a time */
+  log: (offset: number): Promise<{ entries: AdminLogEntry[]; total: number }> => json("GET", `/admin/log?offset=${offset}`),
 };
 
 /** The live-collaboration socket's address for a drawing. */

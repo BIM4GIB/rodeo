@@ -8,8 +8,9 @@
 // person counts once a day and can't be followed from one day to the next. The address itself is
 // never kept. Each visitor has one row a day: when they came and were last heard of, how they
 // came (the site that linked them, a campaign tag, a share link), their country (Cloudflare's
-// CF-IPCountry), and their kind of device, browser and system. A signed-in visitor's row names
-// the account, and the account's last_seen_at moves on.
+// CF-IPCountry), roughly where (the city, region and a position rounded to 0.1°, when Cloudflare's
+// "Add visitor location headers" transform is on), and their kind of device, browser and system.
+// A signed-in visitor's row names the account, and the account's last_seen_at moves on.
 
 import type { Context, Hono } from "hono";
 import type { VisitEntry } from "../../web/src/platform/protocol.ts";
@@ -78,6 +79,33 @@ function countryOf(c: Context): string | null {
   return /^[A-Z]{2}$/.test(v) && v !== "XX" && v !== "T1" ? v : null;
 }
 
+/**
+ * A header Cloudflare filled with a place name: its UTF-8 arrives as Latin-1 characters (Node reads
+ * headers so), and some names come percent-encoded.
+ */
+function placeName(c: Context, header: string): string | null {
+  let v = c.req.header(header) ?? "";
+  if (!v) return null;
+  try {
+    if (/%[0-9A-Fa-f]{2}/.test(v)) v = decodeURIComponent(v);
+    else if (/[\x80-\xff]/.test(v)) {
+      const utf8 = Buffer.from(v, "latin1").toString("utf8");
+      if (!utf8.includes("\ufffd")) v = utf8;
+    }
+  } catch {
+    // kept as it came
+  }
+  return cleanLine(v, 60) || null;
+}
+
+/** Cloudflare's rough position for the visitor, rounded to 0.1° (about 10 km), or null. */
+function positionOf(c: Context): { lat: number; lon: number } | null {
+  const lat = Number(c.req.header("cf-iplatitude"));
+  const lon = Number(c.req.header("cf-iplongitude"));
+  if (!c.req.header("cf-iplatitude") || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat: Math.round(lat * 10) / 10, lon: Math.round(lon * 10) / 10 };
+}
+
 function bump(day: string, name: string): void {
   run("INSERT INTO visit_counts (day, name, count) VALUES (?, ?, 1) ON CONFLICT(day, name) DO UPDATE SET count = count + 1", day, name);
 }
@@ -110,14 +138,19 @@ export function registerVisits(app: Hono): void {
 
     // the day's first word from this visitor makes the row (a ping too: a tab open past midnight);
     // later ones move it on, and name the account once they have signed in
+    const at = positionOf(c);
     run(
-      `INSERT INTO visits (day, visitor, user_id, first_at, last_at, pings, opens, entry, referrer, campaign, country, device, browser, os)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO visits (day, visitor, user_id, first_at, last_at, pings, opens, entry, referrer, campaign, country, device, browser, os, city, region, lat, lon)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(day, visitor) DO UPDATE SET
          last_at = excluded.last_at,
          user_id = COALESCE(excluded.user_id, visits.user_id),
          pings = visits.pings + excluded.pings,
-         opens = visits.opens + excluded.opens`,
+         opens = visits.opens + excluded.opens,
+         city = COALESCE(visits.city, excluded.city),
+         region = COALESCE(visits.region, excluded.region),
+         lat = COALESCE(visits.lat, excluded.lat),
+         lon = COALESCE(visits.lon, excluded.lon)`,
       day,
       visitor,
       user?.id ?? null,
@@ -132,6 +165,10 @@ export function registerVisits(app: Hono): void {
       device,
       browserOf(ua),
       osOf(ua),
+      placeName(c, "cf-ipcity"),
+      placeName(c, "cf-region"),
+      at?.lat ?? null,
+      at?.lon ?? null,
     );
     // the admins' own visits are left out of the numbers (admin.ts), and so are their counts
     const counted = !user || !isAdmin(user);

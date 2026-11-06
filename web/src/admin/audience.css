@@ -1,0 +1,183 @@
+/* The Audience tab: the globe and the countries side by side (one column under 900 px), and the
+   look of the charts in audienceCharts.ts (adm-chart2-). Solid panels and the page's tokens only. */
+
+.adm-aud {
+  min-width: 0;
+}
+
+.adm-aud-where {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.adm-aud-globe {
+  min-width: 0;
+}
+
+.adm-aud-note {
+  margin: 8px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.adm-aud-more {
+  margin-top: 8px;
+}
+
+.adm-aud-row {
+  cursor: pointer;
+}
+
+.adm-aud-row:hover,
+.adm-aud-row:focus-visible {
+  outline: none;
+  background: var(--fill);
+}
+
+.adm-aud-visits {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.adm-aud-share {
+  display: block;
+  width: 48px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.adm-aud-share > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--series-1);
+}
+
+@media (max-width: 900px) {
+  .adm-aud-where {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- heatmap -------------------------------------------------------------------- */
+
+.adm-chart2-heat {
+  position: relative;
+  min-width: 0;
+}
+
+.adm-chart2-grid {
+  display: grid;
+  gap: 2px;
+  align-items: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-chart2-row,
+.adm-chart2-col {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.adm-chart2-row {
+  padding-right: 6px;
+}
+
+.adm-chart2-cell {
+  height: 18px;
+  min-width: 0;
+  border-radius: 3px;
+}
+
+.adm-chart2-cell:hover {
+  outline: 1px solid var(--text-2);
+}
+
+.adm-chart2-scale {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.adm-chart2-scale-bar {
+  width: 96px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--surface-2), var(--series-1));
+}
+
+/* ---- funnel --------------------------------------------------------------------- */
+
+.adm-chart2-funnel {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-chart2-step {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.adm-chart2-step-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.adm-chart2-step-label {
+  color: var(--text-2);
+}
+
+.adm-chart2-step-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-chart2-step-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.adm-chart2-step-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 5px;
+  background: var(--series-1);
+}
+
+.adm-chart2-step-meta,
+.adm-chart2-step-note {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ---- cohorts -------------------------------------------------------------------- */
+
+/* twelve weeks of rows are not cut short the way the chart tables are */
+.adm-chart-body .adm-table-wrap.adm-chart2-cohort {
+  max-height: none;
+}
+
+.adm-chart2-week {
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,201 @@
+/* The admin page's Live tab and the Overview's live card: a globe beside the headline and the day's
+   counts, then a table of who is in Rodeo now. Solid panels, no glass. Colours are tokens only. */
+
+.adm-livev {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.adm-livev-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.adm-livev-globe,
+.adm-livev-side {
+  min-width: 0;
+}
+
+.adm-livev-side {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.adm-livev-now {
+  margin-bottom: 0;
+}
+
+.adm-livev-now .adm-live.on {
+  animation: adm-livev-pulse 2s ease-out infinite;
+}
+
+@keyframes adm-livev-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent);
+  }
+
+  to {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--good) 0%, transparent);
+  }
+}
+
+.adm-livev-side .adm-tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.adm-livev-side .adm-tile {
+  padding: 12px 14px;
+}
+
+.adm-livev-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.adm-livev-facts > div {
+  min-width: 0;
+}
+
+.adm-livev-facts dt {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.adm-livev-facts dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-livev-chart {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+
+.adm-livev-bar-guests {
+  fill: var(--series-1);
+}
+
+.adm-livev-bar-members {
+  fill: var(--series-2);
+}
+
+.adm-livev-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.adm-livev-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adm-livev-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--series-1);
+}
+
+.adm-livev-swatch.members {
+  background: var(--series-2);
+}
+
+.adm-livev-go {
+  cursor: pointer;
+}
+
+.adm-livev-go:hover td {
+  background: var(--fill-hover);
+}
+
+.adm-livev-go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.adm-livev-new td {
+  animation: adm-livev-flash 2s ease-out;
+}
+
+@keyframes adm-livev-flash {
+  from {
+    background: var(--select);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+.adm-livev-card {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.adm-livev-card-globe {
+  width: 180px;
+  max-width: 100%;
+}
+
+.adm-livev-card-text,
+.adm-livev-card-info {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.adm-livev-countries {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+}
+
+@media (max-width: 900px) {
+  .adm-livev-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .adm-livev-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-livev-card-globe {
+    width: 160px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-livev-now .adm-live.on,
+  .adm-livev-new td {
+    animation: none;
+  }
+}
+
+/* on the Overview, the card sits above the period's tiles */
+.adm-overview > .adm-livev-card {
+  margin-bottom: 16px;
+}

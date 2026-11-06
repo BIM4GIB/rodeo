@@ -88,10 +88,6 @@
   width: min(400px, 100%);
 }
 
-.menu-dialog.admin-dialog {
-  width: min(480px, 100%);
-}
-
 .menu-dialog.supporter-dialog {
   width: min(420px, 100%);
 }

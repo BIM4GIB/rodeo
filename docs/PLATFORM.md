@@ -95,12 +95,13 @@ Funding (goal, raised, donation links) and the sponsor (the start hub's ad) are 
 in the editor) and kept in the database. Paid Stripe checkouts with the metadata
 `kind=donation` (a donation Payment Link) are added to the month's total by the webhook,
 on top of the admin's raised figure, and the total starts again each calendar month (UTC).
-Admins also post and delete the start hub's
-announcements from Help > Announcements… (`PUT /api/admin/announcements`).
+Admins also post, edit and delete the start hub's
+announcements on the admin page's Announcements tab (`PUT /api/admin/announcements`); one can
+also show once as a bar across the top of the editor until a date (`bannerUntil`).
 
 Anyone can send a bug report or feature request from Help > Report a Bug… / Request a
-Feature… or the start screen. Reports are kept in the database and listed for admins in
-Help > Feedback Inbox…; with SMTP set up, each one is also emailed to `ADMIN_EMAILS`, with
+Feature… or the start screen. Reports are kept in the database and listed for admins on
+the admin page's Feedback tab; with SMTP set up, each one is also emailed to `ADMIN_EMAILS`, with
 Reply-To set to the sender's address when they gave one.
 
 The editor also reports errors on its own (`web/src/app/reports.ts`): errors nothing caught,
@@ -108,7 +109,7 @@ failures the user was shown (a render, a cloud save, opening a drawing), and sav
 over 30 s. Each carries the build, browser, GPU, memory and view, and a trail of what happened
 just before (toasts, console warnings, freezes, lost WebGL contexts, parts that wouldn't load);
 never the drawing, and names in quotes are blanked out. The server files its own 500s the same
-way. Reports of one error are grouped; admins read them in Help > Error Reports…, each new
+way. Reports of one error are grouped; admins read them on the admin page's Errors tab, each new
 error is one line in the server log and (with SMTP) an email to `ADMIN_EMAILS`, and
 `node server/scripts/reports.ts` lists them from a terminal with `REPORTS_TOKEN`. API requests
 over 8 s or failing with a 5xx are logged with their size and time.
@@ -299,18 +300,33 @@ and sends the recording here, which passes it once to the speech model and keeps
 ### Admin page and visits
 
 The admin page is `/admin` (web/admin.html, web/src/admin), a page of its own for the accounts
-in `ADMIN_EMAILS`, also reached from the editor's Help > Admin Page…. Its Overview shows who is
-in the editor now, visitors a day (guests and signed in), sign-ups, the AI credit bought, given,
-used and still owed, and where visitors came from; People lists the accounts, and an account's
-panel gives or takes back credit (with a note the user sees, and an email if wanted), gives
-Rodeo Plus for a while, signs it out everywhere, suspends it or deletes it; Settings sets the
-credit new accounts start with.
+in `ADMIN_EMAILS`, also reached from the editor's Help > Admin Panel… (the only admin item left
+in the editor). Its side bar has three groups of tabs:
+
+- Analytics. Live: who is in the editor now on a globe, with each visitor's place, device, way
+  in and time in, the last hour, today so far and live editing sessions. Overview: visitors a
+  day, sign-ups, the AI credit bought, given, used and still owed, and where visitors came from.
+  Audience: visitors by country and city on a globe, accounts in Rodeo each day, week and month,
+  the hours people come, visit lengths, a funnel from visiting to paying, weekly sign-up cohorts
+  and new against returning members. Revenue: Rodeo Plus, credit bought and taken against what
+  the providers charged, use by model, cloud renders and the top spenders. Usage: cloud drawings,
+  versions and storage, the gallery, comments, merge requests and agents.
+- Manage. People lists the accounts, and an account's panel gives or takes back credit (with a
+  note the user sees, and an email if wanted), gives Rodeo Plus for a while, signs it out
+  everywhere, suspends it or deletes it. Feedback and Errors are the bug reports and the error
+  reports; Gallery the moderation queue; Announcements and Funding and sponsor what the editor
+  shows.
+- Server. Settings sets the credit new accounts start with and makes tagged links; System shows
+  the server's health, what it is set up with, and the admin log: every step an admin took.
 
 Visits come from the editor (web/src/app/visits.ts): a word when it opens, each minute while it
 is in front, and when a drawing opens (its kind only). No cookie, nothing kept on the device:
 the server knows a visitor by a hash of their address and browser with a salt that changes each
-day, so a person counts once a day and can't be followed across days. Admins' own visits,
-crawlers and test browsers (`navigator.webdriver`) aren't counted. Rows are kept 400 days.
+day, so a person counts once a day and can't be followed across days. Where a visit came from
+is the country Cloudflare names (`CF-IPCountry`) and, when its "Add visitor location headers"
+managed transform is on, the city, region and a position rounded to 0.1° (about 10 km); without
+them the globes place visitors at their country's middle. Admins' own visits, crawlers and test
+browsers (`navigator.webdriver`) aren't counted. Rows are kept 400 days.
 
 | | |
 | --- | --- |
@@ -325,6 +341,13 @@ crawlers and test browsers (`navigator.webdriver`) aren't counted. Rows are kept
 | `POST /admin/users/:id/suspend` `{ suspended }` | admins; a suspended account is signed out, can't sign in, and is treated as signed out |
 | `DELETE /admin/users/:id` `{ email }` | admins; deletes the account as `DELETE /me` would, the email typed to confirm |
 | `GET`, `PUT /admin/settings` `{ welcomeCredit }` | admins; the credit each new account starts with (0 to 50) |
+| `GET /admin/live` | admins; `AdminLive`: visitors heard from in the last 3 minutes, the last hour, today, live sessions |
+| `GET /admin/geo?days=N` | admins; `AdminGeo`: visitors by country and by city |
+| `GET /admin/engagement?days=N` | admins; `AdminEngagement`: daily, weekly and monthly accounts, hours, visit lengths, the funnel, cohorts |
+| `GET /admin/revenue?days=N` | admins; `AdminRevenue`: Rodeo Plus, credit by day and by model, renders, top spenders |
+| `GET /admin/usage?days=N` | admins; `AdminUsage`: cloud drawings, the gallery, comments, merge requests, agents |
+| `GET /admin/system` | admins; `AdminSystem`: version, memory, storage, what is set up, admins |
+| `GET /admin/log?offset=N` | admins; `{ entries, total }`: the steps admins took, newest first, 50 a page |
 
 ## Live collaboration
 

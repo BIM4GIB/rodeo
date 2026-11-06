@@ -1,11 +1,19 @@
-// The admin page's Overview: who is in the editor now, the period's visitors, sign-ups and use
-// against the period before, the money (credit bought, given and used, what it cost, and what is
-// still owed), charts a day, and where visitors came from. It refreshes each minute while shown.
+// The admin page's Overview: who is in the editor now (with a small globe of where), the period's
+// visitors, sign-ups and use against the period before, the money (credit bought, given and used,
+// what it cost, and what is still owed), charts a day, and where visitors came from. It refreshes
+// each minute while shown.
 
 import { h } from "../app/dom.ts";
+import { adminApi } from "../platform/api.ts";
 import type { AdminOverview, AdminPeriod, Tally } from "../platform/protocol.ts";
 import { barList, columnChart, lineChart, type Point } from "./charts.ts";
-import { bytes, change, count, country, minutes, money, share, usd } from "./format.ts";
+import { type AdminContext, updatedNow } from "./context.ts";
+import { bytes, count, country, minutes, money, share, usd } from "./format.ts";
+import { liveCard } from "./live.ts";
+import { loaded, periodName, tile } from "./ui.ts";
+
+/** the overview is fetched again this often while it is in front */
+const REFRESH_MS = 60_000;
 
 const ENTRY_LABEL: Record<string, string> = {
   editor: "Opened Rodeo",
@@ -26,34 +34,6 @@ const CHECK_LABEL: Record<string, string> = {
   closed: "Closed the question",
   failed: "Didn't come in",
 };
-
-interface TileSpec {
-  readonly label: string;
-  readonly value: string;
-  /** what it is, under the value */
-  readonly note?: string;
-  /** the change on the period before; `good` says whether up is good */
-  readonly delta?: { readonly now: number; readonly before: number; readonly good?: "up" | "down" };
-  readonly hero?: boolean;
-}
-
-function tile(t: TileSpec, period: string): HTMLElement {
-  const d = t.delta ? change(t.delta.now, t.delta.before) : null;
-  const good = t.delta?.good ?? "up";
-  const tone = d === null || d.text.startsWith("±") ? "flat" : d.up === (good === "up") ? "good" : "bad";
-  return h(
-    "div",
-    { cls: t.hero ? "adm-tile hero" : "adm-tile" },
-    h("span", { cls: "adm-tile-label", text: t.label }),
-    h("span", { cls: "adm-tile-value", text: t.value }),
-    d ? h("span", { cls: `adm-delta ${tone}`, text: `${d.up ? "▲" : "▼"} ${d.text} on the ${period} before` }) : null,
-    t.note ? h("span", { cls: "adm-tile-note", text: t.note }) : null,
-  );
-}
-
-function periodName(days: number): string {
-  return days === 1 ? "day" : days === 7 ? "week" : days === 365 ? "year" : `${days} days`;
-}
 
 function points(o: AdminOverview, keys: readonly (keyof AdminOverview["series"][number])[]): Point[] {
   return o.series.map((d) => ({ day: d.day, values: Object.fromEntries(keys.map((k) => [k, Number(d[k])])) }));
@@ -127,29 +107,31 @@ function lists(o: AdminOverview): HTMLElement {
 
 function inbox(o: AdminOverview): HTMLElement {
   const link = (text: string, href: string, n: number, what: string): HTMLElement =>
-    h("a", { cls: n > 0 ? "adm-inbox-item busy" : "adm-inbox-item", attrs: { href, target: "_blank", rel: "noopener" } }, h("strong", { text: String(n) }), ` ${what}`, h("span", { cls: "adm-inbox-go", text: text }));
+    h("a", { cls: n > 0 ? "adm-inbox-item busy" : "adm-inbox-item", attrs: { href } }, h("strong", { text: String(n) }), ` ${what}`, h("span", { cls: "adm-inbox-go", text: text }));
   return h(
     "div",
     { cls: "adm-inbox" },
-    link("Open inbox", "/?admin=feedback", o.inbox.feedback, o.inbox.feedback === 1 ? "new bug report or idea" : "new bug reports and ideas"),
-    link("Open reports", "/?admin=errors", o.inbox.errors, o.inbox.errors === 1 ? "error in the last day" : "errors in the last day"),
+    link("Open feedback", "#feedback", o.inbox.feedback, o.inbox.feedback === 1 ? "new bug report or idea" : "new bug reports and ideas"),
+    link("Open errors", "#errors", o.inbox.errors, o.inbox.errors === 1 ? "error in the last day" : "errors in the last day"),
   );
 }
 
-/** The whole Overview for `o`. */
-export function overviewView(o: AdminOverview): HTMLElement {
-  const nowTotal = o.now.guests + o.now.members;
-  const a = o.accounts;
+/** The Overview tab: the live card (which keeps itself up to date), then the period's numbers, fetched again each minute. */
+export function overviewTab(ctx: AdminContext): HTMLElement {
   return h(
     "div",
     { cls: "adm-overview" },
-    h(
-      "div",
-      { cls: "adm-now" },
-      h("span", { cls: nowTotal > 0 ? "adm-live on" : "adm-live", attrs: { "aria-hidden": "true" } }),
-      h("strong", { text: nowTotal === 1 ? "1 person" : `${nowTotal} people` }),
-      ` in Rodeo now: ${o.now.guests} ${o.now.guests === 1 ? "guest" : "guests"}, ${o.now.members} signed in`,
-    ),
+    liveCard(ctx),
+    loaded(ctx.signal, () => adminApi.overview(ctx.days), overviewView, { refresh: REFRESH_MS, onLoad: () => ctx.updated(updatedNow()) }),
+  );
+}
+
+/** The Overview's numbers for `o`. */
+export function overviewView(o: AdminOverview): HTMLElement {
+  const a = o.accounts;
+  return h(
+    "div",
+    { cls: "adm-overview-body" },
     h("div", { cls: "adm-tiles" }, ...visitorTiles(o)),
     h(
       "div",

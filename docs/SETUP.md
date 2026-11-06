@@ -18,11 +18,11 @@ behind it, `/api/config` answers 404 and the account features stay hidden.
    and every uploaded drawing, so back it up.
 3. Environment:
    - `PUBLIC_URL=https://your-domain` (no trailing slash)
-   - `ADMIN_EMAILS=you@…`: lets you set the funding bar and the sponsor from
-     Help > Funding and Sponsor Settings, post the start screen's news from
-     Help > Announcements…, and read bug reports and feature requests in
-     Help > Feedback Inbox…. With email set up (step 2), each report is also
-     emailed to these addresses.
+   - `ADMIN_EMAILS=you@…`: these accounts get the admin panel at `/admin`
+     (Help > Admin Panel… in the editor): analytics, accounts, bug reports,
+     error reports, the gallery's moderation queue, announcements, the
+     funding bar and the sponsor. With email set up (step 2), each report is
+     also emailed to these addresses.
 4. Point the domain at it. On Cloudflare, proxying (orange cloud) is fine:
    WebSockets pass through by default. Add a cache rule that **bypasses cache
    for `/api/*`**.
@@ -60,6 +60,10 @@ or cheap tiers.
 Behind Cloudflare, also set `CLIENT_IP_HEADER=cf-connecting-ip`, so the
 sign-in rate limits (5 links an hour per address, 20 per visitor) count real
 visitors, not Cloudflare's edge servers.
+
+Also on Cloudflare, turn on Rules › Settings › Managed Transforms › Add visitor
+location headers, so the admin panel's globes show each visitor's city (rounded
+to about 10 km) rather than their country's middle.
 
 ## 3. Sign in with Google, Microsoft, GitHub (optional)
 
@@ -183,7 +187,7 @@ through your server.
 - [ ] Rodeo Plus checkout in Stripe test mode turns the account into a Plus account
 - [ ] An AI credit top-up in test mode adds to the balance (Account…), and an agent
       message takes from it
-- [ ] Help > Report a Bug… sends a report that shows in Help > Feedback Inbox…
+- [ ] Help > Report a Bug… sends a report that shows on the admin panel's Feedback tab
       (and arrives by email at `ADMIN_EMAILS`)
 - [ ] Back up `/data` (Coolify's scheduled backups for the volume, or a cron
       with `sqlite3 .backup` + the `blobs/` folder)

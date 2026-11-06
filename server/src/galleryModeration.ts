@@ -4,6 +4,7 @@
 // entries for the front.
 
 import type { Context, Hono } from "hono";
+import { logAdmin } from "./adminLog.ts";
 import { allowed, clientIp, currentUser, isAdmin, normalizeEmail, requireUser, type UserRow } from "./auth.ts";
 import { config } from "./config.ts";
 import { all, get, run, tx } from "./db.ts";
@@ -148,7 +149,7 @@ export function registerGalleryModeration(app: Hono): void {
   });
 
   app.post("/api/gallery/admin/entries/:id/hide", async (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const body = await readJson(c);
     const reason = cleanLine(body.reason, LIMITS.hideReason);
     if (!reason) fail(400, "Give a reason. The owner is told it.");
@@ -156,6 +157,7 @@ export function registerGalleryModeration(app: Hono): void {
     tx(() => {
       hideEntry(row.id, reason);
       resolveReports(row.id);
+      logAdmin(admin, "gallery.hide", row.title, reason);
     });
     await notifyOwner(
       row,
@@ -166,11 +168,12 @@ export function registerGalleryModeration(app: Hono): void {
   });
 
   app.post("/api/gallery/admin/entries/:id/restore", async (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const row = entryParam(c);
     tx(() => {
       restoreEntry(row.id);
       resolveReports(row.id);
+      logAdmin(admin, "gallery.restore", row.title);
     });
     // the owner hears only when the drawing was hidden: restoring a visible one changes nothing for them
     if (row.hidden_at !== null) {
@@ -184,21 +187,27 @@ export function registerGalleryModeration(app: Hono): void {
   });
 
   app.post("/api/gallery/admin/entries/:id/dismiss", (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const row = entryParam(c);
-    resolveReports(row.id);
+    tx(() => {
+      resolveReports(row.id);
+      logAdmin(admin, "gallery.dismiss", row.title);
+    });
     return c.body(null, 204);
   });
 
   app.post("/api/gallery/admin/entries/:id/feature", async (c) => {
-    requireAdmin(c);
+    const admin = requireAdmin(c);
     const body = await readJson(c);
     const featured = body.featured;
     if (typeof featured !== "boolean") fail(400, "featured must be true or false");
     const row = entryParam(c);
     // COALESCE keeps the day it was first picked, so picking it again does not move it up the trending order
-    if (featured) run("UPDATE gallery_entries SET featured_at = COALESCE(featured_at, ?) WHERE id = ?", nowIso(), row.id);
-    else run("UPDATE gallery_entries SET featured_at = NULL WHERE id = ?", row.id);
+    tx(() => {
+      if (featured) run("UPDATE gallery_entries SET featured_at = COALESCE(featured_at, ?) WHERE id = ?", nowIso(), row.id);
+      else run("UPDATE gallery_entries SET featured_at = NULL WHERE id = ?", row.id);
+      logAdmin(admin, featured ? "gallery.feature" : "gallery.unfeature", row.title);
+    });
     return c.body(null, 204);
   });
 }

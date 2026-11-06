@@ -1,0 +1,56 @@
+/* The Revenue and Usage tabs (revenue.ts, usage.ts), on top of admin.css: a third chart series
+   colour, the bad-number colour, the model and spender tables, and the Review button. Imported by
+   both modules. */
+
+/* a third chart series, teal, kept apart from the blue and orange on both themes' surfaces */
+:root {
+  --adm-series-3: #36b9a9;
+}
+
+:root[data-theme="light"] {
+  --adm-series-3: #0f8a7c;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --adm-series-3: #0f8a7c;
+  }
+}
+
+.adm-rev-bad {
+  color: var(--bad);
+}
+
+/* a name with its email under it, both cut short rather than widening the table */
+.adm-rev-who {
+  display: grid;
+  max-width: 240px;
+}
+
+.adm-rev-who > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adm-rev-email {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.adm-rev-total td {
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+/* the Review button sits under its number, not stretched across the tile */
+.adm-use-review {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .adm-rev-tokens {
+    display: none;
+  }
+}

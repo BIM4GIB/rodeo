@@ -4,7 +4,8 @@
 
 import type { Hono } from "hono";
 import type { Announcement, Funding, FundingLink, ServerConfig, Sponsor } from "../../web/src/platform/protocol.ts";
-import { isAdmin, requireUser } from "./auth.ts";
+import { logAdmin } from "./adminLog.ts";
+import { isAdmin, requireUser, type UserRow } from "./auth.ts";
 import { config, type Provider } from "./config.ts";
 import { creditTerms } from "./credit.ts";
 import { renderTerms } from "./render.ts";
@@ -119,6 +120,17 @@ function cleanText(v: unknown, max: number): string {
   return cleanBody(v, max).replace(/\n{3,}/g, "\n\n");
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** When an announcement's bar across the editor runs out: null for none, else no more than 60 days from now. */
+function barUntil(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  const until = typeof v === "string" ? Date.parse(v) : NaN;
+  if (Number.isNaN(until)) fail(400, "The bar's end must be a date");
+  if (until > Date.now() + 60 * DAY_MS) fail(400, "The bar can run for 60 days at most");
+  return new Date(until).toISOString();
+}
+
 function parseAnnouncement(v: unknown): Announcement {
   if (typeof v !== "object" || v === null || Array.isArray(v)) fail(400, "Each announcement must be an object");
   const a = v as Record<string, unknown>;
@@ -132,7 +144,28 @@ function parseAnnouncement(v: unknown): Announcement {
     body: cleanText(a.body, 1000),
     url,
     date: Number.isNaN(posted) ? nowIso() : new Date(posted).toISOString(),
+    bannerUntil: barUntil(a.bannerUntil),
   };
+}
+
+/** Logs what an admin changed in the announcements: posted, deleted, or edited ones (by title). */
+function logAnnouncementChanges(admin: UserRow, before: readonly Announcement[], after: readonly Announcement[]): void {
+  const old = new Map(before.map((a) => [a.id, a]));
+  const kept = new Set(after.map((a) => a.id));
+  for (const a of after) {
+    const prev = old.get(a.id);
+    if (!prev) logAdmin(admin, "announcement.post", a.title);
+    else if (
+      prev.title !== a.title ||
+      prev.body !== a.body ||
+      prev.url !== a.url ||
+      prev.date !== a.date ||
+      (prev.bannerUntil ?? null) !== (a.bannerUntil ?? null)
+    ) {
+      logAdmin(admin, "announcement.edit", a.title);
+    }
+  }
+  for (const a of before) if (!kept.has(a.id)) logAdmin(admin, "announcement.delete", a.title);
 }
 
 export function registerSettings(app: Hono): void {
@@ -168,6 +201,7 @@ export function registerSettings(app: Hono): void {
     if (!isAdmin(user)) fail(403, "Only admins can change funding", "forbidden");
     const funding = parseFunding(await readJson(c));
     saveSetting("funding", funding);
+    logAdmin(user, "funding.save", null, `goal ${funding.goalMonthly} ${funding.currency}`);
     return c.json({ funding });
   });
 
@@ -176,25 +210,30 @@ export function registerSettings(app: Hono): void {
     const user = requireUser(c);
     if (!isAdmin(user)) fail(403, "Only admins can change the sponsor", "forbidden");
     const value = await readJsonAny(c);
+    const before = sponsorNow();
     if (value === null) {
       run("DELETE FROM settings WHERE key = 'sponsor'");
+      logAdmin(user, "sponsor.clear", before?.name ?? null);
       return c.json({ sponsor: null });
     }
     if (typeof value !== "object" || Array.isArray(value)) fail(400, "The sponsor must be an object or null");
     const sponsor = parseSponsor(value as Record<string, unknown>);
     saveSetting("sponsor", sponsor);
+    logAdmin(user, "sponsor.save", sponsor.name);
     return c.json({ sponsor });
   });
 
-  // The whole list: the editor sends it again after each post or delete.
+  // The whole list: the editor sends it again after each post, edit or delete.
   app.put("/api/admin/announcements", async (c) => {
     const user = requireUser(c);
     if (!isAdmin(user)) fail(403, "Only admins can change the announcements", "forbidden");
     const value = await readJsonAny(c);
     if (!Array.isArray(value)) fail(400, "The announcements must be a list");
     if (value.length > 20) fail(400, "There can be at most 20 announcements");
+    const before = announcementsNow();
     const announcements = value.map(parseAnnouncement).sort(newestFirst);
     saveSetting("announcements", announcements);
+    logAnnouncementChanges(user, before, announcements);
     return c.json({ announcements });
   });
 }

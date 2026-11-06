@@ -69,6 +69,8 @@ export interface CollabHub {
   broadcastCommentDeleted(fileId: string, id: string): void;
   /** Disconnects a user (removed from the drawing), or everyone (drawing deleted) when userId is left out. */
   kick(fileId: string, userId?: string): void;
+  /** Drawings open in a live session now, and the people in them (each account once a drawing), for the admin page. */
+  liveStats(): { readonly drawings: number; readonly people: number; readonly together: number };
 }
 
 const COLLAB_PATH = /^\/api\/collab\/([^/]+)$/;
@@ -578,6 +580,17 @@ export function attachCollab(server: Server, deps: CollabDeps): CollabHub {
   });
 
   return {
+    liveStats() {
+      let people = 0;
+      let together = 0;
+      for (const room of rooms.values()) {
+        const n = new Set([...room.clients].map((c) => c.user.id)).size;
+        people += n;
+        if (n > 1) together++;
+      }
+      return { drawings: rooms.size, people, together };
+    },
+
     currentSeq(fileId) {
       return stateOf(fileId)?.lastSeq ?? 0;
     },
