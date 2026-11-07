@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T12:01:00Z",
+    "live-path-tracing",
+    "Path tracing while you move, and a material library",
+    `Path Traced now stays path traced while you orbit and walk, and 34 scanned materials make surfaces look real.
+- While the view moves, the path tracer keeps tracing at a lower resolution and steadies the picture with what it saw before, instead of switching to the Realistic picture.
+- Where the browser has WebGPU (recent Chrome, Edge and Safari), the path tracer runs on it, denoised by Open Image Denoise, a neural denoiser that keeps edges and textures sharp. Render Image uses it too. Other browsers keep the WebGL path tracer.
+- The Render palette's Materials list has a Library field: pick wood, brick, stone, concrete, plaster, tile, metal, paving, ground, roofing or fabric, with real-size colour, bump and roughness maps, then set its scale and bump. Match library materials does every guessed material at once.
+- The Quality section picks the path tracer (Auto, WebGPU or WebGL) and what shows while the view moves.`,
+    "sphere",
+  ),
+  release(
     "2026-11-07T12:00:00Z",
     "cursors",
     "The right cursor in 3D and the panels",

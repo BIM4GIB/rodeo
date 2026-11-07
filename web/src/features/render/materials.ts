@@ -6,6 +6,7 @@
 
 import * as THREE from "three";
 import type { ModelFace } from "../../app/view3d.ts";
+import { libraryEntry, type LibraryTextures } from "./library.ts";
 import type { MaterialOverride, MaterialPresetId } from "./settings.ts";
 
 export type PresetId = Exclude<MaterialPresetId, "auto">;
@@ -31,6 +32,8 @@ export interface MaterialPreset {
 const DIELECTRIC_IOR = 1.5;
 /** a clay model's faces: about as matte as plaster */
 const CLAY_ROUGHNESS = 0.82;
+/** the image size a drawing's texture is taken to be when it does not say (view3d.ts DEFAULT_IMAGE_MM), mm */
+const DRAWING_IMAGE_MM = 1000;
 
 /** Every preset, in PRESET_LABELS' order (without "auto"). */
 export const PRESETS: readonly MaterialPreset[] = [
@@ -87,49 +90,65 @@ export function guessPreset(face: Pick<ModelFace, "resource" | "color" | "opacit
   return face.opacity < 0.95 ? "glass" : "matte";
 }
 
-/** The preset an override names, "auto" (or none) being the guessed one. */
+/** The preset an override names, "auto" (or none) being the guessed one, or a library material's own finish. */
 export function presetFor(face: ModelFace, override?: MaterialOverride): MaterialPreset {
   const named = override?.preset;
-  const id: PresetId = named && named !== "auto" ? named : guessPreset(face);
+  const fromLibrary = override?.library ? libraryEntry(override.library)?.finish : undefined;
+  const id: PresetId = named && named !== "auto" ? named : (fromLibrary ?? guessPreset(face));
   // PRESETS[0] only answers a name this version does not know, from a setting kept by another one
   return PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 }
 
-/** A new material for `face` with its finish; `clay` (a CSS colour) gives it the clay look instead. */
-export function makeMaterial(face: ModelFace, override?: MaterialOverride, clay: string | null = null): THREE.MeshPhysicalMaterial {
+/** A new material for `face` with its finish; `clay` (a CSS colour) gives it the clay look instead, `lib` the textures of its library material once loaded. */
+export function makeMaterial(face: ModelFace, override?: MaterialOverride, clay: string | null = null, lib: LibraryTextures | null = null): THREE.MeshPhysicalMaterial {
   const material = new THREE.MeshPhysicalMaterial();
-  applyFinish(material, face, override, clay);
+  applyFinish(material, face, override, clay, lib);
   return material;
 }
 
-/** Sets `material` to the finish again after the override or the clay look changed (same material object, needsUpdate set when its shader must change). */
-export function updateMaterial(material: THREE.MeshPhysicalMaterial, face: ModelFace, override?: MaterialOverride, clay: string | null = null): void {
+/** Sets `material` to the finish again after the override, the clay look or the library textures changed (same material object, needsUpdate set when its shader must change). */
+export function updateMaterial(material: THREE.MeshPhysicalMaterial, face: ModelFace, override?: MaterialOverride, clay: string | null = null, lib: LibraryTextures | null = null): void {
   const before = shaderKey(material);
-  applyFinish(material, face, override, clay);
+  applyFinish(material, face, override, clay, lib);
   if (shaderKey(material) !== before) material.needsUpdate = true;
+}
+
+/** Frees a material's library clones (the library's own textures are left alone). */
+export function releaseLibraryMaps(material: THREE.MeshPhysicalMaterial): void {
+  const held = material.userData.library as LibraryMaps | null | undefined;
+  if (held) releaseMaps(held);
+  material.userData.library = null;
 }
 
 /**
  * Writes a face's finish into `material`, every field, so a new material and an edited one come out
  * alike. Under `clay` every face takes that colour, matte and without its picture; glass stays
- * clear and a light panel still glows, and a cut-out keeps its outline.
+ * clear and a light panel still glows, and a cut-out keeps its outline. A library material (`lib`
+ * with clay off) is drawn with its own maps in place of the face's picture.
  */
-function applyFinish(material: THREE.MeshPhysicalMaterial, face: ModelFace, override: MaterialOverride | undefined, clay: string | null): void {
+function applyFinish(material: THREE.MeshPhysicalMaterial, face: ModelFace, override: MaterialOverride | undefined, clay: string | null, lib: LibraryTextures | null): void {
   const preset = presetFor(face, override);
   const transmission = override?.transmission ?? preset.transmission;
   const emissive = override?.emissive ?? preset.emissive;
-  // a picture carries its own colour: a palette tint multiplies it, otherwise it shows as it is
-  const own = override?.tint ?? (face.map ? "#ffffff" : (preset.color ?? face.color));
+  const active = clay === null && override?.library && lib ? lib : null;
+  const maps = libraryMaps(material, active, face, override);
+  // a picture carries its own colour: a palette tint multiplies it, otherwise it shows as it is; a library material's maps carry theirs
+  const own = override?.tint ?? (active || face.map ? "#ffffff" : (preset.color ?? face.color));
   const colour = clay === null ? own : transmission > 0 ? "#ffffff" : clay;
 
   material.color.set(colour);
-  material.map = clay === null ? face.map : null;
+  material.map = clay === null ? (maps?.color ?? face.map) : null;
   material.alphaMap = face.alphaMap;
   // a cut-out keeps its pixels above half the mask and drops the rest
   material.alphaTest = face.alphaMap ? 0.5 : 0;
   material.side = THREE.DoubleSide;
-  material.roughness = clay === null ? (override?.roughness ?? preset.roughness) : transmission > 0 ? preset.roughness : CLAY_ROUGHNESS;
-  material.metalness = clay === null ? (override?.metalness ?? preset.metalness) : 0;
+  // a map multiplies its value: a roughness or metal map reads at 1 (the finish's own value without one)
+  material.roughness = clay === null ? (override?.roughness ?? (maps?.rough ? 1 : preset.roughness)) : transmission > 0 ? preset.roughness : CLAY_ROUGHNESS;
+  material.metalness = clay === null ? (override?.metalness ?? (maps?.metal ? 1 : preset.metalness)) : 0;
+  material.roughnessMap = maps?.rough ?? null;
+  material.metalnessMap = maps?.metal ?? null;
+  material.normalMap = maps?.normal ?? null;
+  material.normalScale.set(override?.bump ?? 1, override?.bump ?? 1);
   material.transmission = transmission;
   material.ior = preset.ior;
   material.clearcoat = clay === null ? preset.clearcoat : 0;
@@ -164,5 +183,67 @@ function applyFinish(material: THREE.MeshPhysicalMaterial, face: ModelFace, over
 
 /** What a material's shader is compiled with: a change in any of these needs a new program. */
 function shaderKey(m: THREE.MeshPhysicalMaterial): string {
-  return [m.map !== null, m.alphaMap !== null, m.transmission > 0, m.clearcoat > 0, m.sheen > 0, m.transparent].join();
+  return [m.map !== null, m.alphaMap !== null, m.transmission > 0, m.clearcoat > 0, m.sheen > 0, m.transparent, m.normalMap !== null, m.roughnessMap !== null, m.metalnessMap !== null].join();
+}
+
+/** The clones of a library material's maps a material is drawn with, and the library textures they were cloned from. */
+interface LibraryMaps {
+  readonly from: LibraryTextures;
+  readonly color: THREE.Texture;
+  readonly normal: THREE.Texture | null;
+  readonly rough: THREE.Texture | null;
+  readonly metal: THREE.Texture | null;
+}
+
+/**
+ * The clones of `lib`'s maps for a material, kept on the material (userData.library): made when the
+ * library material changes, the old ones disposed, and each one's repeat set so a tile of the image
+ * spans the library's size at the face's scale. Null without a library.
+ */
+function libraryMaps(material: THREE.MeshPhysicalMaterial, lib: LibraryTextures | null, face: ModelFace, override: MaterialOverride | undefined): LibraryMaps | null {
+  let held = (material.userData.library as LibraryMaps | null | undefined) ?? null;
+  if (held && held.from !== lib) {
+    releaseMaps(held);
+    held = null;
+  }
+  if (lib && !held) held = cloneMaps(lib);
+  material.userData.library = held;
+  if (!held) return null;
+  const [x, y] = tileRepeat(face, held.from, override);
+  for (const map of [held.color, held.normal, held.rough, held.metal]) map?.repeat.set(x, y);
+  return held;
+}
+
+/** Clones of every map of `lib`: each a texture of its own over the same image, so the image is uploaded once. */
+function cloneMaps(lib: LibraryTextures): LibraryMaps {
+  const color = lib.color.clone();
+  color.needsUpdate = true;
+  return { from: lib, color, normal: copyOf(lib.normal), rough: copyOf(lib.rough), metal: copyOf(lib.metal) };
+}
+
+/** A clone of a library map, uploaded on its first use (null for none). */
+function copyOf(map: THREE.Texture | null): THREE.Texture | null {
+  if (!map) return null;
+  const copy = map.clone();
+  copy.needsUpdate = true;
+  return copy;
+}
+
+function releaseMaps(maps: LibraryMaps): void {
+  maps.color.dispose();
+  maps.normal?.dispose();
+  maps.rough?.dispose();
+  maps.metal?.dispose();
+}
+
+/**
+ * How many tiles of a library image a face's UVs span across and up. A face with its drawing's
+ * picture has UVs in units of that picture (imageSize mm, DRAWING_IMAGE_MM when unknown); any other
+ * face has UVs in metres (sceneBuilder writes them). `scale` multiplies the image's real size.
+ */
+function tileRepeat(face: ModelFace, lib: LibraryTextures, override: MaterialOverride | undefined): [number, number] {
+  const scale = override?.scale ?? 1;
+  const drawn = face.texture >= 0 && face.geometry.attributes.uv !== undefined;
+  const unit = drawn ? (face.resource?.imageSize || DRAWING_IMAGE_MM) / 1000 : 1;
+  return [unit / (lib.entry.size[0] * scale), unit / (lib.entry.size[1] * scale)];
 }

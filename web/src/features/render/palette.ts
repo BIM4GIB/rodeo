@@ -14,6 +14,9 @@ import { setViz, store } from "../../app/state.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
 import type { RealisticMode } from "../../app/view3d.ts";
 import { materialList, onMaterials, onStatus, renderStatus, type MaterialItem } from "./bridge.ts";
+import { webgpuAvailable, webgpuKnown } from "./gpuSupport.ts";
+import { LIBRARY, libraryEntry, libraryUrl } from "./library.ts";
+import { pickLibraryMaterial } from "./libraryPicker.ts";
 import {
   LOOKS,
   PRESET_LABELS,
@@ -62,6 +65,19 @@ const LOOK_OPTIONS: readonly (readonly [string, string])[] = [...LOOKS.map((l): 
 /** the materials list gets a search box above this many */
 const SEARCH_ABOVE = 8;
 const PRESET_IDS = Object.keys(PRESET_LABELS) as MaterialPresetId[];
+type QualityEngine = RenderSettings["quality"]["engine"];
+type QualityMotion = RenderSettings["quality"]["motion"];
+const ENGINE_OPTIONS: readonly (readonly [QualityEngine, string])[] = [
+  ["auto", "Auto"],
+  ["webgpu", "WebGPU"],
+  ["webgl", "WebGL"],
+];
+const MOTION_OPTIONS: readonly (readonly [QualityMotion, string])[] = [
+  ["trace", "Path traced"],
+  ["raster", "Realistic"],
+];
+/** the guessed finishes "Match library materials" gives a library material to (those the library has a material of) */
+const MATCHED_FINISHES: ReadonlySet<string> = new Set(["wood", "brick", "stone", "concrete", "plaster", "tile", "metal", "brushed-metal", "fabric"]);
 
 /** One material's row in the list, and how it shows the settings. */
 interface MaterialRow {
@@ -224,6 +240,40 @@ function editMaterial(key: string, change: Partial<MaterialOverride>): void {
   setMaterial(key, { ...current, ...change });
 }
 
+/** A library material's thumb, for a swatch (16 px) or the Library field (24 px). */
+function libraryThumb(id: string, cls: string): HTMLElement {
+  return h("img", { cls, attrs: { src: libraryUrl(id, "thumb"), alt: "", loading: "lazy" } });
+}
+
+/**
+ * Gives each listed material that has no library material and no texture of its own, and whose guessed
+ * finish the library has a material of, the library's first material of that finish. One settings change;
+ * a toast says how many were matched.
+ */
+function matchLibraryMaterials(): void {
+  const items = materialList();
+  if (items.length === 0) {
+    toast("No materials are listed yet: draw the 3D view in Realistic or Path Traced first.", "info");
+    return;
+  }
+  const next = { ...renderSettings().materials };
+  let matched = 0;
+  for (const item of items) {
+    if (item.textured || next[item.key]?.library !== undefined || !MATCHED_FINISHES.has(item.guess)) continue;
+    const entry = LIBRARY.find((e) => e.finish === item.guess);
+    if (!entry) continue;
+    const current: MaterialOverride = next[item.key] ?? { preset: "auto" };
+    next[item.key] = { ...current, library: entry.id, preset: entry.finish };
+    matched++;
+  }
+  if (matched === 0) {
+    toast("No material matched a library material.", "info");
+    return;
+  }
+  setRender({ materials: next });
+  toast(`Matched ${matched} ${matched === 1 ? "material" : "materials"} to the library.`, "info");
+}
+
 /** A material's swatch: its texture's preview (its blob URL goes in `urls`, to revoke later), else its colour. */
 function swatchOf(item: MaterialItem, urls: string[]): HTMLElement {
   const preview = item.preview;
@@ -260,6 +310,25 @@ function materialRow(item: MaterialItem, swatch: HTMLElement, expanded: Set<stri
     preset,
   );
 
+  // the library material: its thumb and name, Choose and Remove; its scale and bump once one is set
+  const libSlot = h("span", { cls: "render-library-slot" });
+  const libName = h("span", { cls: "render-library-name" });
+  const choose = h("button", { cls: "btn small", text: "Choose…", title: "Pick a material from the library", attrs: { type: "button", "aria-haspopup": "dialog" } });
+  choose.addEventListener("click", () => {
+    const current = renderSettings().materials[key]?.library ?? null;
+    void pickLibraryMaterial(choose, current).then((id) => {
+      const entry = id === null ? undefined : libraryEntry(id);
+      if (entry) editMaterial(key, { library: entry.id, preset: entry.finish });
+    });
+  });
+  const removeLib = h("button", { cls: "btn small", text: "Remove", title: "Take the library material away", attrs: { type: "button" } });
+  removeLib.addEventListener("click", () => editMaterial(key, { library: undefined, scale: undefined, bump: undefined }));
+  const libraryField = h("div", { cls: "render-library" }, libSlot, libName, choose, removeLib);
+  const scale = slider("Scale", 0.25, 4, 0.05, (n) => editMaterial(key, { scale: n }));
+  const bump = slider("Bump", 0, 2, 0.05, (n) => editMaterial(key, { bump: n }));
+  const scaleLine = line("Scale", scale.el);
+  const bumpLine = line("Bump", bump.el);
+
   const roughness = slider("Roughness", 0, 1, 0.01, (n) => editMaterial(key, { roughness: n }));
   const metalness = slider("Metalness", 0, 1, 0.01, (n) => editMaterial(key, { metalness: n }));
   const transmission = slider("Transmission", 0, 1, 0.01, (n) => editMaterial(key, { transmission: n }));
@@ -272,6 +341,9 @@ function materialRow(item: MaterialItem, swatch: HTMLElement, expanded: Set<stri
   const detail = h(
     "div",
     { cls: "render-material-detail", hidden: !isOpen },
+    line("Library", libraryField),
+    scaleLine,
+    bumpLine,
     line("Roughness", roughness.el),
     line("Metalness", metalness.el),
     line("Transmission", transmission.el),
@@ -294,6 +366,10 @@ function materialRow(item: MaterialItem, swatch: HTMLElement, expanded: Set<stri
     toggle();
   });
 
+  // the head's swatch, and the Library field's thumb, show the library material's thumb while one is set
+  let thumbFor: string | undefined;
+  let shownSwatch = swatch;
+
   const update = (s: RenderSettings): void => {
     const m: MaterialOverride | undefined = s.materials[key];
     preset.value = m?.preset ?? "auto";
@@ -304,6 +380,28 @@ function materialRow(item: MaterialItem, swatch: HTMLElement, expanded: Set<stri
     tint.value = hexOf(m?.tint ?? item.color, "#ffffff");
     clearTint.disabled = m?.tint === undefined;
     reset.disabled = m === undefined;
+
+    const lib = m?.library;
+    const entry = lib === undefined ? undefined : libraryEntry(lib);
+    if (lib !== thumbFor) {
+      thumbFor = lib;
+      const thumb = entry ? libraryThumb(entry.id, "render-swatch") : swatch;
+      if (thumb !== shownSwatch) {
+        shownSwatch.replaceWith(thumb);
+        shownSwatch = thumb;
+      }
+      libSlot.replaceChildren(...(entry ? [libraryThumb(entry.id, "render-library-thumb")] : []));
+    }
+    libName.textContent = lib === undefined ? "None" : (entry?.label ?? "Not in the library");
+    libName.title = libName.textContent;
+    libName.classList.toggle("render-library-none", lib === undefined);
+    removeLib.hidden = lib === undefined;
+    scaleLine.hidden = lib === undefined;
+    bumpLine.hidden = lib === undefined;
+    const sc = m?.scale ?? 1;
+    setSlider(scale, sc, `×${sc.toFixed(2)}`);
+    const bp = m?.bump ?? 1;
+    setSlider(bump, bp, pct(bp));
   };
 
   return { label: item.label, el: h("div", { cls: "render-material" }, head, detail), update };
@@ -456,7 +554,14 @@ export function renderPalette(): HTMLElement {
   const search = h("input", { cls: "search render-search", attrs: { type: "search", placeholder: "Search materials", "aria-label": "Search materials" } });
   const materialsNone = h("p", { cls: "muted render-note", text: "Materials appear once the 3D view draws in Realistic or Path Traced." });
   const materialsBox = h("div", { cls: "list render-list" });
-  const materials = section("Materials", search, materialsNone, materialsBox);
+  const matchBtn = h("button", {
+    cls: "btn small",
+    text: "Match library materials",
+    title: "Give each material whose finish the library has a material of that finish, unless it has a texture or a library material",
+    attrs: { type: "button" },
+  });
+  matchBtn.addEventListener("click", () => matchLibraryMaterials());
+  const materials = h("section", { cls: "info-section" }, h("div", { cls: "render-head" }, h("h3", { text: "Materials" }), matchBtn), search, materialsNone, materialsBox);
   const expanded = new Set<string>();
   let previews: string[] = [];
   let rows: MaterialRow[] = [];
@@ -548,7 +653,19 @@ export function renderPalette(): HTMLElement {
   const denoise = check("Denoise", (on) => patchRender("quality", { denoise: on }));
   const resetAll = h("button", { cls: "btn small", text: "Reset all settings", title: "Back to the defaults, materials included", attrs: { type: "button" } });
   resetAll.addEventListener("click", () => resetRender());
-  const quality = section("Quality", field("Preview samples", samples), field("Bounces", bounces.el), denoise.row, h("div", { cls: "row-end" }, resetAll));
+  const engine = dropdown("Path tracer", ENGINE_OPTIONS, (e) => patchRender("quality", { engine: e }));
+  const engineNote = h("p", { cls: "muted render-note", text: "This browser has no WebGPU: the WebGL path tracer draws.", hidden: true });
+  const motion = dropdown("While moving", MOTION_OPTIONS, (m) => patchRender("quality", { motion: m }));
+  const quality = section(
+    "Quality",
+    field("Preview samples", samples),
+    field("Bounces", bounces.el),
+    denoise.row,
+    field("Path tracer", engine),
+    engineNote,
+    field("While moving", motion),
+    h("div", { cls: "row-end" }, resetAll),
+  );
 
   // keeps every control in step with the settings, the drawing's view and its time
   const sync = (): void => {
@@ -649,6 +766,9 @@ export function renderPalette(): HTMLElement {
     samples.value = String(q.previewSamples);
     setSlider(bounces, q.bounces, String(q.bounces));
     denoise.box.checked = q.denoise;
+    engine.value = q.engine;
+    engineNote.hidden = webgpuKnown() !== false;
+    motion.value = q.motion;
 
     for (const r of rows) r.update(s);
   };
@@ -662,6 +782,8 @@ export function renderPalette(): HTMLElement {
   listCameras();
   refreshMaterials();
   sync();
+  // asks once whether this browser has WebGPU, so the note under the path tracer shows when it has not
+  void webgpuAvailable().then(() => sync());
 
   return h("div", { cls: "info render-palette" }, head, environment, sun, lights, camera, fog, materials, lighting, lens, colourSection, style, quality);
 }

@@ -1,0 +1,4 @@
+The textures in public/materials are from ambientCG (https://ambientcg.com), released under the CC0 1.0 licence
+(https://docs.ambientcg.com/license/): free to use, change and share, commercially or not, with no credit needed.
+
+Lawn | Grass004 | ambientCG | https://ambientcg.com/a/Grass004

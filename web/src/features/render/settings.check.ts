@@ -48,5 +48,25 @@ console.log("looks");
   check(mono?.effects.saturation === -1, "Black and white takes the colour out");
 }
 
+console.log("engine and motion");
+{
+  // settings from before the path tracer's choices: quality without engine or motion
+  const before = completeSettings({ quality: { previewSamples: 64, bounces: 3, denoise: false } });
+  check(before.quality.engine === "auto" && before.quality.motion === "trace", "without them, the engine is auto and the motion trace");
+  check(before.quality.previewSamples === 64 && before.quality.bounces === 3 && before.quality.denoise === false, "the quality values before them are kept");
+  const picked = completeSettings({ quality: { engine: "webgpu", motion: "raster" } });
+  check(picked.quality.engine === "webgpu" && picked.quality.motion === "raster", "an engine and a motion are kept");
+  const unknown = completeSettings({ quality: { engine: "metal", motion: "orbit" } });
+  check(unknown.quality.engine === "auto" && unknown.quality.motion === "trace", "a name this version does not know takes the default");
+  check(completeSettings({}).quality.engine === "auto" && DEFAULT_RENDER.quality.motion === "trace", "the defaults are auto and trace");
+}
+
+console.log("library fields");
+{
+  const kept = completeSettings({ materials: { "tex:Oak": { preset: "wood", library: "oak-planks", scale: 2, bump: 0.5 } } });
+  const oak = kept.materials["tex:Oak"];
+  check(oak?.library === "oak-planks" && oak.scale === 2 && oak.bump === 0.5, "a library material keeps its library, scale and bump");
+}
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exitCode = failures === 0 ? 0 : 1;

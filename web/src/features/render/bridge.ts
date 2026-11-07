@@ -16,6 +16,8 @@ export interface MaterialItem {
   readonly guess: Exclude<MaterialPresetId, "auto">;
   /** face groups using it */
   readonly count: number;
+  /** its faces show a drawing texture's image, so a library material would hide it */
+  readonly textured: boolean;
 }
 
 let materials: readonly MaterialItem[] = [];

@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import type { ModelFace } from "../../app/view3d.ts";
 import type { ResourceInfo } from "../../core/index.ts";
+import type { LibraryEntry, LibraryTextures } from "./library.ts";
 import { PRESET_LABELS, type MaterialOverride, type MaterialPresetId } from "./settings.ts";
 import { PRESETS, guessPreset, makeMaterial, presetFor, updateMaterial, type PresetId } from "./materials.ts";
 
@@ -41,10 +42,18 @@ function finishOf(m: THREE.MeshPhysicalMaterial): string {
 }
 
 /** Updates `m` in place and tells whether that asked for a new shader (needsUpdate bumps the material's version). */
-function updateBumps(m: THREE.MeshPhysicalMaterial, f: ModelFace, o?: MaterialOverride): boolean {
+function updateBumps(m: THREE.MeshPhysicalMaterial, f: ModelFace, o?: MaterialOverride, lib: LibraryTextures | null = null): boolean {
   const v = m.version;
-  updateMaterial(m, f, o);
+  updateMaterial(m, f, o, null, lib);
   return m.version !== v;
+}
+
+/** A textured face of a drawing's picture `mm` wide, its UVs in units of that picture as view3d.ts makes them. */
+function drawnFace(mm: number): ModelFace {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1], 2));
+  const f = face("Oak Floor", { geometry, map: picture });
+  return { ...f, resource: { ...(f.resource as ResourceInfo), imageSize: mm } };
 }
 
 const picture = new THREE.Texture();
@@ -224,6 +233,77 @@ console.log("clay");
   check(m.version !== v && m.map === null, "turning clay on drops the picture and recompiles");
   updateMaterial(m, face("Oak Floor", { map: picture }), undefined, null);
   check(finishOf(m) === finishOf(makeMaterial(face("Oak Floor", { map: picture }))), "turning clay off gives the finish back");
+}
+
+console.log("library");
+{
+  // a library material 2 m across and 1 m up, with all four maps
+  const entry: LibraryEntry = { id: "test-oak", label: "Test oak", category: "Wood", finish: "wood", size: [2, 1], maps: { normal: true, rough: true, metal: true }, author: "test" };
+  const lib: LibraryTextures = { entry, color: new THREE.Texture(), normal: new THREE.Texture(), rough: new THREE.Texture(), metal: new THREE.Texture() };
+  const oak: MaterialOverride = { preset: "auto", library: "test-oak" };
+  const repeatIs = (t: THREE.Texture | null, x: number, y: number) => t !== null && Math.abs(t.repeat.x - x) < 1e-9 && Math.abs(t.repeat.y - y) < 1e-9;
+
+  const m = makeMaterial(face(null), oak, null, lib);
+  check(m.map !== null && m.map !== lib.color && m.map.source === lib.color.source, "the colour map is a clone of the library's, over the same image");
+  check(m.normalMap !== null && m.normalMap !== lib.normal && m.normalMap.source === lib.normal?.source, "the normal map is a clone too");
+  check(m.roughnessMap !== null && m.roughnessMap.source === lib.rough?.source && m.metalnessMap !== null && m.metalnessMap.source === lib.metal?.source, "the roughness and metal maps are clones");
+  check(m.color.getHexString() === "ffffff", "a library material is drawn in white: its colour map carries the colour");
+  check(makeMaterial(face(null), { ...oak, tint: "#ff0000" }, null, lib).color.getHexString() === "ff0000", "a tint multiplies the colour map");
+
+  check(m.normalScale.x === 1 && m.normalScale.y === 1, "bump as it is: normal scale 1");
+  const flat = makeMaterial(face(null), { ...oak, bump: 0.5 }, null, lib);
+  check(flat.normalScale.x === 0.5 && flat.normalScale.y === 0.5, "bump 0.5: normal scale 0.5 both ways");
+
+  check(m.roughness === 1, "a roughness map sets roughness: 1 as it is");
+  check(makeMaterial(face(null), { ...oak, roughness: 0.3 }, null, lib).roughness === 0.3, "a roughness set multiplies the map: 0.3");
+  const noRough = makeMaterial(face(null), oak, null, { ...lib, rough: null });
+  check(noRough.roughnessMap === null && noRough.roughness === 0.9, "without a roughness map: the finish's roughness (matte 0.9)");
+
+  // the repeat: metres for a face with no picture, the picture's size for a face with one, both over the library's size and scale
+  check(repeatIs(m.map, 0.5, 1) && repeatIs(m.normalMap, 0.5, 1), "untextured face: one tile is 2 m by 1 m, repeat 0.5 by 1");
+  check(repeatIs(makeMaterial(drawnFace(500), oak, null, lib).map, 0.25, 0.5), "a picture 500 mm wide: repeat 0.25 by 0.5");
+  check(repeatIs(makeMaterial(drawnFace(500), { ...oak, scale: 2 }, null, lib).map, 0.125, 0.25), "the same at scale 2: repeat 0.125 by 0.25");
+  check(repeatIs(makeMaterial(drawnFace(0), oak, null, lib).map, 0.5, 1), "a picture of unknown size takes 1000 mm");
+  check(repeatIs(makeMaterial(face("Oak Floor"), oak, null, lib).map, 0.5, 1), "a textured face with no UVs of its own has metre UVs");
+
+  const shiny = makeMaterial(face(null), { preset: "matte", library: "test-oak" }, null, lib);
+  check(shiny.metalness === 1 && shiny.metalnessMap !== null && shiny.metalnessMap.source === lib.metal?.source, "a metal map: metalness 1 whatever the finish");
+  const metalNoMap = makeMaterial(face(null), { preset: "metal", library: "test-oak" }, null, { ...lib, metal: null });
+  check(metalNoMap.metalness === 1 && metalNoMap.metalnessMap === null, "without a metal map: the finish's metalness (metal: 1)");
+  check(makeMaterial(face(null), { preset: "matte", library: "test-oak", metalness: 0.5 }, null, lib).metalness === 0.5, "a metalness set multiplies the metal map: 0.5");
+
+  const loading = makeMaterial(face("Oak Floor", { map: picture }), oak, null, null);
+  check(loading.map === picture && loading.normalMap === null && loading.roughnessMap === null && loading.metalnessMap === null, "while the library loads, the face keeps its own look");
+
+  const clayed = makeMaterial(face(null), oak, "#ecebe7", lib);
+  check(clayed.map === null && clayed.normalMap === null && clayed.roughnessMap === null && clayed.metalnessMap === null && clayed.color.getHexString() === "ecebe7", "clay: the library's maps are dropped");
+
+  // removing the library clears the maps and disposes the clones, never the library's own textures
+  const gone = makeMaterial(face(null), oak, null, lib);
+  const clones = [gone.map, gone.normalMap, gone.roughnessMap, gone.metalnessMap].filter((t): t is THREE.Texture => t !== null);
+  let disposed = 0;
+  let libDisposed = 0;
+  for (const t of clones) t.addEventListener("dispose", () => disposed++);
+  lib.color.addEventListener("dispose", () => libDisposed++);
+  updateMaterial(gone, face(null), { preset: "auto" }, null, null);
+  check(gone.map === null && gone.normalMap === null && gone.roughnessMap === null && gone.metalnessMap === null, "library removed: its maps cleared");
+  check(disposed === clones.length && clones.length === 4, `library removed: its ${clones.length} clones disposed (${disposed})`);
+  check(libDisposed === 0, "the library's own textures are not disposed");
+
+  // a different library textures object (the same material, loaded again): new clones, the old ones disposed
+  const swapped = makeMaterial(face(null), oak, null, lib);
+  const oldMap = swapped.map;
+  let oldDisposed = 0;
+  oldMap?.addEventListener("dispose", () => oldDisposed++);
+  updateMaterial(swapped, face(null), oak, null, { ...lib });
+  check(swapped.map !== oldMap && oldDisposed === 1, "textures swapped: new clones, the old colour clone disposed");
+
+  // shaders: a library adds maps (a new program), its values alone do not
+  const k = makeMaterial(face(null));
+  check(updateBumps(k, face(null), oak, lib), "a library added: a new shader");
+  check(!updateBumps(k, face(null), { ...oak, bump: 0.3 }, lib), "bump edited: values only, no new shader");
+  check(!updateBumps(k, face(null), { ...oak, scale: 2 }, lib), "scale edited: the repeat only, no new shader");
+  check(updateBumps(k, face(null), { ...oak, bump: 0.3 }, null), "library removed: a new shader");
 }
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);

@@ -45,6 +45,12 @@ export interface MaterialOverride {
   readonly emissive?: number;
   /** a CSS colour in place of the face's */
   readonly tint?: string;
+  /** the library material's id (library.ts LIBRARY), whose colour, normal, roughness and metal maps the face takes */
+  readonly library?: string;
+  /** multiplies the library material's real size (1 as it is) */
+  readonly scale?: number;
+  /** the normal map's strength, 0 flat .. 2 (1 as it is) */
+  readonly bump?: number;
 }
 
 /** The finishes the palette offers, in its order ("auto" first). */
@@ -163,6 +169,10 @@ export interface RenderSettings {
     /** light bounces the path tracer follows */
     readonly bounces: number;
     readonly denoise: boolean;
+    /** which path tracer: auto takes WebGPU where the browser has it */
+    readonly engine: "auto" | "webgpu" | "webgl";
+    /** what the Path Traced view shows while it moves: a path-traced picture kept steady over frames (trace), or the Realistic one (raster) */
+    readonly motion: "trace" | "raster";
   };
   /** each material's finish, by materialKey */
   readonly materials: Readonly<Record<string, MaterialOverride>>;
@@ -207,9 +217,12 @@ export const DEFAULT_RENDER: RenderSettings = {
     outlineColor: "#24262b",
   },
   clay: { on: false, color: "#ecebe7" },
-  quality: { previewSamples: 256, bounces: 5, denoise: true },
+  quality: { previewSamples: 256, bounces: 5, denoise: true, engine: "auto", motion: "trace" },
   materials: {},
 };
+
+const ENGINES = ["auto", "webgpu", "webgl"] as const;
+const MOTIONS = ["trace", "raster"] as const;
 
 /** The effects a look sets: the grading, the lens's and the glow's; the rest are left as they are. */
 type LookFields = Pick<
@@ -349,6 +362,9 @@ export function completeSettings(raw: unknown): RenderSettings {
     if (v === undefined) continue;
     out[k] = def && typeof def === "object" && v && typeof v === "object" ? mergeSection(def as Record<string, unknown>, v as Record<string, unknown>, k === "materials") : typeof v === typeof def ? v : def;
   }
+  // the path tracer's names: one this version does not know (from a later one) takes its default
+  const quality = out.quality as Record<string, unknown>;
+  out.quality = { ...quality, engine: oneOf(quality.engine, ENGINES, DEFAULT_RENDER.quality.engine), motion: oneOf(quality.motion, MOTIONS, DEFAULT_RENDER.quality.motion) };
   return out as unknown as RenderSettings;
 }
 
@@ -358,6 +374,11 @@ function mergeSection(def: Record<string, unknown>, v: Record<string, unknown>, 
   const out: Record<string, unknown> = { ...def };
   for (const [k, d] of Object.entries(def)) if (typeof v[k] === typeof d) out[k] = v[k];
   return out;
+}
+
+/** `value` when it is one of `choices`, else `fallback`. */
+function oneOf<T extends string>(value: unknown, choices: readonly T[], fallback: T): T {
+  return (choices as readonly unknown[]).includes(value) ? (value as T) : fallback;
 }
 
 function save(): void {

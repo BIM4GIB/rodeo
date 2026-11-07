@@ -226,7 +226,14 @@ The 3D view's **Realistic** mode draws the model each frame in physically based 
 
 ### Path Traced
 
-**Path Traced** shows the Realistic picture while the view moves and, once it rests, refines a path-traced picture (light bouncing between surfaces, glass, mirrors, the light objects) up to the preview's samples, denoised while it has few. The path tracer builds its scene off the page's thread.
+**Path Traced** traces the light in the 3D view itself: light bouncing between surfaces, through glass, off mirrors and from the light objects. The path tracer builds its scene off the page's thread.
+
+- While the view moves it keeps tracing, at a lower resolution, and steadies the picture by reusing what the frames before saw of each surface, so you orbit and walk inside the path-traced picture.
+- Once the view rests it refines the full picture up to the preview's samples, denoised as it goes.
+
+Where the browser has WebGPU (recent Chrome, Edge and Safari), the path tracer runs on it and denoises with Open Image Denoise, a neural denoiser that keeps edges and textures sharp; elsewhere it runs on WebGL. The Render palette's Quality section chooses (**Path tracer**: Auto, WebGPU or WebGL), and **While moving › Realistic** shows the Realistic picture while the view moves instead, for slow graphics cards.
+
+**Limits:** the WebGL path tracer leaves out clear coats (the glossy top layer of tile, wood and glossy paint), which Realistic and the WebGPU path tracer show.
 
 ### Render palette
 
@@ -241,9 +248,32 @@ The Render palette (**View › Render Settings**, after Renderworks Style) sets:
 - two-point perspective and depth of field
 - each material's finish: Auto guesses one from its texture's name and colour (wood, glass, metal, foliage and so on), each with its roughness, metalness, transmission, glow and tint to change
 - the effects: ambient occlusion, bloom, vignette, contrast, saturation
-- the quality: preview samples, bounces, denoise
+- each material's library material (see Material library, below), with its scale and bump
+- the quality: preview samples, bounces, denoise, the path tracer (WebGPU or WebGL) and what shows while the view moves
 
 Its Cameras list looks through the drawing's cameras. The settings belong to the drawing on this machine, not the file.
+
+### Material library
+
+Rodeo comes with 34 scanned materials, free to use (CC0, from Poly Haven and ambientCG), each with its colour, bump (normal), roughness and, for metal, metalness maps at its real size:
+
+- Wood: light oak floor, dark deck boards, herringbone parquet, weathered and grey board cladding, oak veneer
+- Brick: red, pale, yellow stock and dark engineering brick
+- Stone: rough stone wall, sandstone blocks, flagstone
+- Concrete: polished, fair-faced and precast panels
+- Plaster: smooth white plaster, rough render
+- Tile: white wall tile, chequered and limestone floor tile
+- Metal: corrugated iron, painted metal plate
+- Paving: concrete pavers, cobblestones, asphalt
+- Ground: lawn, leafy grass, gravel, sand
+- Roofing: clay roof tiles, roof slates
+- Fabric: cotton, tan leather
+
+In the Render palette's Materials list, open a material and use **Library › Choose…** to pick one (search or browse by category). **Scale** makes it bigger or smaller than its real size and **Bump** sets how deep its relief looks; **Remove** goes back to the drawing's own texture. **Match library materials** gives every material Rodeo guessed as wood, brick, stone, concrete, plaster, tile, metal or fabric the closest library material in one go.
+
+Library materials show in Realistic, Path Traced, Render Image and the cloud renders. They're laid on each face at their real size; a face with a texture keeps that texture's placement.
+
+**Limits:** library materials belong to the Render palette's settings on this machine, like the other finishes: the drawing and the file keep their own textures, and Vectorworks doesn't see them. Each map is 1K, so a library material seen from very close looks soft.
 
 ### Renderworks styles
 

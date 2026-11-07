@@ -5,6 +5,7 @@
 // asks for that. Each picture is PUT back to the page's server as it is made.
 
 import { buildScene, type RenderScene } from "./sceneBuilder.ts";
+import { prepareLibrary } from "./library.ts";
 import { unpackJob } from "./pack.ts";
 import { renderStill, type Job, type Tiling } from "./still.ts";
 
@@ -97,7 +98,11 @@ window.rodeoRender = async (spec: WorkerJob): Promise<Made[]> => {
   const res = await fetch(spec.pack);
   if (!res.ok || !res.body) throw new Error(`the job could not be read (${res.status})`);
   const bytes = new Uint8Array(await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
-  const { plan, settings, viz, shots, source } = await unpackJob(bytes);
+  const unpacked = await unpackJob(bytes);
+  const { plan, viz, shots, source } = unpacked;
+  // the server's headless Chrome traces with WebGL (its WebGPU isn't set up for the GPU)
+  const settings = { ...unpacked.settings, quality: { ...unpacked.settings.quality, engine: "webgl" as const } };
+  await prepareLibrary(settings);
 
   label = "Building the scene…";
   await report(true);

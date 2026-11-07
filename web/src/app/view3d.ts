@@ -2176,7 +2176,7 @@ export class View3D {
   /** Rewrites every index buffer to the objects on visible layers and sets the draw ranges. */
   /** The light objects' shadows are drawn again at the next frame: what the model shows has changed. */
   private staleShadows(): void {
-    for (const c of this.lamps.children) if (c instanceof THREE.Light && c.castShadow && c.shadow) c.shadow.needsUpdate = true;
+    for (const c of this.lamps.children) if (c instanceof THREE.Light && c.castShadow && "shadow" in c && c.shadow instanceof THREE.LightShadow) c.shadow.needsUpdate = true;
   }
 
   private applyVisibility(): void {

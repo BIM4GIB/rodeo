@@ -40,7 +40,8 @@ uniform sampler2D tBlurred;
 uniform sampler2D tNormal;
 uniform sampler2D tReflect;
 uniform sampler2D tDepth;
-uniform sampler2D tEnv;
+uniform samplerCube tEnv;
+uniform float uEnvMaxLod;
 uniform float uHasEnv;
 uniform mat4 uProj;
 uniform mat4 uProjInv;
@@ -56,7 +57,6 @@ varying vec2 vUv;
 
 #include <common>
 #include <packing>
-#include <cube_uv_reflection_fragment>
 
 float viewZAt(float depth) {
   return uOrtho > 0.5 ? orthographicDepthToViewZ(depth, uNear, uFar) : perspectiveDepthToViewZ(depth, uNear, uFar);
@@ -178,7 +178,9 @@ void main() {
   vec3 sky = vec3(0.0);
   if (uHasEnv > 0.5) {
     vec3 dir = normalize(mix(r, n, pow4(roughness)));
-    sky = textureCubeUV(tEnv, normalize(mat3(uCamWorld) * dir), roughness).rgb;
+    // the mip three.js's PMREM prefiltered for this roughness (its roughnessToMip)
+    float r = clamp(roughness, 0.0, 1.0);
+    sky = textureLod(tEnv, normalize(mat3(uCamWorld) * dir), uEnvMaxLod * r * (2.0 - r)).rgb;
   }
   vec2 fab = envBRDF(dotNV, roughness);
   vec3 weight = texture2D(tReflect, vUv).rgb * fab.x + fab.y;
@@ -223,6 +225,7 @@ export class ReflectionPass extends Pass {
     tReflect: { value: null as THREE.Texture | null },
     tDepth: { value: null as THREE.Texture | null },
     tEnv: { value: null as THREE.Texture | null },
+    uEnvMaxLod: { value: 0 },
     uHasEnv: { value: 0 },
     uProj: { value: new THREE.Matrix4() },
     uProjInv: { value: new THREE.Matrix4() },
@@ -239,7 +242,6 @@ export class ReflectionPass extends Pass {
     uniforms: this.uniforms,
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
-    defines: { ENVMAP_TYPE_CUBE_UV: "" },
     toneMapped: false,
     depthTest: false,
     depthWrite: false,
@@ -247,14 +249,11 @@ export class ReflectionPass extends Pass {
   private readonly quad = new FullScreenQuad(this.material);
   /** the sky as three.js prefilters it for rough reflections, made again when the sky changes */
   private env: { readonly sky: THREE.Texture; readonly target: THREE.WebGLRenderTarget } | null = null;
-  private envHeight = 0;
 
   constructor(gbuffer: GBufferPass, width: number, height: number) {
     super();
     this.gbuffer = gbuffer;
     this.blurred = blurTarget(width, height);
-    // compiled for some size until a sky is prefiltered, as the shader reads the defines either way
-    this.sizeCubeUv(256);
   }
 
   /** Takes up the scene's sky (null: none), prefiltering it when it is new. */
@@ -269,18 +268,8 @@ export class ReflectionPass extends Pass {
     } finally {
       generator.dispose();
     }
-    this.sizeCubeUv(this.env.target.texture.image.height as number);
-  }
-
-  /** Compiles the cube-UV lookup for a prefiltered map `height` px high, as three.js does (WebGLProgram's generateCubeUVSize). */
-  private sizeCubeUv(height: number): void {
-    if (height === this.envHeight) return;
-    this.envHeight = height;
-    const maxMip = Math.log2(height) - 2;
-    this.material.defines.CUBEUV_TEXEL_WIDTH = String(1 / (3 * Math.max(2 ** maxMip, 7 * 16)));
-    this.material.defines.CUBEUV_TEXEL_HEIGHT = String(1 / height);
-    this.material.defines.CUBEUV_MAX_MIP = `${maxMip}.0`;
-    this.material.needsUpdate = true;
+    // three.js's PMREM is a cube map whose mips hold the sky blurred for rougher and rougher faces
+    this.uniforms.uEnvMaxLod.value = Math.max(0, this.env.target.texture.mipmaps.length - 1);
   }
 
   setSize(width: number, height: number): void {

@@ -17,6 +17,7 @@ import { errorMessage, toast } from "../../app/toast.ts";
 import type { View3D } from "../../app/view3d.ts";
 import type { CameraInfo } from "../../core/index.ts";
 import { shotOfCamera, shotOfView, type Shot } from "./camera.ts";
+import { prepareLibrary } from "./library.ts";
 import { buildScene, type RenderScene } from "./sceneBuilder.ts";
 import { renderSettings, type RenderSettings } from "./settings.ts";
 import { currentUser } from "../../platform/api.ts";
@@ -542,6 +543,8 @@ export async function makePictures(plan: Plan, job: Job, box: StillBox, results:
   if (job.cancelled) return;
 
   const settings = jobSettings(plan);
+  await prepareLibrary(settings);
+  if (job.cancelled) return;
   // one scene for every picture of the job: it is built once, from the first picture that fits
   let scene: RenderScene | null = null;
   try {

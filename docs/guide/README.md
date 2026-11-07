@@ -19,7 +19,7 @@ How to use Rodeo, the drawing and 3D modelling app at [rodeo.build](https://rode
 
 ## 3D
 
-- [3D view, lights and rendering](3d-view-rendering.md): opening the 3D view and moving around, views and display, lights, cameras and the sun, rendering, Render Image and working planes.
+- [3D view, lights and rendering](3d-view-rendering.md): opening the 3D view and moving around, views and display, lights, cameras and the sun, rendering and the material library, Render Image and working planes.
 - [3D modelling](3d-modeling.md): extrudes and sweeps, solids and booleans, sections, surfaces and meshes, the 3D Power Pack and the 3D Modeling tool set.
 
 ## Documents
