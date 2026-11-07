@@ -1,3 +1,450 @@
+diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
+index 03d4f31..bca1abe 100644
+--- a/src/ifc/saved_meshes.rs
++++ b/src/ifc/saved_meshes.rs
+@@ -30,6 +30,7 @@ use super::entities::{BrepTriangle, IfcEntity, PropertyValue, SolidShape};
+ use super::export_content::{
+-    BEAM_BOX_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE, SPACE_OUTLINE_SAVED_MESH,
+-    SPACE_OUTLINE_SOURCE_PROPERTY,
++    BEAM_BOX_BODY_SOURCE, INSTANCE_TURNED_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE,
++    SPACE_OUTLINE_SAVED_MESH, SPACE_OUTLINE_SOURCE_PROPERTY,
+ };
+ use std::collections::{BTreeMap, BTreeSet};
++use crate::native_saved_scene::SavedElement;
+ 
+@@ -49,2 +50,6 @@ pub struct SavedMeshReport {
+     pub partial: usize,
++    /// Of the `replaced` elements, those drawn from a partial saved mesh whose
++    /// decoded faces fill the record box and are the body minus a few small
++    /// pieces (see [`partial_failures_admissible`] and the checks after it).
++    pub partial_admitted: usize,
+     /// Triangles written in all.
+@@ -53,2 +58,36 @@ pub struct SavedMeshReport {
+ 
++/// Most failed faces a partial element may have, and their largest share of
++/// its decoded faces.
++const PARTIAL_MAX_FAILED_FACES: usize = 4;
++const PARTIAL_MAX_FAILED_SHARE: f64 = 0.10;
++
++/// The face-decode failures a partial element may carry (RE-224 admission):
++/// a face whose surface pointer or UV boundary did not resolve, a trimmed face
++/// past its triangle budget, or a surface sampled outside its envelope. A
++/// trimmed face that needs a finer interior lattice is not among them: on the
++/// public reference models the only partial meshes that passed the count rule were
++/// sanitary terminals whose one such face was not Revit's body, so they stay
++/// boxed.
++const PARTIAL_FACE_FAILURES: [&str; 4] = [
++    "missing surface pointer target",
++    "disconnected UV boundary",
++    "trimmed face exceeds its budget",
++    "surface coordinates outside envelope",
++];
++
++/// Whether a partial element's failed face diagnostics are few enough, and all
++/// of a kind in [`PARTIAL_FACE_FAILURES`], to admit its decoded faces as the
++/// body: at most [`PARTIAL_MAX_FAILED_FACES`] and at most
++/// [`PARTIAL_MAX_FAILED_SHARE`] of its decoded primitives.
++fn partial_failures_admissible(failed: &[&String], decoded: usize) -> bool {
++    let count = failed.len();
++    count <= PARTIAL_MAX_FAILED_FACES
++        && (count as f64) <= PARTIAL_MAX_FAILED_SHARE * decoded as f64
++        && failed.iter().all(|diagnostic| {
++            PARTIAL_FACE_FAILURES
++                .iter()
++                .any(|kind| diagnostic.contains(kind))
++        })
++}
++
+ /// Which bounding-box bodies [`attach_scoped_with_control`] replaces.
+@@ -144,7 +183,8 @@ pub fn attach_scoped_with_control(
+         });
+-        // A beam RE-328 draws as its box along its line is a stand-in for
+-        // its saved mesh, as the record box is.
++        // A beam RE-328 draws as its box along its line, and a family instance
++        // turned off the model's axes (RE-87), are stand-ins for their saved
++        // mesh, as the record box is.
+         if !matches!(
+             text("BodySource"),
+-            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE)
++            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE | INSTANCE_TURNED_BODY_SOURCE)
+         ) || profile_resolved
+@@ -172,2 +212,7 @@ pub fn attach_scoped_with_control(
+     // meshed (#1075).
++    // Pass one: every element as the live decoder reads it. An element that
++    // is not admitted but has decoder diagnostics is a candidate for a second
++    // decode with the round-5 rules; its pass-one counts are kept aside.
++    let mut retry_ids = BTreeSet::new();
++    let mut retry: BTreeMap<u64, SavedMeshReport> = BTreeMap::new();
+     crate::native_saved_scene::extract_in_batches_with_control(
+@@ -186,62 +231,10 @@ pub fn attach_scoped_with_control(
+             };
+-            let primitives = &element.meshes.primitives;
+-            if primitives.is_empty() {
+-                return Ok(());
+-            }
+-            // RE-224: a mesh some face or branch of which did not decode is only
+-            // part of the body (on the BIM4LCA office 357 such meshes, none of
+-            // them Revit's body). Only branches left out for their view semantics
+-            // leave it whole.
+-            let partial = element.meshes.diagnostics.iter().any(|diagnostic| {
+-                !diagnostic
+-                    .ends_with(crate::native_graphics_traversal::NESTED_DETAIL_FILTER_DIAGNOSTIC)
+-                    && !diagnostic
+-                        .ends_with(crate::native_graphics_traversal::VIEW_COMPONENT_DIAGNOSTIC)
+-            });
+-            if partial {
+-                report.partial += 1;
+-                return Ok(());
+-            }
+-            let IfcEntity::BuildingElement {
+-                location_feet: Some(origin),
+-                rotation_radians,
+-                solid_shape,
+-                property_set: Some(set),
+-                ..
+-            } = &mut model.entities[*index]
+-            else {
+-                return Ok(());
+-            };
+-            let (sin, cos) = (-rotation_radians.unwrap_or(0.0)).sin_cos();
+-            let mut vertices = Vec::new();
+-            let mut triangles = Vec::new();
+-            for primitive in primitives {
+-                let base = vertices.len() as u32;
+-                vertices.extend(primitive.vertices.iter().map(|p| {
+-                    let (dx, dy) = (p[0] - origin[0], p[1] - origin[1]);
+-                    [dx * cos - dy * sin, dx * sin + dy * cos, p[2] - origin[2]]
+-                }));
+-                triangles.extend(
+-                    primitive
+-                        .triangles
+-                        .iter()
+-                        .filter(|t| t.iter().all(|&v| (v as usize) < primitive.vertices.len()))
+-                        .map(|t| BrepTriangle(base + t[0], base + t[1], base + t[2])),
+-                );
+-            }
+-            if triangles.is_empty() {
+-                return Ok(());
+-            }
+-            report.replaced += 1;
+-            report.triangles += triangles.len();
+-            *solid_shape = Some(SolidShape::TriangulatedFaceSet {
+-                vertices_feet: vertices,
+-                triangles,
+-            });
+-            for property in &mut set.properties {
+-                if property.name == "BodySource" {
+-                    property.value = PropertyValue::Text(SAVED_MESH_BODY_SOURCE.into());
+-                } else if property.name == SPACE_OUTLINE_SOURCE_PROPERTY {
+-                    property.value = PropertyValue::Text(SPACE_OUTLINE_SAVED_MESH.into());
+-                }
++            let mut own = SavedMeshReport::default();
++            admit_element(&element, *index, model, &mut own)?;
++            let id = element.identity.element_id;
++            if own.replaced > 0 || !round5_candidate(&element.meshes.diagnostics) {
++                absorb(&mut report, &own);
++            } else {
++                retry_ids.insert(id);
++                retry.insert(id, own);
+             }
+@@ -250,3 +243,297 @@ pub fn attach_scoped_with_control(
+     )?;
++    // Pass two: only the candidates, decoded with the round-5 rules on. Each
++    // is kept only if it passes every gate of the admission above; otherwise
++    // its pass-one counts stand and its box stays.
++    if !retry_ids.is_empty() {
++        let retry_options = crate::research::native_document::Options {
++            selected_ids: retry_ids.clone(),
++            ..options.clone()
++        };
++        crate::research::native_parametric_surface::NEW_RULES
++            .store(true, std::sync::atomic::Ordering::Relaxed);
++        let result = crate::native_saved_scene::extract_in_batches_with_control(
++            rf,
++            &retry_options,
++            3,
++            control,
++            |element| {
++                let id = element.identity.element_id;
++                let Some(indices) = by_id.get(&id) else {
++                    return Ok(());
++                };
++                let [index] = indices.as_slice() else {
++                    return Ok(());
++                };
++                let mut own = SavedMeshReport::default();
++                admit_element(&element, *index, model, &mut own)?;
++                if own.replaced > 0 {
++                    absorb(&mut report, &own);
++                    retry.remove(&id);
++                }
++                Ok(())
++            },
++        );
++        crate::research::native_parametric_surface::NEW_RULES
++            .store(false, std::sync::atomic::Ordering::Relaxed);
++        result?;
++        for own in retry.values() {
++            absorb(&mut report, own);
++        }
++    }
+     Ok(report)
+ }
++
++/// Whether an element that live leaves boxed has a decoder failure the
++/// round-6 rules can change: a multi-loop cylinder or a UV loop that does not
++/// join. Only these are decoded again; no admitted body in the corpus
++/// needed a surface-pointer candidate.
++fn round5_candidate(diagnostics: &[String]) -> bool {
++    diagnostics.iter().any(|d| {
++        [
++            "disconnected UV boundary",
++        ]
++        .iter()
++        .any(|kind| d.contains(kind))
++    })
++}
++
++/// Adds `own`'s counts to `report`.
++fn absorb(report: &mut SavedMeshReport, own: &SavedMeshReport) {
++    report.replaced += own.replaced;
++    report.partial += own.partial;
++    report.partial_admitted += own.partial_admitted;
++    report.triangles += own.triangles;
++}
++
++/// The admission of one element's saved graphics as its body: a decoded body
++/// that passes every gate replaces the element's box. Counts go to `report`.
++fn admit_element(element: &SavedElement, index: usize, model: &mut IfcModel, report: &mut SavedMeshReport) -> anyhow::Result<()> {
++    let primitives = &element.meshes.primitives;
++    if primitives.is_empty() {
++        return Ok(());
++    }
++    // RE-224: a mesh some face or branch of which did not decode is only
++    // part of the body (on a public reference office 357 such meshes, none of
++    // them Revit's body). Only branches left out for their view semantics
++    // leave it whole. A partial mesh whose few failed faces leave its
++    // decoded faces the body is admitted further down, after the checks
++    // that follow.
++    let failed: Vec<&String> = element
++        .meshes
++        .diagnostics
++        .iter()
++        .filter(|diagnostic| {
++            !diagnostic.ends_with(
++                crate::native_graphics_traversal::NESTED_DETAIL_FILTER_DIAGNOSTIC,
++            ) && !diagnostic
++                .ends_with(crate::native_graphics_traversal::VIEW_COMPONENT_DIAGNOSTIC)
++        })
++        .collect();
++    let partial = !failed.is_empty();
++    if partial && !partial_failures_admissible(&failed, primitives.len()) {
++        report.partial += 1;
++        return Ok(());
++    }
++    let IfcEntity::BuildingElement {
++        ifc_type,
++        location_feet: Some(origin),
++        rotation_radians,
++        extrusion,
++        solid_shape,
++        property_set: Some(set),
++        ..
++    } = &mut model.entities[index]
++    else {
++        return Ok(());
++    };
++    let (sin, cos) = (-rotation_radians.unwrap_or(0.0)).sin_cos();
++    let mut vertices = Vec::new();
++    let mut triangles = Vec::new();
++    for primitive in primitives {
++        let base = vertices.len() as u32;
++        vertices.extend(primitive.vertices.iter().map(|p| {
++            let (dx, dy) = (p[0] - origin[0], p[1] - origin[1]);
++            [dx * cos - dy * sin, dx * sin + dy * cos, p[2] - origin[2]]
++        }));
++        triangles.extend(
++            primitive
++                .triangles
++                .iter()
++                .filter(|t| t.iter().all(|&v| (v as usize) < primitive.vertices.len()))
++                .map(|t| BrepTriangle(base + t[0], base + t[1], base + t[2])),
++        );
++    }
++    if triangles.is_empty() {
++        return Ok(());
++    }
++    // A body with a curved-profile face must lie in its record box and
++    // fill most of it on each axis; otherwise it is only part of the
++    // element, and the box stays. Where the owner left out hidden
++    // components, the record box also holds geometry Revit does not
++    // draw in 3D, so one short axis is allowed.
++    if element.meshes.curved_extension_faces > 0
++        && !fills_record_box(
++            &vertices,
++            &triangles,
++            extrusion.as_ref(),
++            element.meshes.excluded_visibility_branches > 0,
++        )
++    {
++        return Ok(());
++    }
++    // A curved-profile shell admitted only by the seam tolerance (the
++    // exact rim refuses it) must have no triangle longer than half its
++    // box's diagonal; the seam tolerance is not allowed to draw a body
++    // that spans across its element.
++    if element.meshes.seam_admitted_shell
++        && has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
++    {
++        return Ok(());
++    }
++    // A railing's saved mesh is taken only where it fills its record box
++    // (RE-303): every vertex within the box and each extent of the box
++    // reached, to within 0.5 ft. A railing whose graphics leave a part
++    // out, with no decoder diagnostic to say so, keeps its box.
++    if ifc_type.as_str() == "IFCRAILING"
++        && !railing_mesh_fills_box(&vertices, extrusion.as_ref())
++    {
++        report.partial += 1;
++        return Ok(());
++    }
++    // RE-224 partial admission (a few failed faces, see above): the
++    // decoded faces must fill the record box on every axis, each vertex
++    // within it to 0.5 ft, with no triangle spanning it, and the element
++    // must not be a railing (its own rule above). Anything else keeps its
++    // box, counted as partial.
++    if partial {
++        if ifc_type.as_str() == "IFCRAILING"
++            || !fills_record_box(&vertices, &triangles, extrusion.as_ref(), false)
++            || has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
++        {
++            report.partial += 1;
++            return Ok(());
++        }
++        report.partial_admitted += 1;
++    }
++    report.replaced += 1;
++    report.triangles += triangles.len();
++    *solid_shape = Some(SolidShape::TriangulatedFaceSet {
++        vertices_feet: vertices,
++        triangles,
++    });
++    for property in &mut set.properties {
++        if property.name == "BodySource" {
++            property.value = PropertyValue::Text(SAVED_MESH_BODY_SOURCE.into());
++        } else if property.name == SPACE_OUTLINE_SOURCE_PROPERTY {
++            property.value = PropertyValue::Text(SPACE_OUTLINE_SAVED_MESH.into());
++        }
++    }
++    Ok(())
++}
++
++/// Whether the body's vertices (in the element's frame, the record box
++/// centred on x and y, from z = 0 to its height) lie within the box to 0.5 ft
++/// and span at least 70% of it on every axis. With `hidden_excluded` (the
++/// owner left out components Revit hides in 3D), one axis may fall short, but
++/// then no triangle may be longer than half the box's diagonal: a body that
++/// is only part of the element must not span across it.
++fn fills_record_box(
++    vertices: &[[f64; 3]],
++    triangles: &[BrepTriangle],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++    hidden_excluded: bool,
++) -> bool {
++    const TOLERANCE: f64 = 0.5;
++    const MIN_FILL: f64 = 0.7;
++    let Some(x) = extrusion else {
++        return false;
++    };
++    let size = [x.width_feet, x.depth_feet, x.height_feet];
++    if !size.iter().all(|s| s.is_finite() && *s > 0.) || vertices.is_empty() {
++        return false;
++    }
++    let lo = [-size[0] / 2., -size[1] / 2., 0.];
++    let hi = [size[0] / 2., size[1] / 2., size[2]];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            if !v[k].is_finite() || v[k] < lo[k] - TOLERANCE || v[k] > hi[k] + TOLERANCE {
++                return false;
++            }
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    let short = (0..3)
++        .filter(|&k| (max[k] - min[k]) < MIN_FILL * size[k])
++        .count();
++    match short {
++        0 => true,
++        1 => hidden_excluded && !has_giant_triangle(vertices, triangles, extrusion),
++        _ => false,
++    }
++}
++
++/// Whether some triangle of the body has an edge longer than half the
++/// diagonal of its record box.
++fn has_giant_triangle(
++    vertices: &[[f64; 3]],
++    triangles: &[BrepTriangle],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    let Some(x) = extrusion else {
++        return false;
++    };
++    let limit = (x.width_feet.powi(2) + x.depth_feet.powi(2) + x.height_feet.powi(2)).sqrt() / 2.;
++    let length = |a: u32, b: u32| {
++        let (p, q) = (vertices[a as usize], vertices[b as usize]);
++        (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
++    };
++    // A flat panel lying in a plane parallel to a side of the box (an
++    // appliance's side wall) is drawn by long triangles of its own; only a
++    // triangle crossing the box out of such a plane counts.
++    let axis_flat = |t: &BrepTriangle| {
++        let (a, b, c) = (vertices[t.0 as usize], vertices[t.1 as usize], vertices[t.2 as usize]);
++        (0..3).any(|k| (a[k] - b[k]).abs() <= AXIS_FLAT_FEET && (a[k] - c[k]).abs() <= AXIS_FLAT_FEET)
++    };
++    triangles.iter().any(|t| {
++        (length(t.0, t.1) > limit || length(t.1, t.2) > limit || length(t.2, t.0) > limit)
++            && !axis_flat(t)
++    })
++}
++
++/// How far a triangle's vertices may differ along one axis for it to count as
++/// lying in a plane parallel to a side of the record box.
++const AXIS_FLAT_FEET: f64 = 0.003;
++
++/// Whether `vertices`, in the element's frame (origin at its location, the
++/// box's x and y centred on it, its z from 0 up), lie within `extrusion`'s box
++/// and reach each of its faces, to within [`RAILING_BOX_TOLERANCE_FEET`].
++fn railing_mesh_fills_box(
++    vertices: &[[f64; 3]],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++) -> bool {
++    let Some(e) = extrusion else {
++        return false;
++    };
++    let half = [e.width_feet / 2.0, e.depth_feet / 2.0];
++    let tol = RAILING_BOX_TOLERANCE_FEET;
++    let lo = [-half[0], -half[1], 0.0];
++    let hi = [half[0], half[1], e.height_feet];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    (0..3).all(|k| min[k] >= lo[k] - tol && max[k] <= hi[k] + tol)
++        && (0..3).all(|k| min[k] <= lo[k] + tol && max[k] >= hi[k] - tol)
++}
++
++/// How far a railing's saved mesh may stop short of its record box, or reach
++/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
++/// their graphics on every railing measured on the sample projects.
++const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;
 diff --git a/rvt-wasm/src/lib.rs b/rvt-wasm/src/lib.rs
 index 86e48f0..c6c4992 100644
 --- a/rvt-wasm/src/lib.rs
@@ -219,7 +666,7 @@ index 15db1d8..e99be94 100644
          }
          Ok(())
 diff --git a/src/research/native_parametric_mesh.rs b/src/research/native_parametric_mesh.rs
-index b50dc80..b5d3f34 100644
+index b50dc80..e135450 100644
 --- a/src/research/native_parametric_mesh.rs
 +++ b/src/research/native_parametric_mesh.rs
 @@ -1,11 +1,98 @@
@@ -351,7 +798,7 @@ index b50dc80..b5d3f34 100644
      let (du, dv) = match &surface {
          ParametricSurface::SurfRev { profile, .. } => match profile {
              Curve::Line {
-@@ -293,6 +377,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -293,7 +377,16 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
                  angular(center[0].hypot(center[1]) + 2. * radius),
                  angular(*radius),
              ),
@@ -362,9 +809,13 @@ index b50dc80..b5d3f34 100644
 +                angular(profile.curvature_speed_max()),
 +            ),
          },
++        ParametricSurface::Cylinder { .. } => {
++            anyhow::bail!("cylinder trim has no parametric grid")
++        }
          ParametricSurface::ConeSurf { half_angle, .. } => {
              // The generators are straight: only the angle needs a chord bound.
-@@ -318,30 +408,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+             let far = min[1].abs().max(max[1].abs());
+@@ -318,30 +411,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
                  }
                  let s = ParametricSurface::read(g, surface_index)?;
                  let ParametricSurface::RuledSurf {
@@ -399,7 +850,7 @@ index b50dc80..b5d3f34 100644
              }
              (1. / n, 1. / n)
          }
-@@ -370,8 +442,178 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -370,8 +445,178 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
      })
  }
  
@@ -413,7 +864,7 @@ index b50dc80..b5d3f34 100644
 +        ParametricSurface::SurfRev { profile, .. } => {
 +            matches!(profile, Curve::Ellipse { .. } | Curve::Hermite { .. })
 +        }
-+        ParametricSurface::ConeSurf { .. } => false,
++        ParametricSurface::ConeSurf { .. } | ParametricSurface::Cylinder { .. } => false,
 +    }
 +}
 +
@@ -580,10 +1031,35 @@ index b50dc80..b5d3f34 100644
      let flags = f.fields["m_faceFlags_v9"].as_u64().context("face flags")?;
      let mesh = tessellate_uv(
 diff --git a/src/research/native_parametric_surface.rs b/src/research/native_parametric_surface.rs
-index b902e19..e85fcc5 100644
+index b902e19..776ab72 100644
 --- a/src/research/native_parametric_surface.rs
 +++ b/src/research/native_parametric_surface.rs
-@@ -111,6 +111,25 @@ pub enum Curve {
+@@ -60,6 +60,24 @@ fn corner(v: &Value) -> Result<[f64; 2]> {
+     Ok(r)
+ }
+ 
++/// One end of a ruled surface. A null profile pointer (class tag null, token
++/// 0) is a point end: the surface runs from the other profile to the point
++/// stored beside it, `m_Point1` or `m_Point2`. The point is a zero-direction
++/// line, so it evaluates to that point everywhere and has no tangent. Any
++/// other unresolved pointer is still refused.
++fn ruled_end(g: &ObjectGraph, si: usize, s: &crate::research::native_parameters::GraphObject, field: &str, point_field: &str) -> Result<Curve> {
++    let v = &s.fields[field];
++    if new_rules() && v["class_tag"].is_null() && v["pointer_token"].as_u64() == Some(0) {
++        let apex = p(&s.fields[point_field], "ruled surface point end")?;
++        return Ok(Curve::Line {
++            origin: apex,
++            direction: [0., 0., 0.],
++            range: [0., 1.],
++        });
++    }
++    Curve::read(g, target(g, si, v)?)
++}
++
+ fn target(g: &ObjectGraph, source: usize, v: &Value) -> Result<usize> {
+     crate::native_saved_mesh::pointer(g, source, v)?.context("missing surface pointer target")
+ }
+@@ -111,6 +129,25 @@ pub enum Curve {
          radius: f64,
          range: [f64; 2],
      },
@@ -609,7 +1085,7 @@ index b902e19..e85fcc5 100644
  }
  
  impl Curve {
-@@ -153,10 +172,76 @@ impl Curve {
+@@ -153,10 +190,76 @@ impl Curve {
                      range: range(&o.fields["m_endParams"], "arc range")?,
                  })
              }
@@ -687,7 +1163,7 @@ index b902e19..e85fcc5 100644
          match self {
              Self::Line {
                  origin, direction, ..
-@@ -171,6 +256,36 @@ impl Curve {
+@@ -171,6 +274,36 @@ impl Curve {
                  *center,
                  mul(add(mul(*x, t.cos()), mul(*y, t.sin())), *radius),
              ),
@@ -724,7 +1200,7 @@ index b902e19..e85fcc5 100644
          }
      }
      fn derivative(&self, t: f64) -> Point {
-@@ -179,8 +294,95 @@ impl Curve {
+@@ -179,10 +312,107 @@ impl Curve {
              Self::Arc { x, y, radius, .. } => {
                  mul(add(mul(*x, -t.sin()), mul(*y, t.cos())), *radius)
              }
@@ -752,8 +1228,8 @@ index b902e19..e85fcc5 100644
 +                );
 +                mul(ds, 1. / h)
 +            }
-         }
-     }
++        }
++    }
 +    /// The parameter range of the curve.
 +    pub(crate) fn range(&self) -> [f64; 2] {
 +        c_range_of(self)
@@ -793,10 +1269,10 @@ index b902e19..e85fcc5 100644
 +                }
 +                best
 +            }
-+        }
-+    }
-+}
-+
+         }
+     }
+ }
+ 
 +/// The span `[params[i], params[i + 1]]` holding `t` (clamped to the nodes),
 +/// the span length `h` and the normalized position `s` within it.
 +fn hermite_segment(params: &[f64], t: f64) -> (usize, f64, f64) {
@@ -817,10 +1293,173 @@ index b902e19..e85fcc5 100644
 +        | Curve::Ellipse { range, .. }
 +        | Curve::Hermite { range, .. } => *range,
 +    }
- }
- 
++}
++
++/// Whether the round-5 decoder rules are on: the point-end RuledSurf, the
++/// loop-join tolerance and the multi-loop cylinder. Off, the decoder is
++/// live's; the element-level retry in saved_meshes turns it on for the
++/// elements live leaves boxed, and only for them.
++pub static NEW_RULES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++
++pub fn new_rules() -> bool {
++    NEW_RULES.load(std::sync::atomic::Ordering::Relaxed)
++}
++
  #[derive(Debug, Clone)]
-@@ -457,7 +659,5 @@ impl ParametricSurface {
+ pub enum ParametricSurface {
+     SurfRev {
+@@ -200,6 +430,19 @@ pub enum ParametricSurface {
+         profile1: Curve,
+         profile2: Curve,
+     },
++    /// A cylinder `center + radius (cos u x + sin u y) + v z` carrying several
++    /// trim loops, drawn by the trimmed-face mesher. `handed` is the sign of
++    /// the basis as the cylinder reader takes it (see native_saved_mesh).
++    Cylinder {
++        center: Point,
++        radius: f64,
++        x: Point,
++        y: Point,
++        z: Point,
++        handed: f64,
++        envelope: [[f64; 2]; 2],
++        orient: bool,
++    },
+     /// A cone `apex + v (cos α z + sin α (cos u x + sin u y))`: `v` is the
+     /// distance from the apex along the generator, and the radius at `v` is
+     /// `v sin α` (RE-311).
+@@ -249,8 +492,8 @@ impl ParametricSurface {
+                 orient: s.fields["m_orientFlag"]
+                     .as_bool()
+                     .context("surface orientation")?,
+-                profile1: Curve::read(g, target(g, si, &s.fields["m_pProfileCurve1"])?)?,
+-                profile2: Curve::read(g, target(g, si, &s.fields["m_pProfileCurve2"])?)?,
++                profile1: ruled_end(g, si, s, "m_pProfileCurve1", "m_Point1")?,
++                profile2: ruled_end(g, si, s, "m_pProfileCurve2", "m_Point2")?,
+             }),
+             "ConeSurf" => {
+                 let (x, y, z) = basis(&s.fields)?;
+@@ -285,14 +528,16 @@ impl ParametricSurface {
+         match self {
+             Self::SurfRev { envelope, .. }
+             | Self::RuledSurf { envelope, .. }
+-            | Self::ConeSurf { envelope, .. } => *envelope,
++            | Self::ConeSurf { envelope, .. }
++            | Self::Cylinder { envelope, .. } => *envelope,
+         }
+     }
+     pub fn orientation(&self) -> bool {
+         match self {
+             Self::SurfRev { orient, .. }
+             | Self::RuledSurf { orient, .. }
+-            | Self::ConeSurf { orient, .. } => *orient,
++            | Self::ConeSurf { orient, .. }
++            | Self::Cylinder { orient, .. } => *orient,
+         }
+     }
+     pub fn evaluate(&self, u: f64, v: f64) -> Result<Point> {
+@@ -336,6 +581,23 @@ impl ParametricSurface {
+                     mul(profile2.eval(t(profile2)), v),
+                 )
+             }
++            Self::Cylinder {
++                center,
++                radius,
++                x,
++                y,
++                z,
++                ..
++            } => {
++                let (s, c) = u.sin_cos();
++                add(
++                    *center,
++                    add(
++                        add(mul(*x, radius * c), mul(*y, radius * s)),
++                        mul(*z, v),
++                    ),
++                )
++            }
+             Self::ConeSurf {
+                 apex,
+                 x,
+@@ -403,6 +665,19 @@ impl ParametricSurface {
+             }
+             return Ok(mul(n, if *orient { 1. / len(n) } else { -1. / len(n) }));
+         }
++        if let Self::Cylinder {
++            x,
++            y,
++            handed,
++            orient,
++            ..
++        } = self
++        {
++            // The sign the cylinder's own normal takes, before the face's flag.
++            let sign = handed * if *orient { 1. } else { -1. };
++            let (s, c) = u.sin_cos();
++            return Ok(add(mul(*x, sign * c), mul(*y, sign * s)));
++        }
+         if let Self::ConeSurf {
+             x,
+             y,
+@@ -436,28 +711,51 @@ impl ParametricSurface {
+         };
+         let r1 = c_range(profile1);
+         let r2 = c_range(profile2);
+-        let t1 = r1[0] + u * (r1[1] - r1[0]);
+-        let t2 = r2[0] + u * (r2[1] - r2[0]);
+-        let p1 = profile1.eval(t1);
+-        let p2 = profile2.eval(t2);
+-        let du = add(
+-            mul(profile1.derivative(t1), (1. - v) * (r1[1] - r1[0])),
+-            mul(profile2.derivative(t2), v * (r2[1] - r2[0])),
+-        );
+-        let dv = sub(p2, p1);
+-        let n = cross(du, dv);
++        let cross_at = |u: f64, v: f64| -> Point {
++            let t1 = r1[0] + u * (r1[1] - r1[0]);
++            let t2 = r2[0] + u * (r2[1] - r2[0]);
++            let p1 = profile1.eval(t1);
++            let p2 = profile2.eval(t2);
++            let du = add(
++                mul(profile1.derivative(t1), (1. - v) * (r1[1] - r1[0])),
++                mul(profile2.derivative(t2), v * (r2[1] - r2[0])),
++            );
++            cross(du, sub(p2, p1))
++        };
++        let n = cross_at(u, v);
+         ensure!(
+             n.iter().all(|value| value.is_finite()),
+             "nonfinite surface normal"
+         );
+-        let l = len(n);
++        let mut l = len(n);
++        let mut n = n;
++        if l <= 1e-12 && crate::research::native_parametric_surface::new_rules() {
++            // At an apex (a point end of the ruled surface) both tangents
++            // vanish on the edge. Its normal is the limit from the interior:
++            // the first nearby parameter with a normal is used.
++            for (du_, dv_) in [
++                (1e-6, 0.),
++                (-1e-6, 0.),
++                (0., 1e-6),
++                (0., -1e-6),
++                (1e-4, 0.),
++                (-1e-4, 0.),
++                (0., 1e-4),
++                (0., -1e-4),
++            ] {
++                let cand = cross_at((u + du_).clamp(0., 1.), (v + dv_).clamp(0., 1.));
++                if cand.iter().all(|x| x.is_finite()) && len(cand) > 1e-12 {
++                    n = cand;
++                    l = len(cand);
++                    break;
++                }
++            }
++        }
+         ensure!(l > 1e-12, "surface normal is singular");
+         Ok(mul(n, if *orient { 1. / l } else { -1. / l }))
+     }
  }
  
  fn c_range(c: &Curve) -> [f64; 2] {
@@ -831,10 +1470,10 @@ index b902e19..e85fcc5 100644
  }
 diff --git a/src/research/native_parametric_trim.rs b/src/research/native_parametric_trim.rs
 new file mode 100644
-index 0000000..663d7f5
+index 0000000..b5eb876
 --- /dev/null
 +++ b/src/research/native_parametric_trim.rs
-@@ -0,0 +1,937 @@
+@@ -0,0 +1,1171 @@
 +//! Parametric faces whose saved trim is not a UV rectangle. Each trim loop is
 +//! read as a UV polygon. A single-loop trim is triangulated in UV by its
 +//! boundary samples, which are the samples neighbouring faces share, and the
@@ -1131,8 +1770,8 @@ index 0000000..663d7f5
 +}
 +
 +/// Whether `p` lies in the trim region: inside the outer loop and in no hole.
-+fn in_region(p: Uv, outer: &[Uv], holes: &[Vec<Uv>]) -> bool {
-+    inside(p, outer) && holes.iter().all(|h| !inside(p, h))
++fn in_region(p: Uv, rings: &[Vec<Uv>]) -> bool {
++    rings.iter().filter(|r| inside(p, r)).count() % 2 == 1
 +}
 +
 +/// Whether the segments `a`-`b` and `u`-`v` cross at a point interior to both.
@@ -1178,9 +1817,13 @@ index 0000000..663d7f5
 +    let span = (max[0] - min[0]).max(max[1] - min[1]).max(1e-9);
 +    let (mx, my) = ((min[0] + max[0]) / 2., (min[1] + max[1]) / 2.);
 +    let mut all = pts.to_vec();
-+    all.push([mx - 100. * span, my - 100. * span]);
-+    all.push([mx + 100. * span, my - 100. * span]);
-+    all.push([mx, my + 100. * span]);
++    let _ = (mx, my);
++    // The round-6 rules need a super-triangle far larger than the samples:
++    // at 100 spans, near-collinear boundary samples lose hull edges.
++    let k = if crate::research::native_parametric_surface::new_rules() { 1e4 } else { 100. };
++    all.push([mx - k * span, my - k * span]);
++    all.push([mx + k * span, my - k * span]);
++    all.push([mx, my + k * span]);
 +    let s = n as u32;
 +    let mut tris: Vec<[u32; 3]> = vec![[s, s + 1, s + 2]];
 +    for (i, &p) in pts.iter().enumerate() {
@@ -1222,32 +1865,207 @@ index 0000000..663d7f5
 +    Some((a?, b?))
 +}
 +
-+/// Forces each constraint segment into the triangulation as an edge: the
-+/// edges crossing it are flipped until none does (Sloan's method). A
-+/// constraint that touches another sample, or never settles, is refused.
-+fn constrain(pts: &[Uv], tris: &mut [[u32; 3]], constraints: &[(u32, u32)]) -> Result<()> {
++/// Each constraint with the trim samples that lie exactly on it (within
++/// 1e-12 of its span) split out: the constraint `a`-`b` becomes the chain
++/// `a`, `v1`, ..., `b` through those samples, so no new point is needed.
++fn split_constraints(pts: &[Uv], constraints: &[(u32, u32)]) -> Vec<(u32, u32)> {
++    let mut out = Vec::with_capacity(constraints.len());
 +    for &(a, b) in constraints {
 +        let (pa, pb) = (pts[a as usize], pts[b as usize]);
-+        let len2 = (pb[0] - pa[0]).powi(2) + (pb[1] - pa[1]).powi(2);
++        let len = ((pb[0] - pa[0]).powi(2) + (pb[1] - pa[1]).powi(2)).sqrt();
++        let mut on: Vec<(f64, u32)> = Vec::new();
 +        for (k, &p) in pts.iter().enumerate() {
 +            let k = k as u32;
 +            if k == a || k == b {
 +                continue;
 +            }
-+            let along = (p[0] - pa[0]) * (pb[0] - pa[0]) + (p[1] - pa[1]) * (pb[1] - pa[1]);
-+            ensure!(
-+                !(cross2(pa, pb, p).abs() <= 1e-12 && along > 0. && along < len2),
-+                "trim sample lies on another trim edge"
-+            );
++            let along = ((p[0] - pa[0]) * (pb[0] - pa[0]) + (p[1] - pa[1]) * (pb[1] - pa[1])) / len;
++            if cross2(pa, pb, p).abs() / len <= 1e-12 && along > 0. && along < len {
++                on.push((along, k));
++            }
 +        }
++        on.sort_by(|x, y| x.0.total_cmp(&y.0));
++        let mut prev = a;
++        for (_, k) in on {
++            out.push((prev, k));
++            prev = k;
++        }
++        out.push((prev, b));
++    }
++    out
++}
++
++/// Whether `p` lies in the closed triangle (a, b, c) of counter-clockwise order.
++fn in_closed_triangle(a: Uv, b: Uv, c: Uv, p: Uv) -> bool {
++    cross2(a, b, p) >= 0. && cross2(b, c, p) >= 0. && cross2(c, a, p) >= 0.
++}
++
++/// Ear clipping of a simple counter-clockwise polygon of sample indices.
++/// Returns its triangles, or `None` when no ear exists (a degenerate loop).
++fn ear_clip(pts: &[Uv], mut poly: Vec<u32>) -> Option<Vec<[u32; 3]>> {
++    let mut out = Vec::with_capacity(poly.len().saturating_sub(2));
++    while poly.len() > 3 {
++        let n = poly.len();
++        let mut found = None;
++        for i in 0..n {
++            let (p, c, q) = (poly[(i + n - 1) % n], poly[i], poly[(i + 1) % n]);
++            let (pp, pc, pq) = (pts[p as usize], pts[c as usize], pts[q as usize]);
++            if cross2(pp, pc, pq) <= 0. {
++                continue;
++            }
++            let blocked = poly.iter().any(|&r| {
++                r != p && r != c && r != q && in_closed_triangle(pp, pc, pq, pts[r as usize])
++            });
++            if !blocked {
++                found = Some(i);
++                break;
++            }
++        }
++        let i = found?;
++        let n = poly.len();
++        out.push([poly[(i + n - 1) % n], poly[i], poly[(i + 1) % n]]);
++        poly.remove(i);
++    }
++    let (x, y, z) = (poly[0], poly[1], poly[2]);
++    if cross2(pts[x as usize], pts[y as usize], pts[z as usize]) > 0. {
++        out.push([x, y, z]);
++    }
++    Some(out)
++}
++
++/// Inserts the constraint `a`-`b` by cavity retriangulation (Anglada 1997):
++/// the triangles it crosses are removed, and the two polygons they leave on
++/// either side of it are ear-clipped. No point is added. Returns `false` when
++/// the cavity is not a simple polygon on each side.
++fn cavity_insert(pts: &[Uv], tris: &mut Vec<[u32; 3]>, a: u32, b: u32) -> bool {
++    let (pa, pb) = (pts[a as usize], pts[b as usize]);
++    let crossed: Vec<usize> = (0..tris.len())
++        .filter(|&i| {
++            let t = tris[i];
++            (0..3).any(|k| {
++                let (u, v) = (t[k], t[(k + 1) % 3]);
++                u != a && u != b && v != a && v != b && crosses(pa, pb, pts[u as usize], pts[v as usize])
++            })
++        })
++        .collect();
++    if crossed.is_empty() {
++        return false;
++    }
++    let mut directed = BTreeSet::new();
++    for &i in &crossed {
++        let t = tris[i];
++        for k in 0..3 {
++            directed.insert((t[k], t[(k + 1) % 3]));
++        }
++    }
++    // Boundary edges of the cavity, each on one side of a-b.
++    let mut sides: [Vec<(u32, u32)>; 2] = [Vec::new(), Vec::new()];
++    for &(u, v) in &directed {
++        if directed.contains(&(v, u)) {
++            continue;
++        }
++        let p = if u == a || u == b { v } else { u };
++        let s = cross2(pa, pb, pts[p as usize]);
++        if s == 0. {
++            return false;
++        }
++        sides[usize::from(s < 0.)].push((u, v));
++    }
++    let mut new_tris = Vec::new();
++    for side in &sides {
++        // The chain of the cavity boundary on this side, from a to b.
++        let mut adj: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
++        for &(u, v) in side {
++            adj.entry(u).or_default().push(v);
++            adj.entry(v).or_default().push(u);
++        }
++        if adj.get(&a).map_or(true, |n| n.len() != 1) || adj.get(&b).map_or(true, |n| n.len() != 1) {
++            return false;
++        }
++        let mut path = vec![a];
++        let mut prev = None;
++        let mut cur = a;
++        while cur != b {
++            let next: Vec<u32> = adj
++                .get(&cur)
++                .map(|n| n.iter().copied().filter(|&x| Some(x) != prev).collect())
++                .unwrap_or_default();
++            if next.len() != 1 || path.len() > side.len() + 1 {
++                return false;
++            }
++            prev = Some(cur);
++            cur = next[0];
++            path.push(cur);
++        }
++        let area: f64 = path
++            .iter()
++            .zip(path.iter().cycle().skip(1))
++            .map(|(&u, &v)| {
++                let (p, q) = (pts[u as usize], pts[v as usize]);
++                p[0] * q[1] - q[0] * p[1]
++            })
++            .sum();
++        if area.abs() <= 1e-18 {
++            return false;
++        }
++        if area < 0. {
++            path.reverse();
++        }
++        match ear_clip(pts, path) {
++            Some(t) => new_tris.extend(t),
++            None => return false,
++        }
++    }
++    let crossed: BTreeSet<usize> = crossed.into_iter().collect();
++    let mut kept: Vec<[u32; 3]> = tris
++        .iter()
++        .enumerate()
++        .filter(|(i, _)| !crossed.contains(i))
++        .map(|(_, t)| *t)
++        .collect();
++    kept.extend(new_tris);
++    *tris = kept;
++    true
++}
++
++/// Forces each constraint segment into the triangulation as an edge. The
++/// edges crossing it are flipped until none does (Sloan's method); where
++/// that fails under the round-6 rules, the triangulation is restored and the
++/// constraint is inserted by cavity retriangulation instead. A constraint
++/// that still is not an edge is refused.
++fn constrain(pts: &[Uv], tris: &mut Vec<[u32; 3]>, constraints: &[(u32, u32)]) -> Result<()> {
++    let round6 = crate::research::native_parametric_surface::new_rules();
++    let segments = if round6 {
++        split_constraints(pts, constraints)
++    } else {
++        for &(a, b) in constraints {
++            let (pa, pb) = (pts[a as usize], pts[b as usize]);
++            let len2 = (pb[0] - pa[0]).powi(2) + (pb[1] - pa[1]).powi(2);
++            for (k, &p) in pts.iter().enumerate() {
++                let k = k as u32;
++                if k == a || k == b {
++                    continue;
++                }
++                let along = (p[0] - pa[0]) * (pb[0] - pa[0]) + (p[1] - pa[1]) * (pb[1] - pa[1]);
++                ensure!(
++                    !(cross2(pa, pb, p).abs() <= 1e-12 && along > 0. && along < len2),
++                    "trim sample lies on another trim edge"
++                );
++            }
++        }
++        constraints.to_vec()
++    };
++    for (seg_i, &(a, b)) in segments.iter().enumerate() {
++        let (pa, pb) = (pts[a as usize], pts[b as usize]);
 +        let mut edges: Vec<(u32, u32)> = tris
 +            .iter()
 +            .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
 +            .map(|(u, v)| (u.min(v), u.max(v)))
 +            .collect();
-+        if edges.contains(&(a, b)) {
++        if edges.contains(&(a.min(b), a.max(b))) {
 +            continue;
 +        }
++        let backup = round6.then(|| tris.clone());
 +        edges.sort_unstable();
 +        edges.dedup();
 +        let mut queue: VecDeque<(u32, u32)> = edges
@@ -1256,9 +2074,14 @@ index 0000000..663d7f5
 +            .filter(|&(u, v)| crosses(pa, pb, pts[u as usize], pts[v as usize]))
 +            .collect();
 +        let mut steps = 0usize;
++        let mut sloan_ok = true;
 +        while let Some((u, v)) = queue.pop_front() {
 +            steps += 1;
-+            ensure!(steps <= 1_000_000, "trim constraint recovery stalled");
++            if steps > 1_000_000 {
++                ensure!(round6, "trim constraint recovery stalled");
++                sloan_ok = false;
++                break;
++            }
 +            if !crosses(pa, pb, pts[u as usize], pts[v as usize]) {
 +                continue;
 +            }
@@ -1279,12 +2102,23 @@ index 0000000..663d7f5
 +                queue.push_back((x.min(y), x.max(y)));
 +            }
 +        }
-+        let recovered = tris.iter().any(|t| {
-+            [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])]
-+                .iter()
-+                .any(|&(u, v)| (u, v) == (a, b) || (v, u) == (a, b))
-+        });
-+        ensure!(recovered, "trim boundary not recoverable");
++        let recovered = |tris: &[[u32; 3]]| {
++            tris.iter().any(|t| {
++                [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])]
++                    .iter()
++                    .any(|&(u, v)| (u, v) == (a, b) || (v, u) == (a, b))
++            })
++        };
++        if sloan_ok && recovered(tris) {
++            continue;
++        }
++        if let Some(backup) = backup {
++            *tris = backup;
++            if cavity_insert(pts, tris, a, b) && recovered(tris) {
++                continue;
++            }
++        }
++        bail!("trim boundary not recoverable");
 +    }
 +    Ok(())
 +}
@@ -1446,8 +2280,7 @@ index 0000000..663d7f5
 +/// not, so a face that needs a boundary split is refused.
 +fn cdt_mesh(
 +    surface: &ParametricSurface,
-+    outer: &[Uv],
-+    holes: &[Vec<Uv>],
++    rings: &[Vec<Uv>],
 +    boundary: &[Uv],
 +    boundary_edges: &BTreeSet<(u32, u32)>,
 +    boundary_count: usize,
@@ -1464,19 +2297,21 @@ index 0000000..663d7f5
 +    let constraints: Vec<(u32, u32)> = boundary_edges.iter().copied().collect();
 +    let span = (0..2)
 +        .map(|k| {
-+            let lo = outer.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min);
-+            let hi = outer.iter().map(|p| p[k]).fold(f64::NEG_INFINITY, f64::max);
++            let lo = rings.iter().flatten().map(|p| p[k]).fold(f64::INFINITY, f64::min);
++            let hi = rings.iter().flatten().map(|p| p[k]).fold(f64::NEG_INFINITY, f64::max);
 +            hi - lo
 +        })
 +        .fold(1e-9_f64, f64::max);
 +    let gap2 = (1e-9 * span) * (1e-9 * span);
-+    let margin2 = (1e-6 * span) * (1e-6 * span);
++    let new_rules = crate::research::native_parametric_surface::new_rules();
++    let margin = if new_rules { 1e-3 * span } else { 1e-6 * span };
++    let margin2 = margin * margin;
 +    let mut points = boundary.to_vec();
 +    // Points are binned in a GRID x GRID cell grid over the outer loop's box,
 +    // as linked lists in Vec indices, so the duplicate test looks only at the
 +    // nearby cells.
 +    const GRID: usize = 64;
-+    let origin: Uv = std::array::from_fn(|k| outer.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min));
++    let origin: Uv = std::array::from_fn(|k| rings.iter().flatten().map(|p| p[k]).fold(f64::INFINITY, f64::min));
 +    let cell_w = span / GRID as f64;
 +    let cell_of = |p: Uv| -> usize {
 +        let cx = (((p[0] - origin[0]) / cell_w).floor().max(0.) as usize).min(GRID - 1);
@@ -1495,7 +2330,7 @@ index 0000000..663d7f5
 +        ensure!(points.len() < MAX_VERTICES, "trimmed face exceeds its budget");
 +        let mut tris = delaunay(&points);
 +        constrain(&points, &mut tris, &constraints)?;
-+        tris.retain(|t| in_region(centroid(&points, *t), outer, holes));
++        tris.retain(|t| in_region(centroid(&points, *t), rings));
 +        ensure!(tris.len() < MAX_TRIANGLES, "trimmed face exceeds its budget");
 +        let bad = bad_triangles(surface, &points, &tris, boundary_count, boundary_tol)?;
 +        if bad.is_empty() {
@@ -1524,14 +2359,25 @@ index 0000000..663d7f5
 +                continue;
 +            }
 +            let [a, b, c] = t.map(|k| points[k as usize]);
-+            let p = circumcentre(a, b, c)
-+                .filter(|p| in_region(*p, outer, holes))
++            let near_constraint = |p: Uv| {
++                constraints
++                    .iter()
++                    .any(|&(u, v)| segment_distance2(p, points[u as usize], points[v as usize]) <= margin2)
++            };
++            let mut p = circumcentre(a, b, c)
++                .filter(|p| in_region(*p, rings))
 +                .unwrap_or_else(|| centroid(&points, t));
-+            if constraints
-+                .iter()
-+                .any(|&(u, v)| segment_distance2(p, points[u as usize], points[v as usize]) <= margin2)
-+            {
-+                continue;
++            if near_constraint(p) {
++                // Under the round-6 rules a candidate within 1e-3 of the span
++                // of a trim constraint is not used: the centroid is tried, and
++                // a triangle whose centroid is also that close is left as it is.
++                if !new_rules {
++                    continue;
++                }
++                p = centroid(&points, t);
++                if near_constraint(p) {
++                    continue;
++                }
 +            }
 +            let c = cell_of(p);
 +            let (cx, cy) = (c % GRID, c / GRID);
@@ -1605,6 +2451,21 @@ index 0000000..663d7f5
 +        next = pointer(g, li, &g.objects[li].fields["m_nextLoop"])?;
 +    }
 +    ensure!(!rings.is_empty(), "face has no trim loop");
++    let islands = crate::research::native_parametric_surface::new_rules();
++    mesh_rings(g, fi, &surface, rings, islands)
++}
++
++/// The trimmed mesh of face `fi` on `surface`, given its trim rings in UV.
++/// The outer ring is the one of largest area; the others are holes.
++pub(crate) fn mesh_rings(
++    g: &ObjectGraph,
++    fi: usize,
++    surface: &ParametricSurface,
++    rings: Vec<Vec<Uv>>,
++    islands: bool,
++) -> Result<FaceMesh> {
++    let f = g.objects.get(fi).context("face index")?;
++    let ring_set = rings.clone();
 +    let outer_index = (0..rings.len())
 +        .max_by(|&a, &b| signed_area(&rings[a]).abs().total_cmp(&signed_area(&rings[b]).abs()))
 +        .context("no trim ring")?;
@@ -1617,6 +2478,19 @@ index 0000000..663d7f5
 +        .collect();
 +    let mut expected = signed_area(&outer).abs();
 +    for (i, h) in holes.iter().enumerate() {
++        // Under `islands` (a cylinder face whose rings do not nest) a ring
++        // outside the outer one is a separate piece of the face, not a hole.
++        if islands && !inside(h[0], &outer) {
++            ensure!(
++                holes
++                    .iter()
++                    .enumerate()
++                    .all(|(j, other)| i == j || !inside(h[0], other)),
++                "nested trim islands unsupported"
++            );
++            expected += signed_area(h).abs();
++            continue;
++        }
 +        ensure!(inside(h[0], &outer), "trim hole outside its outer loop");
 +        ensure!(
 +            holes
@@ -1673,8 +2547,7 @@ index 0000000..663d7f5
 +        Some(found) => found,
 +        None => cdt_mesh(
 +            &surface,
-+            &outer,
-+            &holes,
++            &ring_set,
 +            &uv,
 +            &boundary_edges,
 +            boundary_count,
@@ -1773,7 +2646,7 @@ index 0000000..663d7f5
 +    })
 +}
 diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
-index 199cbbe..5edb347 100644
+index 199cbbe..84c199c 100644
 --- a/src/research/native_saved_mesh.rs
 +++ b/src/research/native_saved_mesh.rs
 @@ -3,7 +3,9 @@ use crate::native_parameters::ObjectGraph;
@@ -1787,7 +2660,17 @@ index 199cbbe..5edb347 100644
  #[derive(Debug, Clone, Serialize, Deserialize)]
  pub struct FaceMesh {
      pub face_index: usize,
-@@ -257,12 +259,27 @@ fn refined_plane_edge(
+@@ -107,6 +109,9 @@ fn point<const N: usize>(v: &Value) -> Result<[f64; N]> {
+     }
+     Ok(p)
+ }
++/// Largest UV gap, in feet, at which two loop edges are joined when their
++/// exact endpoints do not agree.
++const UV_JOIN_TOLERANCE: f64 = 1e-3;
+ fn close(a: [f64; 2], b: [f64; 2]) -> bool {
+     (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-7
+ }
+@@ -257,12 +262,27 @@ fn refined_plane_edge(
          });
          (us, vs, eval)
      } else {
@@ -1821,7 +2704,7 @@ index 199cbbe..5edb347 100644
      };
      let ends = edge.fields["m_firstAndLastEdgePnts"]
          .as_array()
-@@ -278,19 +295,22 @@ fn refined_plane_edge(
+@@ -278,19 +298,22 @@ fn refined_plane_edge(
      samples.push(point::<2>(&ends[1]["uv"][other_side])?);
      let start = samples[0];
      let end = *samples.last().unwrap();
@@ -1851,7 +2734,7 @@ index 199cbbe..5edb347 100644
      let plane_index = index
          .resolve(face, &g.objects[face].fields["m_pSurf"])?
          .context("plane surface missing")?;
-@@ -336,7 +356,13 @@ fn refined_plane_edge(
+@@ -336,7 +359,13 @@ fn refined_plane_edge(
              "shared edge surface samples disagree"
          );
      }
@@ -1865,7 +2748,7 @@ index 199cbbe..5edb347 100644
      let lo = start[axis].min(end[axis]);
      let hi = start[axis].max(end[axis]);
      let mut values = knots
-@@ -445,13 +471,16 @@ fn ring_impl(
+@@ -445,30 +474,48 @@ fn ring_impl(
          segments.iter().all(|s: &Vec<_>| !s.is_empty()),
          "empty boundary edge"
      );
@@ -1876,7 +2759,8 @@ index 199cbbe..5edb347 100644
 +    // elements of a school model, whose long faces are their own length:
 +    // their edges exceed half the record box's diagonal, so they are kept as
 +    // their boxes. The ring therefore keeps the exact join.
-+    let chain = |reverse: bool| -> Option<Vec<[f64; 2]>> {
++    let chain = |reverse: bool, tol: f64| -> Option<Vec<[f64; 2]>> {
++        let near = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]) < tol;
          let mut out = segments[0].clone();
          if reverse {
              out.reverse()
@@ -1884,9 +2768,11 @@ index 199cbbe..5edb347 100644
 -        let mut valid = true;
          for s in &segments[1..] {
              let last = *out.last().unwrap();
-             if close(last, s[0]) {
-@@ -459,16 +488,17 @@ fn ring_impl(
-             } else if close(last, *s.last().unwrap()) {
+-            if close(last, s[0]) {
++            if near(last, s[0]) {
+                 out.extend_from_slice(&s[1..])
+-            } else if close(last, *s.last().unwrap()) {
++            } else if near(last, *s.last().unwrap()) {
                  out.extend(s.iter().rev().skip(1).copied())
              } else {
 -                valid = false;
@@ -1895,7 +2781,7 @@ index 199cbbe..5edb347 100644
              }
          }
 -        if valid && close(out[0], *out.last().unwrap()) {
-+        if close(out[0], *out.last().unwrap()) {
++        if near(out[0], *out.last().unwrap()) {
              out.pop();
 -            output = Some(out);
 -            break;
@@ -1905,11 +2791,103 @@ index 199cbbe..5edb347 100644
          }
 -    }
 +    };
-+    let output = [false, true].into_iter().find_map(chain);
++    // The record lists the edges in loop order, so the chain is the same at
++    // any tolerance; only the join test changes. The exact join is tried
++    // first, and the loosened one only where it refuses.
++    let output = [false, true]
++        .into_iter()
++        .find_map(|reverse| chain(reverse, 1e-7))
++        .or_else(|| {
++            if !crate::research::native_parametric_surface::new_rules() {
++                return None;
++            }
++            [false, true]
++                .into_iter()
++                .find_map(|reverse| chain(reverse, UV_JOIN_TOLERANCE))
++        });
      let mut out = output.context("disconnected UV boundary")?;
      out.dedup_by(|a, b| close(*a, *b));
      ensure!(
-@@ -1318,6 +1348,16 @@ pub struct GraphicsMeshes {
+@@ -968,12 +1015,72 @@ pub fn cylinder_face(
+     let loop_index = index
+         .resolve(fi, &face.fields["m_pFirstLoop"])?
+         .context("cylinder trim loop")?;
+-    ensure!(
+-        index
+-            .resolve(loop_index, &g.objects[loop_index].fields["m_nextLoop"])?
+-            .is_none(),
+-        "multiple cylinder trim loops unsupported"
+-    );
++    if index
++        .resolve(loop_index, &g.objects[loop_index].fields["m_nextLoop"])?
++        .is_some()
++    {
++        // A cylinder face with holes is meshed through the trimmed-face
++        // mesher, as a parametric surface, with its rings in UV. Only under
++        // the round-5 rules.
++        ensure!(
++            crate::research::native_parametric_surface::new_rules(),
++            "multiple cylinder trim loops unsupported"
++        );
++        let mut rings = Vec::new();
++        let mut seen = BTreeSet::new();
++        let mut next = Some(loop_index);
++        while let Some(li) = next {
++            ensure!(seen.insert(li), "loop-list cycle");
++            let mut ring_uv = ring(g, &index, fi, li)?;
++            for uv in &mut ring_uv {
++                for k in 0..2 {
++                    let range = if k == 0 { u_range } else { v_range };
++                    ensure!(
++                        uv[k] >= range[0] - 1e-7 && uv[k] <= range[1] + 1e-7,
++                        "cylinder trim outside envelope"
++                    );
++                    uv[k] = uv[k].clamp(range[0], range[1]);
++                }
++            }
++            rings.push(ring_uv);
++            next = index.resolve(li, &g.objects[li].fields["m_nextLoop"])?;
++        }
++        let cylinder = crate::research::native_parametric_surface::ParametricSurface::Cylinder {
++            center,
++            radius,
++            x: x_vec,
++            y: y_vec,
++            z: z_vec,
++            handed,
++            envelope: [[u_range[0], v_range[0]], [u_range[1], v_range[1]]],
++            orient: surface
++                .fields["m_orientFlag"]
++                .as_bool()
++                .context("cylinder orientation")?,
++        };
++        let mut mesh = crate::research::native_parametric_trim::mesh_rings(g, fi, &cylinder, rings, true)?;
++        // The shared-edge check of a neighbouring cylinder reads this record.
++        let orient = surface
++            .fields["m_orientFlag"]
++            .as_bool()
++            .context("cylinder orientation")?
++            ^ (face.fields["m_faceFlags_v9"]
++                .as_u64()
++                .context("face flags")?
++                & 2
++                != 0);
++        mesh.analytic_surface = Some(AnalyticCylinder {
++            center,
++            radius,
++            x_vec,
++            y_vec,
++            z_vec,
++            orient_flag: orient,
++            u_range,
++            v_range,
++        });
++        return Ok(mesh);
++    }
+     let trim_uv = ring(g, &index, fi, loop_index)?;
+     ensure!(!trim_uv.is_empty(), "empty cylinder trim");
+     let mut trim_min = [f64::INFINITY; 2];
+@@ -1318,6 +1425,16 @@ pub struct GraphicsMeshes {
      pub excluded_non_surface_branches: usize,
      #[serde(default)]
      pub profile_observations: Vec<String>,
@@ -1926,7 +2904,7 @@ index 199cbbe..5edb347 100644
  }
  /// Decode selected saved graphics. Positions and normals are in the owning
  /// document frame; length units remain Revit internal feet.
-@@ -1424,6 +1464,11 @@ fn graphics_impl<'a>(
+@@ -1424,6 +1541,11 @@ fn graphics_impl<'a>(
                      let fi = index.resolve(oi, ptr)?.context("null geometry face")?;
                      match face_indexed(g, index, fi)? {
                          Some(m) => {
@@ -1938,7 +2916,7 @@ index 199cbbe..5edb347 100644
                              let normals = if m.normals.len() == m.vertices.len() {
                                  m.normals.clone()
                              } else {
-@@ -1555,8 +1600,179 @@ fn graphics_impl<'a>(
+@@ -1555,8 +1677,179 @@ fn graphics_impl<'a>(
              Err(e) => out.diagnostics.push(format!("object {oi}: {e:#}")),
          }
      }
@@ -2118,264 +3096,3 @@ index 199cbbe..5edb347 100644
  fn transform(p: &mut Primitive, m: [[f64; 4]; 4]) -> Result<()> {
      let a = [m[0][0], m[1][0], m[2][0]];
      let b = [m[0][1], m[1][1], m[2][1]];
-diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
-index 03d4f31..e97317e 100644
---- a/src/ifc/saved_meshes.rs
-+++ b/src/ifc/saved_meshes.rs
-@@ -30,4 +30,4 @@ use super::entities::{BrepTriangle, IfcEntity, PropertyValue, SolidShape};
- use super::export_content::{
--    BEAM_BOX_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE, SPACE_OUTLINE_SAVED_MESH,
--    SPACE_OUTLINE_SOURCE_PROPERTY,
-+    BEAM_BOX_BODY_SOURCE, INSTANCE_TURNED_BODY_SOURCE, RECORD_BBOX_BODY_SOURCE,
-+    SPACE_OUTLINE_SAVED_MESH, SPACE_OUTLINE_SOURCE_PROPERTY,
- };
-@@ -49,2 +49,6 @@ pub struct SavedMeshReport {
-     pub partial: usize,
-+    /// Of the `replaced` elements, those drawn from a partial saved mesh whose
-+    /// decoded faces fill the record box and are the body minus a few small
-+    /// pieces (see [`partial_failures_admissible`] and the checks after it).
-+    pub partial_admitted: usize,
-     /// Triangles written in all.
-@@ -53,2 +57,36 @@ pub struct SavedMeshReport {
- 
-+/// Most failed faces a partial element may have, and their largest share of
-+/// its decoded faces.
-+const PARTIAL_MAX_FAILED_FACES: usize = 4;
-+const PARTIAL_MAX_FAILED_SHARE: f64 = 0.10;
-+
-+/// The face-decode failures a partial element may carry (RE-224 admission):
-+/// a face whose surface pointer or UV boundary did not resolve, a trimmed face
-+/// past its triangle budget, or a surface sampled outside its envelope. A
-+/// trimmed face that needs a finer interior lattice is not among them: on the
-+/// public reference models the only partial meshes that passed the count rule were
-+/// sanitary terminals whose one such face was not Revit's body, so they stay
-+/// boxed.
-+const PARTIAL_FACE_FAILURES: [&str; 4] = [
-+    "missing surface pointer target",
-+    "disconnected UV boundary",
-+    "trimmed face exceeds its budget",
-+    "surface coordinates outside envelope",
-+];
-+
-+/// Whether a partial element's failed face diagnostics are few enough, and all
-+/// of a kind in [`PARTIAL_FACE_FAILURES`], to admit its decoded faces as the
-+/// body: at most [`PARTIAL_MAX_FAILED_FACES`] and at most
-+/// [`PARTIAL_MAX_FAILED_SHARE`] of its decoded primitives.
-+fn partial_failures_admissible(failed: &[&String], decoded: usize) -> bool {
-+    let count = failed.len();
-+    count <= PARTIAL_MAX_FAILED_FACES
-+        && (count as f64) <= PARTIAL_MAX_FAILED_SHARE * decoded as f64
-+        && failed.iter().all(|diagnostic| {
-+            PARTIAL_FACE_FAILURES
-+                .iter()
-+                .any(|kind| diagnostic.contains(kind))
-+        })
-+}
-+
- /// Which bounding-box bodies [`attach_scoped_with_control`] replaces.
-@@ -144,7 +182,8 @@ pub fn attach_scoped_with_control(
-         });
--        // A beam RE-328 draws as its box along its line is a stand-in for
--        // its saved mesh, as the record box is.
-+        // A beam RE-328 draws as its box along its line, and a family instance
-+        // turned off the model's axes (RE-87), are stand-ins for their saved
-+        // mesh, as the record box is.
-         if !matches!(
-             text("BodySource"),
--            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE)
-+            Some(RECORD_BBOX_BODY_SOURCE | BEAM_BOX_BODY_SOURCE | INSTANCE_TURNED_BODY_SOURCE)
-         ) || profile_resolved
-@@ -193,10 +232,18 @@ pub fn attach_scoped_with_control(
-             // them Revit's body). Only branches left out for their view semantics
--            // leave it whole.
--            let partial = element.meshes.diagnostics.iter().any(|diagnostic| {
--                !diagnostic
--                    .ends_with(crate::native_graphics_traversal::NESTED_DETAIL_FILTER_DIAGNOSTIC)
--                    && !diagnostic
-+            // leave it whole. A partial mesh whose few failed faces leave its
-+            // decoded faces the body is admitted further down, after the checks
-+            // that follow.
-+            let failed: Vec<&String> = element
-+                .meshes
-+                .diagnostics
-+                .iter()
-+                .filter(|diagnostic| {
-+                    !diagnostic.ends_with(
-+                        crate::native_graphics_traversal::NESTED_DETAIL_FILTER_DIAGNOSTIC,
-+                    ) && !diagnostic
-                         .ends_with(crate::native_graphics_traversal::VIEW_COMPONENT_DIAGNOSTIC)
--            });
--            if partial {
-+                })
-+                .collect();
-+            let partial = !failed.is_empty();
-+            if partial && !partial_failures_admissible(&failed, primitives.len()) {
-                 report.partial += 1;
-@@ -205,4 +252,6 @@ pub fn attach_scoped_with_control(
-             let IfcEntity::BuildingElement {
-+                ifc_type,
-                 location_feet: Some(origin),
-                 rotation_radians,
-+                extrusion,
-                 solid_shape,
-@@ -234,2 +283,51 @@ pub fn attach_scoped_with_control(
-             }
-+            // A body with a curved-profile face must lie in its record box and
-+            // fill most of it on each axis; otherwise it is only part of the
-+            // element, and the box stays. Where the owner left out hidden
-+            // components, the record box also holds geometry Revit does not
-+            // draw in 3D, so one short axis is allowed.
-+            if element.meshes.curved_extension_faces > 0
-+                && !fills_record_box(
-+                    &vertices,
-+                    &triangles,
-+                    extrusion.as_ref(),
-+                    element.meshes.excluded_visibility_branches > 0,
-+                )
-+            {
-+                return Ok(());
-+            }
-+            // A curved-profile shell admitted only by the seam tolerance (the
-+            // exact rim refuses it) must have no triangle longer than half its
-+            // box's diagonal; the seam tolerance is not allowed to draw a body
-+            // that spans across its element.
-+            if element.meshes.seam_admitted_shell
-+                && has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
-+            {
-+                return Ok(());
-+            }
-+            // A railing's saved mesh is taken only where it fills its record box
-+            // (RE-303): every vertex within the box and each extent of the box
-+            // reached, to within 0.5 ft. A railing whose graphics leave a part
-+            // out, with no decoder diagnostic to say so, keeps its box.
-+            if ifc_type.as_str() == "IFCRAILING"
-+                && !railing_mesh_fills_box(&vertices, extrusion.as_ref())
-+            {
-+                report.partial += 1;
-+                return Ok(());
-+            }
-+            // RE-224 partial admission (a few failed faces, see above): the
-+            // decoded faces must fill the record box on every axis, each vertex
-+            // within it to 0.5 ft, with no triangle spanning it, and the element
-+            // must not be a railing (its own rule above). Anything else keeps its
-+            // box, counted as partial.
-+            if partial {
-+                if ifc_type.as_str() == "IFCRAILING"
-+                    || !fills_record_box(&vertices, &triangles, extrusion.as_ref(), false)
-+                    || has_giant_triangle(&vertices, &triangles, extrusion.as_ref())
-+                {
-+                    report.partial += 1;
-+                    return Ok(());
-+                }
-+                report.partial_admitted += 1;
-+            }
-             report.replaced += 1;
-@@ -252 +350,108 @@ pub fn attach_scoped_with_control(
- }
-+
-+/// Whether the body's vertices (in the element's frame, the record box
-+/// centred on x and y, from z = 0 to its height) lie within the box to 0.5 ft
-+/// and span at least 70% of it on every axis. With `hidden_excluded` (the
-+/// owner left out components Revit hides in 3D), one axis may fall short, but
-+/// then no triangle may be longer than half the box's diagonal: a body that
-+/// is only part of the element must not span across it.
-+fn fills_record_box(
-+    vertices: &[[f64; 3]],
-+    triangles: &[BrepTriangle],
-+    extrusion: Option<&crate::ifc::entities::Extrusion>,
-+    hidden_excluded: bool,
-+) -> bool {
-+    const TOLERANCE: f64 = 0.5;
-+    const MIN_FILL: f64 = 0.7;
-+    let Some(x) = extrusion else {
-+        return false;
-+    };
-+    let size = [x.width_feet, x.depth_feet, x.height_feet];
-+    if !size.iter().all(|s| s.is_finite() && *s > 0.) || vertices.is_empty() {
-+        return false;
-+    }
-+    let lo = [-size[0] / 2., -size[1] / 2., 0.];
-+    let hi = [size[0] / 2., size[1] / 2., size[2]];
-+    let mut min = [f64::INFINITY; 3];
-+    let mut max = [f64::NEG_INFINITY; 3];
-+    for v in vertices {
-+        for k in 0..3 {
-+            if !v[k].is_finite() || v[k] < lo[k] - TOLERANCE || v[k] > hi[k] + TOLERANCE {
-+                return false;
-+            }
-+            min[k] = min[k].min(v[k]);
-+            max[k] = max[k].max(v[k]);
-+        }
-+    }
-+    let short = (0..3)
-+        .filter(|&k| (max[k] - min[k]) < MIN_FILL * size[k])
-+        .count();
-+    match short {
-+        0 => true,
-+        1 => hidden_excluded && !has_giant_triangle(vertices, triangles, extrusion),
-+        _ => false,
-+    }
-+}
-+
-+/// Whether some triangle of the body has an edge longer than half the
-+/// diagonal of its record box.
-+fn has_giant_triangle(
-+    vertices: &[[f64; 3]],
-+    triangles: &[BrepTriangle],
-+    extrusion: Option<&crate::ifc::entities::Extrusion>,
-+) -> bool {
-+    let Some(x) = extrusion else {
-+        return false;
-+    };
-+    let limit = (x.width_feet.powi(2) + x.depth_feet.powi(2) + x.height_feet.powi(2)).sqrt() / 2.;
-+    let length = |a: u32, b: u32| {
-+        let (p, q) = (vertices[a as usize], vertices[b as usize]);
-+        (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f64>().sqrt()
-+    };
-+    // A flat panel lying in a plane parallel to a side of the box (an
-+    // appliance's side wall) is drawn by long triangles of its own; only a
-+    // triangle crossing the box out of such a plane counts.
-+    let axis_flat = |t: &BrepTriangle| {
-+        let (a, b, c) = (vertices[t.0 as usize], vertices[t.1 as usize], vertices[t.2 as usize]);
-+        (0..3).any(|k| (a[k] - b[k]).abs() <= AXIS_FLAT_FEET && (a[k] - c[k]).abs() <= AXIS_FLAT_FEET)
-+    };
-+    triangles.iter().any(|t| {
-+        (length(t.0, t.1) > limit || length(t.1, t.2) > limit || length(t.2, t.0) > limit)
-+            && !axis_flat(t)
-+    })
-+}
-+
-+/// How far a triangle's vertices may differ along one axis for it to count as
-+/// lying in a plane parallel to a side of the record box.
-+const AXIS_FLAT_FEET: f64 = 0.003;
-+
-+/// Whether `vertices`, in the element's frame (origin at its location, the
-+/// box's x and y centred on it, its z from 0 up), lie within `extrusion`'s box
-+/// and reach each of its faces, to within [`RAILING_BOX_TOLERANCE_FEET`].
-+fn railing_mesh_fills_box(
-+    vertices: &[[f64; 3]],
-+    extrusion: Option<&crate::ifc::entities::Extrusion>,
-+) -> bool {
-+    let Some(e) = extrusion else {
-+        return false;
-+    };
-+    let half = [e.width_feet / 2.0, e.depth_feet / 2.0];
-+    let tol = RAILING_BOX_TOLERANCE_FEET;
-+    let lo = [-half[0], -half[1], 0.0];
-+    let hi = [half[0], half[1], e.height_feet];
-+    let mut min = [f64::INFINITY; 3];
-+    let mut max = [f64::NEG_INFINITY; 3];
-+    for v in vertices {
-+        for k in 0..3 {
-+            min[k] = min[k].min(v[k]);
-+            max[k] = max[k].max(v[k]);
-+        }
-+    }
-+    (0..3).all(|k| min[k] >= lo[k] - tol && max[k] <= hi[k] + tol)
-+        && (0..3).all(|k| min[k] <= lo[k] + tol && max[k] >= hi[k] - tol)
-+}
-+
-+/// How far a railing's saved mesh may stop short of its record box, or reach
-+/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
-+/// their graphics on every railing measured on the sample projects.
-+const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;

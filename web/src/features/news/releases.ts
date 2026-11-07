@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T05:00:00Z",
+    "revit-joists",
+    "Revit bar joists and more fittings come in",
+    `More Revit elements come in as Revit drew them, instead of see-through boxes.
+- Steel bar joists are drawn as their trusses.
+- Some floor finishes and wall-mounted fittings whose curved faces didn't quite close are now drawn.`,
+    "walls",
+  ),
+  release(
     "2026-11-07T01:30:00Z",
     "revit-baths-cooktops",
     "Revit baths and cooktops come in",

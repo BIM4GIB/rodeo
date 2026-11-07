@@ -20,10 +20,13 @@ model's levels, elements, geometry and parameters with it, in the import's worke
   Revit hides in 3D, if no triangle spans more than half the box, a flat triangle lying parallel
   to a side of the box excepted). Trimmed faces mesh inside their boundary loops; where the interior lattice can't meet the
   chord tolerance, or the face has holes, a constrained Delaunay triangulation refined inside
-  the boundary (never splitting it) does. An element with
+  the boundary (never splitting it) does. An element still boxed because a trim loop's
+  corners miss by up to 1e-3 ft is decoded once more with that join, and with a ruled surface's
+  point end read as its apex, islands meshed beside the outline, and constraints recovered by
+  cavity retriangulation; the retry is kept only where the element then passes every check. An element with
   up to four faces (at most a tenth) that did not decode is drawn from the rest where they fill its
   box on every axis with no triangle spanning it; railings excepted.
 - Built with rustc 1.97.1 and wasm-bindgen 0.2.118 (`--target web --out-name rvt`).
-- `rvt_bg.wasm` sha256 `1a01f89e23e0e8f0dcedf9ff08ec90971ee22e585277b338a8c04beddf1e22ff`.
+- `rvt_bg.wasm` sha256 `f21b218878d18e2b5bfdcc8bc0e87724945b9aada8eee12be35a4b56ca24a3a5`.
 
 Rebuild with `scripts/rvt-wasm.sh [tag]`. These files are generated: don't edit them.
