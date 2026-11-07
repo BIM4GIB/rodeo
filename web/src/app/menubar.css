@@ -401,7 +401,7 @@
   width: 64px;
   text-align: center;
   caret-color: transparent;
-  cursor: pointer;
+  cursor: default;
 }
 
 .mk-dialog .mk-input:disabled {
@@ -564,7 +564,7 @@
   border: 1px solid var(--chrome-border);
   border-radius: 6px;
   background: var(--fill);
-  cursor: pointer;
+  cursor: default;
 }
 
 .prefs-colour:disabled {

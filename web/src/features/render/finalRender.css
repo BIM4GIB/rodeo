@@ -126,7 +126,7 @@
   border: 2px solid transparent;
   border-radius: 6px;
   background: var(--viewport);
-  cursor: pointer;
+  cursor: default;
 }
 
 .render-viewer-thumb canvas {

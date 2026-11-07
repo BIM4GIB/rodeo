@@ -1081,7 +1081,7 @@ export class App {
       if (n && store.session && !store.view3d) await this.focus3d();
       const v = this.view3d;
       if (!v) return;
-      v.setNavigation(n?.nav ?? "orbit", n?.sensitivity);
+      v.setNavigation(n?.nav ?? "orbit", n?.sensitivity, n?.viewing);
       if (n?.objectCentre) v.orbitAboutObjects(this.withParts(store.selection));
       if (n?.viewerHeight == null) {
         standing = null;

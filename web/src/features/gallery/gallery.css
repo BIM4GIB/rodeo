@@ -77,7 +77,7 @@
   color: var(--text-soft);
   font: inherit;
   font-size: 12px;
-  cursor: pointer;
+  cursor: default;
 }
 
 .gallery-tag-chip:hover {
@@ -105,7 +105,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  cursor: pointer;
+  cursor: default;
 }
 
 .gallery-licence.off {
@@ -254,7 +254,7 @@
   font-size: 12px;
   text-decoration: none;
   white-space: nowrap;
-  cursor: pointer;
+  cursor: default;
 }
 
 .gallery-forked:not([href]) {

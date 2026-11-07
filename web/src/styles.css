@@ -1449,7 +1449,7 @@ code {
   border: 1px solid var(--chrome-border);
   border-radius: 6px;
   background: var(--fill);
-  cursor: pointer;
+  cursor: default;
 }
 
 .class-style {

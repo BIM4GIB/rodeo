@@ -82,6 +82,9 @@ export interface FaceHit {
   readonly objectId: string | null;
 }
 
+/** What a tool does with a click on the model in place of picking (View3D.onFacePick). */
+export type FacePick = (hit: FaceHit | null, shift: boolean, e: MouseEvent) => void;
+
 /** One merged face group of the model, as a renderer of its own takes it (modelFaces). */
 export interface ModelFace {
   /**
@@ -283,8 +286,15 @@ interface EdgeBuild {
 export class View3D {
   /** Called on a click: the object under the pointer (null for empty space) and whether Shift was held. */
   onPick: ((objectId: string | null, additive: boolean) => void) | null = null;
-  /** While set, a click on the model calls this with the face under it (null over empty space) instead of picking. */
-  onFacePick: ((hit: FaceHit | null, shift: boolean, e: MouseEvent) => void) | null = null;
+  /** While set, a click on the model calls this with the face under it (null over empty space) instead of picking; the cursor is a crosshair. */
+  get onFacePick(): FacePick | null {
+    return this.facePick;
+  }
+  set onFacePick(pick: FacePick | null) {
+    this.facePick = pick;
+    this.canvas.classList.toggle("picking", pick !== null);
+  }
+  private facePick: FacePick | null = null;
   /** the working plane's grid and axes, when one is shown */
   private planeGrid: THREE.Group | null = null;
 
@@ -448,6 +458,8 @@ export class View3D {
     this.controls.addEventListener("change", () => {
       this.requestRender();
       this.queueLamps();
+      // a drag that moves the view closes the hand; a click that picks leaves the arrow
+      if (this.down.size > 0) this.canvas.classList.add("moving");
     });
     this.canvas.addEventListener("pointerdown", (e) => {
       if (this.down.size === 0) {
@@ -479,6 +491,7 @@ export class View3D {
       this.steerBy(e.clientX - steer.x, e.clientY - steer.y);
       steer.x = e.clientX;
       steer.y = e.clientY;
+      this.canvas.classList.add("moving");
     });
     this.canvas.addEventListener("pointerup", (e) => this.release(e, false));
     this.canvas.addEventListener("pointercancel", (e) => this.release(e, true));
@@ -1634,7 +1647,10 @@ export class View3D {
   private release(e: PointerEvent, cancelled: boolean): void {
     const press = this.press;
     this.down.delete(e.pointerId);
-    if (this.down.size === 0) this.press = null;
+    if (this.down.size === 0) {
+      this.press = null;
+      this.canvas.classList.remove("moving");
+    }
     if (this.steer?.id === e.pointerId) this.steer = null;
     if (!press || cancelled || press.id !== e.pointerId || press.more) return;
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > (press.touch ? TAP_SLOP : CLICK_SLOP)) return;
@@ -1657,11 +1673,13 @@ export class View3D {
 
   /**
    * What a left drag does from now on (Navigation); `sensitivity` scales how far a drag turns the
-   * view. The middle button still zooms and the right pans, whatever the left does.
+   * view. The middle button still zooms and the right pans, whatever the left does. `viewing`: the
+   * drag is the tool (a viewing tool), so the cursor is an open hand rather than the arrow.
    */
-  setNavigation(nav: Navigation, sensitivity = 1): void {
+  setNavigation(nav: Navigation, sensitivity = 1, viewing = false): void {
     this.nav = nav;
     this.steer = null;
+    this.canvas.classList.toggle("viewing", viewing);
     const left = nav === "orbit" || nav === "origin" ? THREE.MOUSE.ROTATE : nav === "pan" ? THREE.MOUSE.PAN : null;
     this.controls.mouseButtons = { LEFT: left, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.controls.rotateSpeed = sensitivity;

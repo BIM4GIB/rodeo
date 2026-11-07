@@ -29,7 +29,7 @@
   background: none;
   color: inherit;
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .mcp-pill-main:hover {
@@ -79,7 +79,7 @@
   background: var(--fill-strong);
   color: var(--text);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .mcp-pill-stop:hover {

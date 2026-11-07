@@ -280,7 +280,7 @@
   font: inherit;
   font-size: 18px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
 }
 
 .news-bar-close:hover {

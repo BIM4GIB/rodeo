@@ -89,7 +89,7 @@
   background: none;
   color: var(--text-2);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .xr-tab.on {
@@ -199,7 +199,7 @@
   background: none;
   color: var(--text-2);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .xr-caret:disabled {

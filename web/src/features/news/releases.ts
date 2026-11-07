@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T12:00:00Z",
+    "cursors",
+    "The right cursor in 3D and the panels",
+    `The pointer no longer turns into a hand all over the 3D view and the panels.
+- In 3D you see the arrow until you drag; the hand closes while a drag turns or pans the view.
+- Flyover, Translate View and Walkthrough show an open hand, and Push/Pull and the other tools that pick a face show a crosshair.
+- Buttons, tabs, palette titles, the view cube and the other view panes show the arrow, as the rest of the editor does. Links still show the pointing hand.`,
+    "cursors",
+  ),
+  release(
     "2026-11-07T09:50:00Z",
     "revit-duct-transitions",
     "Revit duct transitions come in",

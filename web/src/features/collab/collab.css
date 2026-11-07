@@ -34,7 +34,7 @@
   overflow: hidden;
   color: var(--text);
   font: 600 10px/1 var(--font);
-  cursor: pointer;
+  cursor: default;
 }
 
 .collab-avatars > .collab-avatar + .collab-avatar,
@@ -122,7 +122,7 @@ span.collab-avatar {
   color: var(--text);
   font: 500 12px/1.2 var(--font);
   white-space: nowrap;
-  cursor: pointer;
+  cursor: default;
 }
 
 .collab-follow[hidden] {

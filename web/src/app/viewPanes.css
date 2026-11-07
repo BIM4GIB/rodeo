@@ -53,7 +53,7 @@
   z-index: 1;
   display: block;
   background: #e6e7ea;
-  cursor: pointer;
+  cursor: default;
 }
 
 .pane-ring {
