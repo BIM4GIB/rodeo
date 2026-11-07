@@ -219,7 +219,7 @@ index 15db1d8..e99be94 100644
          }
          Ok(())
 diff --git a/src/research/native_parametric_mesh.rs b/src/research/native_parametric_mesh.rs
-index b50dc80..157876c 100644
+index b50dc80..b5d3f34 100644
 --- a/src/research/native_parametric_mesh.rs
 +++ b/src/research/native_parametric_mesh.rs
 @@ -1,11 +1,98 @@
@@ -322,6 +322,21 @@ index b50dc80..157876c 100644
  #[derive(Debug, Clone)]
  pub struct ParametricMesh {
      pub vertices: Vec<[f64; 3]>,
+@@ -124,10 +211,10 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+         pointer(g, li, &l.fields["m_pFace"])? == Some(fi),
+         "loop owner mismatch"
+     );
+-    ensure!(
+-        pointer(g, li, &l.fields["m_nextLoop"])?.is_none(),
+-        "multiple parametric trim loops unsupported"
+-    );
++    // Several trim loops are drawn inside their loops by the trim module.
++    if pointer(g, li, &l.fields["m_nextLoop"])?.is_some() {
++        anyhow::bail!(crate::research::native_parametric_trim::NONRECTANGULAR);
++    }
+     let mut cur = pointer(g, li, &l.fields["m_next"])?.context("empty trim")?;
+     let mut seen = std::collections::BTreeSet::new();
+     let mut segments = Vec::new();
 @@ -273,11 +360,8 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
          }
          ensure!((end - max[axis]).abs() < 1e-7, "incomplete trim perimeter");
@@ -816,17 +831,19 @@ index b902e19..e85fcc5 100644
  }
 diff --git a/src/research/native_parametric_trim.rs b/src/research/native_parametric_trim.rs
 new file mode 100644
-index 0000000..6612ffd
+index 0000000..663d7f5
 --- /dev/null
 +++ b/src/research/native_parametric_trim.rs
-@@ -0,0 +1,522 @@
+@@ -0,0 +1,937 @@
 +//! Parametric faces whose saved trim is not a UV rectangle. Each trim loop is
-+//! read as a UV polygon; the polygon with its holes is triangulated on its own
++//! read as a UV polygon. A single-loop trim is triangulated in UV by its
 +//! boundary samples, which are the samples neighbouring faces share, and the
 +//! triangles are split at their centroids until the surface stays within
-+//! [`CHORD`] of its linear mapping. A split leaves every boundary edge in
-+//! place, so the mesh stays conforming. Anything else is refused and the
-+//! element keeps its record box.
++//! [`CHORD`] of its linear mapping: the interior lattice. Where that lattice
++//! refuses, and for a face with holes, the outer loop and its holes are
++//! triangulated by a constrained Delaunay triangulation in UV, refined with
++//! interior points only, so every boundary edge stays as the samples left it.
++//! Anything else is refused and the element keeps its record box.
 +
 +use crate::native_parameters::ObjectGraph;
 +use crate::native_parametric_mesh::{
@@ -836,12 +853,19 @@ index 0000000..6612ffd
 +use crate::native_saved_mesh::{FaceMesh, pointer};
 +use crate::vector_math::distance;
 +use anyhow::{Context, Result, bail, ensure};
-+use std::collections::{BTreeMap, BTreeSet};
++use std::collections::{BTreeMap, BTreeSet, VecDeque};
 +
 +/// The most vertices one trimmed face may build.
 +const MAX_VERTICES: usize = 200_000;
 +/// The most triangles one trimmed face may build.
 +const MAX_TRIANGLES: usize = 400_000;
++/// The most refinement rounds one trimmed face may take in the CDT.
++const REFINE_ROUNDS: usize = 16;
++/// The shortest 3D edge a CDT refinement point is still added inside, in feet.
++const MIN_EDGE: f64 = 0.01;
++/// The most interior CDT refinement points one trimmed face may add. Each
++/// round rebuilds the triangulation, so the cost grows with this count.
++const REFINE_POINTS: usize = 1200;
 +/// The error text the rectangular grid gives a non-rectangular trim.
 +pub(crate) const NONRECTANGULAR: &str = "nonrectangular parametric trim";
 +
@@ -1012,6 +1036,19 @@ index 0000000..6612ffd
 +    hit
 +}
 +
++/// The squared distance from `p` to the segment `a`-`b`.
++fn segment_distance2(p: Uv, a: Uv, b: Uv) -> f64 {
++    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
++    let len2 = dx * dx + dy * dy;
++    let t = if len2 > 0. {
++        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2).clamp(0., 1.)
++    } else {
++        0.
++    };
++    let (ex, ey) = (p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
++    ex * ex + ey * ey
++}
++
 +/// The distance from `p` to the segment `a`-`b`.
 +fn segment_distance(p: Uv, a: Uv, b: Uv) -> f64 {
 +    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
@@ -1029,6 +1066,23 @@ index 0000000..6612ffd
 +    tris.iter().position(|t| {
 +        let [a, b, c] = [uv[t[0] as usize], uv[t[1] as usize], uv[t[2] as usize]];
 +        cross2(a, b, p) > 1e-12 && cross2(b, c, p) > 1e-12 && cross2(c, a, p) > 1e-12
++    })
++}
++
++/// Whether `p` lies more than `thr` from every segment of every ring. The
++/// squared test settles every clear-cut case; only a point within a hair of
++/// the threshold pays for the exact distance.
++fn clear_of(p: Uv, rings: &[&[Uv]], thr: f64) -> bool {
++    let far2 = thr * thr * (1. + 1e-6);
++    rings.iter().all(|r| {
++        (0..r.len()).all(|k| {
++            let (a, b) = (r[k], r[(k + 1) % r.len()]);
++            // A segment is no nearer than its bounding box, so a box that is
++            // far enough settles the segment without its distance.
++            let gap = |v: f64, lo: f64, hi: f64| (lo - v).max(v - hi).max(0.);
++            let (gx, gy) = (gap(p[0], a[0].min(b[0]), a[0].max(b[0])), gap(p[1], a[1].min(b[1]), a[1].max(b[1])));
++            gx * gx + gy * gy > far2 || segment_distance2(p, a, b) > far2 || segment_distance(p, a, b) > thr
++        })
 +    })
 +}
 +
@@ -1058,12 +1112,7 @@ index 0000000..6612ffd
 +                continue;
 +            }
 +            // Keep lattice points off the boundary so no triangle is a sliver.
-+            let clear = rings.iter().all(|r| {
-+                (0..r.len()).all(|k| {
-+                    segment_distance(p, r[k], r[(k + 1) % r.len()]) > 0.25 * step[0].min(step[1])
-+                })
-+            });
-+            if !clear {
++            if !clear_of(p, &rings, 0.25 * step[0].min(step[1])) {
 +                continue;
 +            }
 +            let Some(t) = containing(&uv, &tris, p) else {
@@ -1079,6 +1128,165 @@ index 0000000..6612ffd
 +        }
 +    }
 +    Ok((uv, tris))
++}
++
++/// Whether `p` lies in the trim region: inside the outer loop and in no hole.
++fn in_region(p: Uv, outer: &[Uv], holes: &[Vec<Uv>]) -> bool {
++    inside(p, outer) && holes.iter().all(|h| !inside(p, h))
++}
++
++/// Whether the segments `a`-`b` and `u`-`v` cross at a point interior to both.
++fn crosses(a: Uv, b: Uv, u: Uv, v: Uv) -> bool {
++    cross2(a, b, u) * cross2(a, b, v) < 0. && cross2(u, v, a) * cross2(u, v, b) < 0.
++}
++
++/// Positive when `d` lies inside the circumcircle of the counter-clockwise
++/// triangle (a, b, c).
++fn in_circle(a: Uv, b: Uv, c: Uv, d: Uv) -> f64 {
++    let (ax, ay) = (a[0] - d[0], a[1] - d[1]);
++    let (bx, by) = (b[0] - d[0], b[1] - d[1]);
++    let (cx, cy) = (c[0] - d[0], c[1] - d[1]);
++    let (a2, b2, c2) = (ax * ax + ay * ay, bx * bx + by * by, cx * cx + cy * cy);
++    ax * (by * c2 - b2 * cy) - ay * (bx * c2 - b2 * cx) + a2 * (bx * cy - by * cx)
++}
++
++/// The middle of the triangle `t` of `uv`.
++fn centroid(uv: &[Uv], t: [u32; 3]) -> Uv {
++    let [a, b, c] = t.map(|k| uv[k as usize]);
++    [(a[0] + b[0] + c[0]) / 3., (a[1] + b[1] + c[1]) / 3.]
++}
++
++/// The circumcentre of the triangle (a, b, c), or `None` when it is flat.
++fn circumcentre(a: Uv, b: Uv, c: Uv) -> Option<Uv> {
++    let (bx, by) = (b[0] - a[0], b[1] - a[1]);
++    let (cx, cy) = (c[0] - a[0], c[1] - a[1]);
++    let d = 2. * (bx * cy - by * cx);
++    if d.abs() <= 1e-18 {
++        return None;
++    }
++    let (b2, c2) = (bx * bx + by * by, cx * cx + cy * cy);
++    Some([a[0] + (cy * b2 - by * c2) / d, a[1] + (bx * c2 - cx * b2) / d])
++}
++
++/// Bowyer-Watson Delaunay triangulation of `pts`, counter-clockwise. Points
++/// are inserted one at a time into a super-triangle, which is removed at the
++/// end. Points must be distinct.
++fn delaunay(pts: &[Uv]) -> Vec<[u32; 3]> {
++    let n = pts.len();
++    let min: Uv = std::array::from_fn(|k| pts.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min));
++    let max: Uv = std::array::from_fn(|k| pts.iter().map(|p| p[k]).fold(f64::NEG_INFINITY, f64::max));
++    let span = (max[0] - min[0]).max(max[1] - min[1]).max(1e-9);
++    let (mx, my) = ((min[0] + max[0]) / 2., (min[1] + max[1]) / 2.);
++    let mut all = pts.to_vec();
++    all.push([mx - 100. * span, my - 100. * span]);
++    all.push([mx + 100. * span, my - 100. * span]);
++    all.push([mx, my + 100. * span]);
++    let s = n as u32;
++    let mut tris: Vec<[u32; 3]> = vec![[s, s + 1, s + 2]];
++    for (i, &p) in pts.iter().enumerate() {
++        // Directed edges of the triangles whose circumcircle holds p.
++        let mut cavity = BTreeSet::new();
++        let mut keep = Vec::with_capacity(tris.len() + 2);
++        for t in tris.drain(..) {
++            let [a, b, c] = t;
++            if in_circle(all[a as usize], all[b as usize], all[c as usize], p) > 0. {
++                cavity.extend([(a, b), (b, c), (c, a)]);
++            } else {
++                keep.push(t);
++            }
++        }
++        for &(a, b) in &cavity {
++            if !cavity.contains(&(b, a)) {
++                keep.push([a, b, i as u32]);
++            }
++        }
++        tris = keep;
++    }
++    tris.retain(|t| t.iter().all(|&k| k < s));
++    tris
++}
++
++/// The third vertex of `t` when `t` has
++/// the directed edge `u`-`v`, is the third vertex.
++fn third_of(t: [u32; 3], u: u32, v: u32) -> Option<u32> {
++    (0..3)
++        .find(|&k| t[k] == u && t[(k + 1) % 3] == v)
++        .map(|k| t[(k + 2) % 3])
++}
++
++/// The two triangles on either side of the edge `u`-`v`, each with its third
++/// vertex: the one that has `u`-`v` in its order, then the one with `v`-`u`.
++fn sides(tris: &[[u32; 3]], u: u32, v: u32) -> Option<((usize, u32), (usize, u32))> {
++    let a = tris.iter().enumerate().find_map(|(i, t)| third_of(*t, u, v).map(|x| (i, x)));
++    let b = tris.iter().enumerate().find_map(|(i, t)| third_of(*t, v, u).map(|y| (i, y)));
++    Some((a?, b?))
++}
++
++/// Forces each constraint segment into the triangulation as an edge: the
++/// edges crossing it are flipped until none does (Sloan's method). A
++/// constraint that touches another sample, or never settles, is refused.
++fn constrain(pts: &[Uv], tris: &mut [[u32; 3]], constraints: &[(u32, u32)]) -> Result<()> {
++    for &(a, b) in constraints {
++        let (pa, pb) = (pts[a as usize], pts[b as usize]);
++        let len2 = (pb[0] - pa[0]).powi(2) + (pb[1] - pa[1]).powi(2);
++        for (k, &p) in pts.iter().enumerate() {
++            let k = k as u32;
++            if k == a || k == b {
++                continue;
++            }
++            let along = (p[0] - pa[0]) * (pb[0] - pa[0]) + (p[1] - pa[1]) * (pb[1] - pa[1]);
++            ensure!(
++                !(cross2(pa, pb, p).abs() <= 1e-12 && along > 0. && along < len2),
++                "trim sample lies on another trim edge"
++            );
++        }
++        let mut edges: Vec<(u32, u32)> = tris
++            .iter()
++            .flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])])
++            .map(|(u, v)| (u.min(v), u.max(v)))
++            .collect();
++        if edges.contains(&(a, b)) {
++            continue;
++        }
++        edges.sort_unstable();
++        edges.dedup();
++        let mut queue: VecDeque<(u32, u32)> = edges
++            .iter()
++            .copied()
++            .filter(|&(u, v)| crosses(pa, pb, pts[u as usize], pts[v as usize]))
++            .collect();
++        let mut steps = 0usize;
++        while let Some((u, v)) = queue.pop_front() {
++            steps += 1;
++            ensure!(steps <= 1_000_000, "trim constraint recovery stalled");
++            if !crosses(pa, pb, pts[u as usize], pts[v as usize]) {
++                continue;
++            }
++            let Some(((i, x), (j, y))) = sides(tris, u, v) else {
++                continue;
++            };
++            let (pu, pv) = (pts[u as usize], pts[v as usize]);
++            let (px, py) = (pts[x as usize], pts[y as usize]);
++            // The quadrilateral u, y, v, x is convex exactly when its
++            // diagonals u-v and x-y cross.
++            if cross2(px, py, pu) * cross2(px, py, pv) >= 0. {
++                queue.push_back((u, v));
++                continue;
++            }
++            tris[i] = [u, y, x];
++            tris[j] = [v, x, y];
++            if crosses(pa, pb, px, py) {
++                queue.push_back((x.min(y), x.max(y)));
++            }
++        }
++        let recovered = tris.iter().any(|t| {
++            [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])]
++                .iter()
++                .any(|&(u, v)| (u, v) == (a, b) || (v, u) == (a, b))
++        });
++        ensure!(recovered, "trim boundary not recoverable");
++    }
++    Ok(())
 +}
 +
 +/// The deviation a triangle touching the trim boundary may show: the largest
@@ -1136,6 +1344,231 @@ index 0000000..6612ffd
 +        }
 +    }
 +    Ok(true)
++}
++
++/// The triangles whose surface leaves their linear mapping by more than the
++/// tolerance they are held to: [`CHORD`] for interior triangles, `boundary_tol`
++/// for those with a vertex among the first `boundary_count` (the trim samples,
++/// which are not refined).
++fn bad_triangles(
++    surface: &ParametricSurface,
++    uv: &[Uv],
++    tris: &[[u32; 3]],
++    boundary_count: usize,
++    boundary_tol: f64,
++) -> Result<Vec<usize>> {
++    let verts3: Vec<[f64; 3]> = uv.iter().map(|&p| point3(surface, p)).collect::<Result<_>>()?;
++    let mut bad = Vec::new();
++    for (ti, &[a, b, c]) in tris.iter().enumerate() {
++        let tol = if [a, b, c].iter().any(|&k| (k as usize) < boundary_count) {
++            boundary_tol
++        } else {
++            CHORD
++        };
++        let (pa, pb, pc) = (uv[a as usize], uv[b as usize], uv[c as usize]);
++        let (qa, qb, qc) = (verts3[a as usize], verts3[b as usize], verts3[c as usize]);
++        let samples = [
++            ([1. / 3., 1. / 3., 1. / 3.], [(pa[0] + pb[0] + pc[0]) / 3., (pa[1] + pb[1] + pc[1]) / 3.]),
++            ([0.5, 0.5, 0.], [(pa[0] + pb[0]) / 2., (pa[1] + pb[1]) / 2.]),
++            ([0., 0.5, 0.5], [(pb[0] + pc[0]) / 2., (pb[1] + pc[1]) / 2.]),
++            ([0.5, 0., 0.5], [(pa[0] + pc[0]) / 2., (pa[1] + pc[1]) / 2.]),
++        ];
++        for (w, s) in samples {
++            let true_point = point3(surface, s)?;
++            let linear: [f64; 3] = std::array::from_fn(|k| w[0] * qa[k] + w[1] * qb[k] + w[2] * qc[k]);
++            if distance(true_point, linear) > tol {
++                bad.push(ti);
++                break;
++            }
++        }
++    }
++    Ok(bad)
++}
++
++/// Whether `e` is the budget refusal, which sends a face to the CDT.
++fn is_budget(e: &anyhow::Error) -> bool {
++    e.to_string() == "trimmed face exceeds its budget"
++}
++
++/// The lattice triangulation of a single-loop trim: the boundary samples
++/// triangulated by earcut, then interior lattice points at the coarsest
++/// division whose triangles all meet their chord tolerance. `None` when no
++/// division does, or the lattice runs over budget.
++fn lattice_mesh(
++    uv: &[Uv],
++    hole_starts: &[u32],
++    outer: &[Uv],
++    holes: &[Vec<Uv>],
++    surface: &ParametricSurface,
++    boundary_count: usize,
++    boundary_tol: f64,
++    expected: f64,
++) -> Result<Option<(Vec<Uv>, Vec<[u32; 3]>)>> {
++    let mut indices = Vec::<u32>::new();
++    earcut::Earcut::new().earcut(uv.iter().copied(), hole_starts, &mut indices);
++    ensure!(!indices.is_empty() && indices.len() % 3 == 0, "triangulation failed");
++    let mut tris: Vec<[u32; 3]> = Vec::new();
++    let mut sum = 0.;
++    for t in indices.chunks_exact(3) {
++        let t = [t[0], t[1], t[2]];
++        ensure!(t.iter().all(|&k| (k as usize) < uv.len()), "triangle bounds");
++        let a = cross2(uv[t[0] as usize], uv[t[1] as usize], uv[t[2] as usize]);
++        if a.abs() <= 1e-14 {
++            continue;
++        }
++        sum += a.abs() * 0.5;
++        tris.push(if a > 0. { t } else { [t[0], t[2], t[1]] });
++    }
++    ensure!(
++        (sum - expected).abs() <= 1e-7 * expected.max(1e-6),
++        "triangulated area mismatch"
++    );
++    // Interior points are added on a lattice, one containing triangle at a
++    // time, so every boundary sample and boundary edge stays as it is. The
++    // coarsest lattice whose triangles all stay within CHORD of the surface is
++    // taken.
++    for divisions in [0_usize, 8, 16, 32, 64] {
++        let (points, tris) = match lattice_refine(outer, holes, uv, &tris, divisions) {
++            Ok(found) => found,
++            Err(e) if is_budget(&e) => return Ok(None),
++            Err(e) => return Err(e),
++        };
++        if within_chord(surface, &points, &tris, boundary_count, boundary_tol)? {
++            return Ok(Some((points, tris)));
++        }
++    }
++    Ok(None)
++}
++
++/// The constrained Delaunay triangulation of the trim's boundary samples in
++/// UV, refined inside the trim until every triangle meets its tolerance. Only
++/// interior points are added: a candidate within `margin` of a trim edge is
++/// not, so a face that needs a boundary split is refused.
++fn cdt_mesh(
++    surface: &ParametricSurface,
++    outer: &[Uv],
++    holes: &[Vec<Uv>],
++    boundary: &[Uv],
++    boundary_edges: &BTreeSet<(u32, u32)>,
++    boundary_count: usize,
++    boundary_tol: f64,
++    expected: f64,
++) -> Result<(Vec<Uv>, Vec<[u32; 3]>)> {
++    let mut seen_samples = BTreeSet::new();
++    for p in boundary {
++        ensure!(
++            seen_samples.insert([p[0].to_bits(), p[1].to_bits()]),
++            "duplicate trim sample"
++        );
++    }
++    let constraints: Vec<(u32, u32)> = boundary_edges.iter().copied().collect();
++    let span = (0..2)
++        .map(|k| {
++            let lo = outer.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min);
++            let hi = outer.iter().map(|p| p[k]).fold(f64::NEG_INFINITY, f64::max);
++            hi - lo
++        })
++        .fold(1e-9_f64, f64::max);
++    let gap2 = (1e-9 * span) * (1e-9 * span);
++    let margin2 = (1e-6 * span) * (1e-6 * span);
++    let mut points = boundary.to_vec();
++    // Points are binned in a GRID x GRID cell grid over the outer loop's box,
++    // as linked lists in Vec indices, so the duplicate test looks only at the
++    // nearby cells.
++    const GRID: usize = 64;
++    let origin: Uv = std::array::from_fn(|k| outer.iter().map(|p| p[k]).fold(f64::INFINITY, f64::min));
++    let cell_w = span / GRID as f64;
++    let cell_of = |p: Uv| -> usize {
++        let cx = (((p[0] - origin[0]) / cell_w).floor().max(0.) as usize).min(GRID - 1);
++        let cy = (((p[1] - origin[1]) / cell_w).floor().max(0.) as usize).min(GRID - 1);
++        cy * GRID + cx
++    };
++    let mut head = vec![u32::MAX; GRID * GRID];
++    let mut next: Vec<u32> = Vec::with_capacity(points.len() + 64);
++    for (i, &p) in points.iter().enumerate() {
++        let c = cell_of(p);
++        next.push(head[c]);
++        head[c] = i as u32;
++    }
++    let mut done = None;
++    for round in 0..=REFINE_ROUNDS {
++        ensure!(points.len() < MAX_VERTICES, "trimmed face exceeds its budget");
++        let mut tris = delaunay(&points);
++        constrain(&points, &mut tris, &constraints)?;
++        tris.retain(|t| in_region(centroid(&points, *t), outer, holes));
++        ensure!(tris.len() < MAX_TRIANGLES, "trimmed face exceeds its budget");
++        let bad = bad_triangles(surface, &points, &tris, boundary_count, boundary_tol)?;
++        if bad.is_empty() {
++            done = Some(tris);
++            break;
++        }
++        if round == REFINE_ROUNDS {
++            break;
++        }
++        ensure!(
++            points.len() - boundary_count + bad.len() <= REFINE_POINTS,
++            "trimmed face needs too many refinement points"
++        );
++        let mut added = false;
++        for ti in bad {
++            let t = tris[ti];
++            // Boundary samples cannot be split, so near a sharp trim corner a
++            // bad triangle may never meet its tolerance. Below MIN_EDGE it is
++            // left as it is, which keeps refinement finite.
++            let q: [[f64; 3]; 3] = [
++                point3(surface, points[t[0] as usize])?,
++                point3(surface, points[t[1] as usize])?,
++                point3(surface, points[t[2] as usize])?,
++            ];
++            if distance(q[0], q[1]).max(distance(q[1], q[2])).max(distance(q[2], q[0])) <= MIN_EDGE {
++                continue;
++            }
++            let [a, b, c] = t.map(|k| points[k as usize]);
++            let p = circumcentre(a, b, c)
++                .filter(|p| in_region(*p, outer, holes))
++                .unwrap_or_else(|| centroid(&points, t));
++            if constraints
++                .iter()
++                .any(|&(u, v)| segment_distance2(p, points[u as usize], points[v as usize]) <= margin2)
++            {
++                continue;
++            }
++            let c = cell_of(p);
++            let (cx, cy) = (c % GRID, c / GRID);
++            let mut duplicate = false;
++            for ny in cy.saturating_sub(1)..=(cy + 1).min(GRID - 1) {
++                for nx in cx.saturating_sub(1)..=(cx + 1).min(GRID - 1) {
++                    let mut j = head[ny * GRID + nx];
++                    while j != u32::MAX {
++                        let q = points[j as usize];
++                        if (q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2) <= gap2 {
++                            duplicate = true;
++                        }
++                        j = next[j as usize];
++                    }
++                }
++            }
++            if !duplicate {
++                points.push(p);
++                next.push(head[c]);
++                head[c] = (points.len() - 1) as u32;
++                added = true;
++            }
++        }
++        if !added {
++            break;
++        }
++    }
++    let done = done.context("trimmed face needs a finer triangulation")?;
++    let sum: f64 = done
++        .iter()
++        .map(|t| cross2(points[t[0] as usize], points[t[1] as usize], points[t[2] as usize]).abs() * 0.5)
++        .sum();
++    ensure!(
++        (sum - expected).abs() <= 1e-7 * expected.max(1e-6),
++        "triangulated area mismatch"
++    );
++    Ok((points, done))
 +}
 +
 +/// The trimmed mesh of a parametric face whose trim the rectangular grid
@@ -1215,43 +1648,40 @@ index 0000000..6612ffd
 +    for (h, &start) in holes.iter().zip(&hole_starts) {
 +        add_ring(start as usize, h.len());
 +    }
-+    let mut indices = Vec::<u32>::new();
-+    earcut::Earcut::new().earcut(uv.iter().copied(), &hole_starts, &mut indices);
-+    ensure!(!indices.is_empty() && indices.len() % 3 == 0, "triangulation failed");
-+    let mut tris: Vec<[u32; 3]> = Vec::new();
-+    let mut sum = 0.;
-+    for t in indices.chunks_exact(3) {
-+        let t = [t[0], t[1], t[2]];
-+        ensure!(t.iter().all(|&k| (k as usize) < uv.len()), "triangle bounds");
-+        let a = cross2(uv[t[0] as usize], uv[t[1] as usize], uv[t[2] as usize]);
-+        if a.abs() <= 1e-14 {
-+            continue;
-+        }
-+        sum += a.abs() * 0.5;
-+        tris.push(if a > 0. { t } else { [t[0], t[2], t[1]] });
-+    }
-+    ensure!(
-+        (sum - expected).abs() <= 1e-7 * expected.max(1e-6),
-+        "triangulated area mismatch"
-+    );
-+    // Interior points are added on a lattice, one containing triangle at a
-+    // time, so every boundary sample and boundary edge stays as it is. The
-+    // coarsest lattice whose triangles all stay within CHORD of the surface is
-+    // taken; none is refused.
 +    let rings: Vec<&[Uv]> = std::iter::once(outer.as_slice())
 +        .chain(holes.iter().map(Vec::as_slice))
 +        .collect();
 +    let boundary_tol = boundary_tolerance(&surface, &rings)?;
 +    let boundary_count = uv.len();
-+    let mut found = None;
-+    for divisions in [0_usize, 8, 16, 32, 64] {
-+        let (points, tris) = lattice_refine(&outer, &holes, &uv, &tris, divisions)?;
-+        if within_chord(&surface, &points, &tris, boundary_count, boundary_tol)? {
-+            found = Some((points, tris));
-+            break;
-+        }
-+    }
-+    let (uv, done) = found.context("trimmed face needs a finer interior lattice")?;
++    // A single-loop trim is first meshed by the interior lattice, as before.
++    // A face with holes, or one the lattice refuses, is meshed by the CDT.
++    let lattice = if holes.is_empty() {
++        lattice_mesh(
++            &uv,
++            &hole_starts,
++            &outer,
++            &holes,
++            &surface,
++            boundary_count,
++            boundary_tol,
++            expected,
++        )?
++    } else {
++        None
++    };
++    let (uv, done) = match lattice {
++        Some(found) => found,
++        None => cdt_mesh(
++            &surface,
++            &outer,
++            &holes,
++            &uv,
++            &boundary_edges,
++            boundary_count,
++            boundary_tol,
++            expected,
++        )?,
++    };
 +    let verts3: Vec<[f64; 3]> = uv.iter().map(|&p| point3(&surface, p)).collect::<Result<_>>()?;
 +    {
 +        // The boundary is still the samples' own: each boundary edge is used

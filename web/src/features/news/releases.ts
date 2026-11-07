@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T01:30:00Z",
+    "revit-baths-cooktops",
+    "Revit baths and cooktops come in",
+    `More Revit fixtures with curved, trimmed faces now come in as Revit drew them, instead of see-through boxes.
+- Bathtubs and cooktops are drawn with their real shape.
+- Curved faces with holes in them, or awkward outlines, are now meshed properly.
+- Large Revit files take a few percent longer to open.`,
+    "walls",
+  ),
+  release(
     "2026-11-06T22:40:00Z",
     "revit-appliances",
     "More Revit appliances and fixtures come in",
