@@ -1,5 +1,5 @@
 diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
-index 03d4f31..bca1abe 100644
+index 03d4f31..5f1e671 100644
 --- a/src/ifc/saved_meshes.rs
 +++ b/src/ifc/saved_meshes.rs
 @@ -30,6 +30,7 @@ use super::entities::{BrepTriangle, IfcEntity, PropertyValue, SolidShape};
@@ -147,7 +147,7 @@ index 03d4f31..bca1abe 100644
 +                retry_ids.insert(id);
 +                retry.insert(id, own);
              }
-@@ -250,3 +243,297 @@ pub fn attach_scoped_with_control(
+@@ -250,3 +243,298 @@ pub fn attach_scoped_with_control(
      )?;
 +    // Pass two: only the candidates, decoded with the round-5 rules on. Each
 +    // is kept only if it passes every gate of the admission above; otherwise
@@ -199,6 +199,7 @@ index 03d4f31..bca1abe 100644
 +    diagnostics.iter().any(|d| {
 +        [
 +            "disconnected UV boundary",
++            "missing surface pointer target",
 +        ]
 +        .iter()
 +        .any(|kind| d.contains(kind))
@@ -1470,10 +1471,10 @@ index b902e19..776ab72 100644
  }
 diff --git a/src/research/native_parametric_trim.rs b/src/research/native_parametric_trim.rs
 new file mode 100644
-index 0000000..b5eb876
+index 0000000..0f92639
 --- /dev/null
 +++ b/src/research/native_parametric_trim.rs
-@@ -0,0 +1,1171 @@
+@@ -0,0 +1,1490 @@
 +//! Parametric faces whose saved trim is not a UV rectangle. Each trim loop is
 +//! read as a UV polygon. A single-loop trim is triangulated in UV by its
 +//! boundary samples, which are the samples neighbouring faces share, and the
@@ -1525,7 +1526,7 @@ index 0000000..b5eb876
 +
 +/// The UV samples of one trim loop's edges, in loop order, each edge read on
 +/// the side of `fi`.
-+fn loop_segments(g: &ObjectGraph, fi: usize, li: usize) -> Result<Vec<Vec<Uv>>> {
++fn loop_segments(g: &ObjectGraph, fi: usize, li: usize, surface: &ParametricSurface) -> Result<Vec<Vec<Uv>>> {
 +    let l = &g.objects[li];
 +    ensure!(
 +        ["EdgeLoop", "EdgeLoopWithChainEnvelopes"].contains(&l.class_name.as_str()),
@@ -1575,6 +1576,7 @@ index 0000000..b5eb876
 +            points.push(uv(&p["uv"][side])?);
 +        }
 +        points.push(uv(&ends[1]["uv"][side])?);
++        let points = apply_splits(cur, fi, surface, points, true)?;
 +        segments.push(points);
 +        cur = pointer(g, cur, &e.fields["m_next"][side])?.context("null trim next")?;
 +    }
@@ -2055,7 +2057,7 @@ index 0000000..b5eb876
 +        }
 +        constraints.to_vec()
 +    };
-+    for (seg_i, &(a, b)) in segments.iter().enumerate() {
++    for &(a, b) in &segments {
 +        let (pa, pb) = (pts[a as usize], pts[b as usize]);
 +        let mut edges: Vec<(u32, u32)> = tris
 +            .iter()
@@ -2326,6 +2328,7 @@ index 0000000..b5eb876
 +        head[c] = i as u32;
 +    }
 +    let mut done = None;
++    let mut stuck: Option<(Uv, Uv)> = None;
 +    for round in 0..=REFINE_ROUNDS {
 +        ensure!(points.len() < MAX_VERTICES, "trimmed face exceeds its budget");
 +        let mut tris = delaunay(&points);
@@ -2344,6 +2347,9 @@ index 0000000..b5eb876
 +            points.len() - boundary_count + bad.len() <= REFINE_POINTS,
 +            "trimmed face needs too many refinement points"
 +        );
++        if new_rules {
++            stuck = chord_pair(surface, &points, &tris, &bad, boundary_count)?;
++        }
 +        let mut added = false;
 +        for ti in bad {
 +            let t = tris[ti];
@@ -2405,7 +2411,13 @@ index 0000000..b5eb876
 +            break;
 +        }
 +    }
-+    let done = done.context("trimmed face needs a finer triangulation")?;
++    let done = match done {
++        Some(done) => done,
++        None => match stuck {
++            Some((a, b)) => return Err(anyhow::Error::new(ChordEdge { a, b })),
++            None => bail!("trimmed face needs a finer triangulation"),
++        },
++    };
 +    let sum: f64 = done
 +        .iter()
 +        .map(|t| cross2(points[t[0] as usize], points[t[1] as usize], points[t[2] as usize]).abs() * 0.5)
@@ -2415,6 +2427,314 @@ index 0000000..b5eb876
 +        "triangulated area mismatch"
 +    );
 +    Ok((points, done))
++}
++
++/// A point in model space.
++type Point = [f64; 3];
++
++thread_local! {
++    /// Shared trim edges (by edge object index) that take extra 3D points,
++    /// set only while the round-8 retry of one geometry object runs.
++    static SPLITS: std::cell::RefCell<BTreeMap<usize, Vec<Point>>> =
++        std::cell::RefCell::new(BTreeMap::new());
++    /// Whether any edge carries a split point (a cheap test for the loops).
++    static SPLIT_ACTIVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++    /// The (face, edge) pairs whose boundary took a split point.
++    static CONSUMED: std::cell::RefCell<BTreeSet<(usize, usize)>> =
++        std::cell::RefCell::new(BTreeSet::new());
++}
++
++/// A boundary chord that the triangulation cannot meet within tolerance,
++/// with its two trim samples in UV. Its edge can be split in 3D.
++#[derive(Debug, Clone, Copy)]
++pub(crate) struct ChordEdge {
++    pub(crate) a: Uv,
++    pub(crate) b: Uv,
++}
++
++impl std::fmt::Display for ChordEdge {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.write_str("trimmed face needs a finer triangulation")
++    }
++}
++
++impl std::error::Error for ChordEdge {}
++
++/// The longest boundary chord of a bad triangle.
++fn chord_pair(
++    surface: &ParametricSurface,
++    uv: &[Uv],
++    tris: &[[u32; 3]],
++    bad: &[usize],
++    boundary_count: usize,
++) -> Result<Option<(Uv, Uv)>> {
++    let mut best: Option<(f64, Uv, Uv)> = None;
++    for &ti in bad {
++        let t = tris[ti];
++        for k in 0..3 {
++            let (u, v) = (t[k], t[(k + 1) % 3]);
++            if u as usize >= boundary_count || v as usize >= boundary_count {
++                continue;
++            }
++            let len = distance(point3(surface, uv[u as usize])?, point3(surface, uv[v as usize])?);
++            if best.map_or(true, |b| len > b.0) {
++                best = Some((len, uv[u as usize], uv[v as usize]));
++            }
++        }
++    }
++    Ok(best.map(|(_, a, b)| (a, b)))
++}
++
++/// The point of `surface` nearest to `p`: a grid start, then Gauss-Newton on
++/// the (u, v) parameters, clamped to the surface's bounds.
++pub(crate) fn nearest_uv(surface: &ParametricSurface, p: Point) -> Result<Uv> {
++    let [[u0, v0], [u1, v1]] = surface.bounds();
++    let n = 24;
++    let mut best = (f64::INFINITY, [u0, v0]);
++    for i in 0..=n {
++        for j in 0..=n {
++            let uv = [
++                u0 + (u1 - u0) * i as f64 / n as f64,
++                v0 + (v1 - v0) * j as f64 / n as f64,
++            ];
++            if let Ok(q) = surface.evaluate(uv[0], uv[1]) {
++                let d = distance(q, p);
++                if d < best.0 {
++                    best = (d, uv);
++                }
++            }
++        }
++    }
++    let mut uv = best.1;
++    let sub = |a: Point, b: Point| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
++    let dot = |a: Point, b: Point| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
++    for _ in 0..60 {
++        let q = surface.evaluate(uv[0], uv[1])?;
++        let r = sub(q, p);
++        let (up, um) = ((uv[0] + (u1 - u0) * 1e-7).min(u1), (uv[0] - (u1 - u0) * 1e-7).max(u0));
++        let (vp, vm) = ((uv[1] + (v1 - v0) * 1e-7).min(v1), (uv[1] - (v1 - v0) * 1e-7).max(v0));
++        let qu = sub(surface.evaluate(up, uv[1])?, surface.evaluate(um, uv[1])?);
++        let qv = sub(surface.evaluate(uv[0], vp)?, surface.evaluate(uv[0], vm)?);
++        let du: Point = std::array::from_fn(|k| qu[k] / (up - um).max(1e-300));
++        let dv: Point = std::array::from_fn(|k| qv[k] / (vp - vm).max(1e-300));
++        let (a11, a12, a22) = (dot(du, du), dot(du, dv), dot(dv, dv));
++        let (b1, b2) = (-dot(du, r), -dot(dv, r));
++        let det = a11 * a22 - a12 * a12;
++        if det.abs() < 1e-300 {
++            break;
++        }
++        let d0 = (b1 * a22 - b2 * a12) / det;
++        let d1 = (a11 * b2 - a12 * b1) / det;
++        uv[0] = (uv[0] + d0).clamp(u0, u1);
++        uv[1] = (uv[1] + d1).clamp(v0, v1);
++        if d0.abs() + d1.abs() < 1e-13 {
++            break;
++        }
++    }
++    Ok(uv)
++}
++
++/// A point on both surfaces near `uv` of `si`: alternating nearest-point
++/// projections, which converge onto the surfaces' intersection, the shared
++/// trim edge when the two faces meet along it.
++fn edge_point(si: &ParametricSurface, sj: &ParametricSurface, uv: Uv) -> Result<Point> {
++    let mut p = si.evaluate(uv[0], uv[1])?;
++    for _ in 0..60 {
++        let uj = nearest_uv(sj, p)?;
++        let q = sj.evaluate(uj[0], uj[1])?;
++        let ui = nearest_uv(si, q)?;
++        let p2 = si.evaluate(ui[0], ui[1])?;
++        let gap = distance(p2, q);
++        p = p2;
++        if gap < 1e-9 {
++            return Ok(std::array::from_fn(|k| 0.5 * (p2[k] + q[k])));
++        }
++    }
++    bail!("shared edge point did not converge")
++}
++
++/// The UV samples of edge `e` on the side of `fi`, with the shared split
++/// points of `e` inserted where they fall along it. With `record`, the pair
++/// is marked consumed, which the element check reads.
++fn apply_splits(
++    e: usize,
++    fi: usize,
++    surface: &ParametricSurface,
++    mut points: Vec<Uv>,
++    record: bool,
++) -> Result<Vec<Uv>> {
++    if !SPLIT_ACTIVE.with(|c| c.get()) {
++        return Ok(points);
++    }
++    let extra = SPLITS.with(|s| s.borrow().get(&e).cloned().unwrap_or_default());
++    if extra.is_empty() || points.len() < 2 {
++        return Ok(points);
++    }
++    if record {
++        CONSUMED.with(|c| c.borrow_mut().insert((fi, e)));
++    }
++    for p3 in extra {
++        let uv = nearest_uv(surface, p3)?;
++        if points
++            .iter()
++            .any(|q| (q[0] - uv[0]).abs() < 1e-9 && (q[1] - uv[1]).abs() < 1e-9)
++        {
++            continue;
++        }
++        let mut best = (f64::INFINITY, 0usize);
++        for k in 0..points.len() - 1 {
++            let d = segment_distance(uv, points[k], points[k + 1]);
++            if d < best.0 {
++                best = (d, k);
++            }
++        }
++        points.insert(best.1 + 1, uv);
++    }
++    Ok(points)
++}
++
++/// Clears the shared split table and the consumed record.
++pub(crate) fn splits_clear() {
++    SPLIT_ACTIVE.with(|c| c.set(false));
++    SPLITS.with(|s| s.borrow_mut().clear());
++    CONSUMED.with(|c| c.borrow_mut().clear());
++}
++
++/// Forgets which faces consumed a split, before a round of meshing.
++pub(crate) fn consumed_clear() {
++    CONSUMED.with(|c| c.borrow_mut().clear());
++}
++
++/// Whether face `fi` took the splits of edge `e` in the last round.
++pub(crate) fn consumed(fi: usize, e: usize) -> bool {
++    CONSUMED.with(|c| c.borrow().contains(&(fi, e)))
++}
++
++/// The edges that carry split points.
++pub(crate) fn split_edges() -> Vec<usize> {
++    SPLITS.with(|s| s.borrow().keys().copied().collect())
++}
++
++/// Adds the split point `p` to edge `e`; false when it is already there.
++pub(crate) fn split_add(e: usize, p: Point) -> bool {
++    SPLIT_ACTIVE.with(|c| c.set(true));
++    SPLITS.with(|s| {
++        let mut m = s.borrow_mut();
++        let list = m.entry(e).or_default();
++        if list.iter().any(|q| distance(*q, p) < 1e-9) {
++            return false;
++        }
++        list.push(p);
++        true
++    })
++}
++
++/// The raw UV samples of edge `e` on side `side`: its two ends and interior.
++fn edge_uv_raw(g: &ObjectGraph, e: usize, side: usize) -> Result<Vec<Uv>> {
++    let edge = &g.objects[e];
++    let ends = edge.fields["m_firstAndLastEdgePnts"]
++        .as_array()
++        .context("edge endpoints")?;
++    ensure!(ends.len() == 2, "edge endpoint count");
++    let uv = |v: &serde_json::Value| -> Result<Uv> {
++        let a = v.as_array().context("UV array")?;
++        ensure!(a.len() == 2, "UV dimension");
++        Ok([
++            a[0].as_f64().context("UV number")?,
++            a[1].as_f64().context("UV number")?,
++        ])
++    };
++    let mut points = vec![uv(&ends[0]["uv"][side])?];
++    for p in edge
++        .fields["m_interiorEdgePnts"]
++        .as_array()
++        .context("edge interior points")?
++    {
++        points.push(uv(&p["uv"][side])?);
++    }
++    points.push(uv(&ends[1]["uv"][side])?);
++    Ok(points)
++}
++
++/// Plans the 3D split of the boundary chord `ce` of face `fi`: a point on the
++/// shared trim edge that the chord crosses, found on both faces' surfaces.
++/// `None` when the chord's edge has no second trimmed face to match.
++pub(crate) fn plan_split(g: &ObjectGraph, fi: usize, ce: &ChordEdge) -> Result<Option<(usize, Point)>> {
++    let f = &g.objects[fi];
++    let si = pointer(g, fi, &f.fields["m_pSurf"])?.context("face surface")?;
++    let surf_i = ParametricSurface::read(g, si)?;
++    let mut found: Option<(usize, Uv, Uv)> = None;
++    let mut next = pointer(g, fi, &f.fields["m_pFirstLoop"])?;
++    let mut loops = BTreeSet::new();
++    while let Some(li) = next {
++        ensure!(loops.insert(li), "loop-list cycle");
++        let l = &g.objects[li];
++        let mut cur = pointer(g, li, &l.fields["m_next"])?.context("empty trim")?;
++        let mut guard = BTreeSet::new();
++        while cur != li {
++            ensure!(guard.insert(cur), "trim edge cycle");
++            let e = &g.objects[cur];
++            let faces = e.fields["m_pFace"].as_array().context("edge face pair")?;
++            let mut side = None;
++            for (i, p) in faces.iter().enumerate() {
++                if pointer(g, cur, p)? == Some(fi) {
++                    side = Some(i);
++                }
++            }
++            let side = side.context("edge does not belong to face")?;
++            if found.is_none() {
++                let points = edge_uv_raw(g, cur, side)?;
++                let points = apply_splits(cur, fi, &surf_i, points, false)?;
++                // Samples match by UV or by 3D position: a degenerate end of
++                // a ruled surface gives two UVs for one point.
++                let mut same = |x: Uv, y: Uv| -> Result<bool> {
++                    if (x[0] - y[0]).abs() < 1e-9 && (x[1] - y[1]).abs() < 1e-9 {
++                        return Ok(true);
++                    }
++                    Ok(distance(point3(&surf_i, x)?, point3(&surf_i, y)?) < 1e-7)
++                };
++                for k in 0..points.len().saturating_sub(1) {
++                    let forward = same(points[k], ce.a)? && same(points[k + 1], ce.b)?;
++                    let backward = same(points[k], ce.b)? && same(points[k + 1], ce.a)?;
++                    if forward || backward {
++                        found = Some((cur, points[k], points[k + 1]));
++                        break;
++                    }
++                }
++            }
++            cur = pointer(g, cur, &e.fields["m_next"][side])?.context("null trim next")?;
++        }
++        next = pointer(g, li, &l.fields["m_nextLoop"])?;
++    }
++    let Some((e, seg_a, seg_b)) = found else {
++        return Ok(None);
++    };
++    let faces = g.objects[e].fields["m_pFace"].as_array().context("edge face pair")?;
++    let mut other = None;
++    for p in faces {
++        if let Some(x) = pointer(g, e, p)? {
++            if x != fi {
++                other = Some(x);
++            }
++        }
++    }
++    let Some(fj) = other else {
++        return Ok(None);
++    };
++    let Some(sj_index) = pointer(g, fj, &g.objects[fj].fields["m_pSurf"])? else {
++        return Ok(None);
++    };
++    let Ok(surf_j) = ParametricSurface::read(g, sj_index) else {
++        return Ok(None);
++    };
++    let mid = [(seg_a[0] + seg_b[0]) / 2., (seg_a[1] + seg_b[1]) / 2.];
++    let p = edge_point(&surf_i, &surf_j, mid)?;
++    let on_face = surf_i.evaluate(mid[0], mid[1])?;
++    // The split must sit at the chord, not elsewhere on the intersection.
++    if distance(p, on_face) > 0.05 {
++        return Ok(None);
++    }
++    Ok(Some((e, p)))
 +}
 +
 +/// The trimmed mesh of a parametric face whose trim the rectangular grid
@@ -2447,7 +2767,7 @@ index 0000000..b5eb876
 +    let mut next = pointer(g, fi, &f.fields["m_pFirstLoop"])?;
 +    while let Some(li) = next {
 +        ensure!(seen.insert(li), "loop-list cycle");
-+        rings.push(closed_ring(&surface, loop_segments(g, fi, li)?)?);
++        rings.push(closed_ring(&surface, loop_segments(g, fi, li, &surface)?)?);
 +        next = pointer(g, li, &g.objects[li].fields["m_nextLoop"])?;
 +    }
 +    ensure!(!rings.is_empty(), "face has no trim loop");
@@ -2646,7 +2966,7 @@ index 0000000..b5eb876
 +    })
 +}
 diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
-index 199cbbe..84c199c 100644
+index 199cbbe..d1c9995 100644
 --- a/src/research/native_saved_mesh.rs
 +++ b/src/research/native_saved_mesh.rs
 @@ -3,7 +3,9 @@ use crate::native_parameters::ObjectGraph;
@@ -2734,7 +3054,24 @@ index 199cbbe..84c199c 100644
      let plane_index = index
          .resolve(face, &g.objects[face].fields["m_pSurf"])?
          .context("plane surface missing")?;
-@@ -336,7 +359,13 @@ fn refined_plane_edge(
+@@ -320,8 +343,15 @@ fn refined_plane_edge(
+         let residual = (0..3)
+             .map(|k| (origin[k] + p[0] * x[k] + p[1] * y[k] - q[k]).powi(2))
+             .sum::<f64>();
++        // Under the round-8 rules the retry allows 1e-4 ft (a squared
++        // residual of 1e-8); the first pass keeps 1e-14.
++        let plane_limit = if crate::research::native_parametric_surface::new_rules() {
++            1e-8
++        } else {
++            1e-14
++        };
+         ensure!(
+-            residual <= 1e-14,
++            residual <= plane_limit,
+             "shared curved edge leaves adjacent plane"
+         );
+         Ok(p)
+@@ -336,7 +366,13 @@ fn refined_plane_edge(
              "shared edge surface samples disagree"
          );
      }
@@ -2748,7 +3085,7 @@ index 199cbbe..84c199c 100644
      let lo = start[axis].min(end[axis]);
      let hi = start[axis].max(end[axis]);
      let mut values = knots
-@@ -445,30 +474,48 @@ fn ring_impl(
+@@ -445,30 +481,48 @@ fn ring_impl(
          segments.iter().all(|s: &Vec<_>| !s.is_empty()),
          "empty boundary edge"
      );
@@ -2808,7 +3145,106 @@ index 199cbbe..84c199c 100644
      let mut out = output.context("disconnected UV boundary")?;
      out.dedup_by(|a, b| close(*a, *b));
      ensure!(
-@@ -968,12 +1015,72 @@ pub fn cylinder_face(
+@@ -713,6 +767,98 @@ fn plane_regions_tile(
+ pub fn face(g: &ObjectGraph, fi: usize) -> Result<Option<FaceMesh>> {
+     face_indexed(g, &PointerIndex::new(g), fi)
+ }
++/// The meshes of one geometry object's faces. Under the round-8 rules, a
++/// face whose boundary chord is too coarse takes a 3D split point on the
++/// shared trim edge, planned from both faces' surfaces; both faces are then
++/// meshed again with that point, for up to three rounds. A split kept only
++/// when both faces of its edge took it. Other rules leave the faces as they
++/// are.
++fn geometry_face_meshes(
++    g: &ObjectGraph,
++    index: &PointerIndex<'_>,
++    faces: &[usize],
++) -> Result<Vec<(usize, Option<FaceMesh>)>> {
++    use crate::research::native_parametric_trim as trim;
++    trim::splits_clear();
++    let result = (|| -> Result<Vec<(usize, Option<FaceMesh>)>> {
++        // Each face keeps its last mesh. A round re-meshes only the faces
++        // that are new or share an edge that took a split.
++        let mut results: Vec<Option<Result<Option<FaceMesh>>>> =
++            (0..faces.len()).map(|_| None).collect();
++        let mut dirty: BTreeSet<usize> = (0..faces.len()).collect();
++        for round in 0..=3 {
++            let mut chords = Vec::new();
++            for &pos in &dirty {
++                let r = face_indexed(g, index, faces[pos]);
++                if let Err(e) = &r {
++                    if let Some(ce) = e.downcast_ref::<trim::ChordEdge>() {
++                        chords.push((pos, *ce));
++                    }
++                }
++                results[pos] = Some(r);
++            }
++            if results.iter().all(|r| matches!(r, Some(Ok(_)))) {
++                // Every split must be taken by both of its faces, or the
++                // shared boundary would open.
++                for e in trim::split_edges() {
++                    let pair = g.objects[e].fields["m_pFace"]
++                        .as_array()
++                        .context("edge face pair")?;
++                    for p in pair {
++                        if let Some(f) = pointer(g, e, p)? {
++                            ensure!(
++                                faces.contains(&f) && trim::consumed(f, e),
++                                "shared split not taken by both faces"
++                            );
++                        }
++                    }
++                }
++                let mut out = Vec::with_capacity(faces.len());
++                for (pos, r) in results.into_iter().enumerate() {
++                    out.push((faces[pos], r.context("face result")??));
++                }
++                return Ok(out);
++            }
++            let first_error = || -> anyhow::Error {
++                results
++                    .iter()
++                    .find_map(|r| match r {
++                        Some(Err(e)) => Some(anyhow::anyhow!("{e:#}")),
++                        _ => None,
++                    })
++                    .unwrap_or_else(|| anyhow::anyhow!("face result missing"))
++            };
++            if round == 3 || chords.is_empty() {
++                return Err(first_error());
++            }
++            let mut next = BTreeSet::new();
++            for (pos, ce) in chords {
++                if let Some((e, p)) = trim::plan_split(g, faces[pos], &ce)? {
++                    if trim::split_add(e, p) {
++                        let pair = g.objects[e].fields["m_pFace"]
++                            .as_array()
++                            .context("edge face pair")?;
++                        for q in pair {
++                            if let Some(f) = pointer(g, e, q)? {
++                                if let Some(k) = faces.iter().position(|&x| x == f) {
++                                    next.insert(k);
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++            if next.is_empty() {
++                return Err(first_error());
++            }
++            dirty = next;
++        }
++        bail!("chord split rounds exhausted")
++    })();
++    trim::splits_clear();
++    result
++}
++
+ fn face_indexed(g: &ObjectGraph, index: &PointerIndex<'_>, fi: usize) -> Result<Option<FaceMesh>> {
+     let f = g.objects.get(fi).context("face index")?;
+     ensure!(f.class_name == "Face", "not Face");
+@@ -968,12 +1114,72 @@ pub fn cylinder_face(
      let loop_index = index
          .resolve(fi, &face.fields["m_pFirstLoop"])?
          .context("cylinder trim loop")?;
@@ -2887,7 +3323,7 @@ index 199cbbe..84c199c 100644
      let trim_uv = ring(g, &index, fi, loop_index)?;
      ensure!(!trim_uv.is_empty(), "empty cylinder trim");
      let mut trim_min = [f64::INFINITY; 2];
-@@ -1318,6 +1425,16 @@ pub struct GraphicsMeshes {
+@@ -1318,6 +1524,16 @@ pub struct GraphicsMeshes {
      pub excluded_non_surface_branches: usize,
      #[serde(default)]
      pub profile_observations: Vec<String>,
@@ -2904,9 +3340,33 @@ index 199cbbe..84c199c 100644
  }
  /// Decode selected saved graphics. Positions and normals are in the owning
  /// document frame; length units remain Revit internal feet.
-@@ -1424,6 +1541,11 @@ fn graphics_impl<'a>(
+@@ -1417,13 +1633,34 @@ fn graphics_impl<'a>(
+         let mut decoded = Vec::new();
+         let result = (|| -> Result<()> {
+             if obj.class_name == "Geometry" {
++                let mut retry_faces = if crate::research::native_parametric_surface::new_rules() {
++                    let mut ids = Vec::new();
++                    for ptr in obj.fields["m_pFaces"]
++                        .as_array()
++                        .context("geometry faces")?
++                    {
++                        ids.push(index.resolve(oi, ptr)?.context("null geometry face")?);
++                    }
++                    Some(geometry_face_meshes(g, index, &ids)?.into_iter())
++                } else {
++                    None
++                };
+                 for ptr in obj.fields["m_pFaces"]
+                     .as_array()
+                     .context("geometry faces")?
+                 {
                      let fi = index.resolve(oi, ptr)?.context("null geometry face")?;
-                     match face_indexed(g, index, fi)? {
+-                    match face_indexed(g, index, fi)? {
++                    let face_mesh = match retry_faces.as_mut() {
++                        Some(it) => it.next().context("retry face")?.1,
++                        None => face_indexed(g, index, fi)?,
++                    };
++                    match face_mesh {
                          Some(m) => {
 +                            if crate::native_parametric_mesh::is_new_path_face(g, fi)?
 +                                || crate::research::native_parametric_trim::is_trimmed_fallback(g, fi)
@@ -2916,7 +3376,7 @@ index 199cbbe..84c199c 100644
                              let normals = if m.normals.len() == m.vertices.len() {
                                  m.normals.clone()
                              } else {
-@@ -1555,8 +1677,179 @@ fn graphics_impl<'a>(
+@@ -1555,8 +1792,179 @@ fn graphics_impl<'a>(
              Err(e) => out.diagnostics.push(format!("object {oi}: {e:#}")),
          }
      }
