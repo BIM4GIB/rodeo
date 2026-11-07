@@ -667,7 +667,7 @@ index 15db1d8..e99be94 100644
          }
          Ok(())
 diff --git a/src/research/native_parametric_mesh.rs b/src/research/native_parametric_mesh.rs
-index b50dc80..e135450 100644
+index b50dc80..efbca14 100644
 --- a/src/research/native_parametric_mesh.rs
 +++ b/src/research/native_parametric_mesh.rs
 @@ -1,11 +1,98 @@
@@ -785,7 +785,60 @@ index b50dc80..e135450 100644
      let mut cur = pointer(g, li, &l.fields["m_next"])?.context("empty trim")?;
      let mut seen = std::collections::BTreeSet::new();
      let mut segments = Vec::new();
-@@ -273,11 +360,8 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -178,7 +265,14 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+         }
+     }
+     let mut closes = false;
+-    for reverse in [false, true] {
++    // Under the round-9 rules a join that misses by up to 1e-3 ft in model
++    // space is accepted too; the first pass joins within 1e-7 only.
++    let joins: &[f64] = if crate::research::native_parametric_surface::new_rules() {
++        &[1e-7, 1e-3]
++    } else {
++        &[1e-7]
++    };
++    for (tol, reverse) in joins.iter().flat_map(|&t| [(t, false), (t, true)]) {
+         let first = if reverse {
+             *segments[0].last().unwrap()
+         } else {
+@@ -194,9 +288,9 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+             let p = surface.evaluate(last[0], last[1])?;
+             let a = seg[0];
+             let b = *seg.last().unwrap();
+-            if distance(p, surface.evaluate(a[0], a[1])?) < 1e-7 {
++            if distance(p, surface.evaluate(a[0], a[1])?) < tol {
+                 last = b;
+-            } else if distance(p, surface.evaluate(b[0], b[1])?) < 1e-7 {
++            } else if distance(p, surface.evaluate(b[0], b[1])?) < tol {
+                 last = a;
+             } else {
+                 valid = false;
+@@ -207,7 +301,7 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+             && distance(
+                 surface.evaluate(first[0], first[1])?,
+                 surface.evaluate(last[0], last[1])?,
+-            ) < 1e-7
++            ) < tol
+         {
+             closes = true;
+             break;
+@@ -248,8 +342,14 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+         if intervals.is_empty() {
+             // A revolution's horizontal UV edge can collapse to a pole. The
+             // half-turn distance is exactly twice the profile's radial norm.
++            // Under the round-9 rules a ruled surface whose profile end is a
++            // single point collapses the same way; the side must be a point
++            // in model space too (checked below).
++            let collapsible = matches!(surface, ParametricSurface::SurfRev { .. })
++                || (crate::research::native_parametric_surface::new_rules()
++                    && matches!(surface, ParametricSurface::RuledSurf { .. }));
+             ensure!(
+-                axis == 0 && matches!(surface, ParametricSurface::SurfRev { .. }),
++                axis == 0 && collapsible,
+                 "missing rectangular trim side"
+             );
+             let v = if side == 0 { min[1] } else { max[1] };
+@@ -273,11 +373,8 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
          }
          ensure!((end - max[axis]).abs() < 1e-7, "incomplete trim perimeter");
      }
@@ -799,7 +852,7 @@ index b50dc80..e135450 100644
      let (du, dv) = match &surface {
          ParametricSurface::SurfRev { profile, .. } => match profile {
              Curve::Line {
-@@ -293,7 +377,16 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -293,7 +390,27 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
                  angular(center[0].hypot(center[1]) + 2. * radius),
                  angular(*radius),
              ),
@@ -813,10 +866,21 @@ index b50dc80..e135450 100644
 +        ParametricSurface::Cylinder { .. } => {
 +            anyhow::bail!("cylinder trim has no parametric grid")
 +        }
++        ParametricSurface::Hermite {
++            u_params, v_params, ..
++        } => {
++            // Eight steps per knot span: the patch is cubic within each span.
++            let step = |k: &[f64]| {
++                k.windows(2)
++                    .map(|w| (w[1] - w[0]) / 8.)
++                    .fold(f64::INFINITY, f64::min)
++            };
++            (step(u_params), step(v_params))
++        }
          ParametricSurface::ConeSurf { half_angle, .. } => {
              // The generators are straight: only the angle needs a chord bound.
              let far = min[1].abs().max(max[1].abs());
-@@ -318,30 +411,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -318,30 +435,12 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
                  }
                  let s = ParametricSurface::read(g, surface_index)?;
                  let ParametricSurface::RuledSurf {
@@ -851,7 +915,7 @@ index b50dc80..e135450 100644
              }
              (1. / n, 1. / n)
          }
-@@ -370,8 +445,178 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
+@@ -370,8 +469,198 @@ pub(crate) fn face_grid(g: &ObjectGraph, fi: usize) -> Result<FaceGrid> {
      })
  }
  
@@ -865,7 +929,9 @@ index b50dc80..e135450 100644
 +        ParametricSurface::SurfRev { profile, .. } => {
 +            matches!(profile, Curve::Ellipse { .. } | Curve::Hermite { .. })
 +        }
-+        ParametricSurface::ConeSurf { .. } | ParametricSurface::Cylinder { .. } => false,
++        ParametricSurface::ConeSurf { .. }
++        | ParametricSurface::Cylinder { .. }
++        | ParametricSurface::Hermite { .. } => false,
 +    }
 +}
 +
@@ -916,6 +982,13 @@ index b50dc80..e135450 100644
 +            })))
 +        }
 +        "RuledSurf" | "SurfRev" | "ConeSurf" => {
++            let surface = ParametricSurface::read(g, si)?;
++            let e = surface.bounds();
++            let u = uv[0].clamp(e[0][0], e[1][0]);
++            let v = uv[1].clamp(e[0][1], e[1][1]);
++            Ok(Some(surface.evaluate(u, v)?))
++        }
++        "HermiteSurf" if crate::research::native_parametric_surface::new_rules() => {
 +            let surface = ParametricSurface::read(g, si)?;
 +            let e = surface.bounds();
 +            let u = uv[0].clamp(e[0][0], e[1][0]);
@@ -1009,6 +1082,17 @@ index b50dc80..e135450 100644
 +
  pub fn face(g: &ObjectGraph, fi: usize) -> Result<FaceMesh> {
 -    let grid = face_grid(g, fi)?;
++    // Round-9 retry: a Hermite patch is meshed inside its trim loops, from
++    // the shared edge samples, so its boundary has no grid vertices that the
++    // neighbouring face lacks.
++    if crate::research::native_parametric_surface::new_rules() {
++        let f = &g.objects[fi];
++        if let Some(si) = crate::native_saved_mesh::pointer(g, fi, &f.fields["m_pSurf"])? {
++            if matches!(g.objects[si].class_name.as_str(), "HermiteSurf") {
++                return crate::research::native_parametric_trim::face(g, fi);
++            }
++        }
++    }
 +    let grid = match face_grid(g, fi) {
 +        Ok(grid) => grid,
 +        // A trim that is not a UV rectangle is drawn inside its loops instead.
@@ -1032,7 +1116,7 @@ index b50dc80..e135450 100644
      let flags = f.fields["m_faceFlags_v9"].as_u64().context("face flags")?;
      let mesh = tessellate_uv(
 diff --git a/src/research/native_parametric_surface.rs b/src/research/native_parametric_surface.rs
-index b902e19..776ab72 100644
+index b902e19..3463f87 100644
 --- a/src/research/native_parametric_surface.rs
 +++ b/src/research/native_parametric_surface.rs
 @@ -60,6 +60,24 @@ fn corner(v: &Value) -> Result<[f64; 2]> {
@@ -1201,7 +1285,7 @@ index b902e19..776ab72 100644
          }
      }
      fn derivative(&self, t: f64) -> Point {
-@@ -179,10 +312,107 @@ impl Curve {
+@@ -179,8 +312,167 @@ impl Curve {
              Self::Arc { x, y, radius, .. } => {
                  mul(add(mul(*x, -t.sin()), mul(*y, t.cos())), *radius)
              }
@@ -1270,12 +1354,74 @@ index b902e19..776ab72 100644
 +                }
 +                best
 +            }
-         }
-     }
- }
- 
++        }
++    }
++}
++
 +/// The span `[params[i], params[i + 1]]` holding `t` (clamped to the nodes),
 +/// the span length `h` and the normalized position `s` within it.
++/// The knot interval of `x` as (index, local parameter in [0, 1], length).
++fn hermite_cell(knots: &[f64], x: f64) -> (usize, f64, f64) {
++    let mut j = 0;
++    while j + 2 < knots.len() && x > knots[j + 1] {
++        j += 1;
++    }
++    let h = knots[j + 1] - knots[j];
++    (j, ((x - knots[j]) / h).clamp(0., 1.), h)
++}
++
++/// The cubic Hermite basis on [0, 1] at `s`: the value weights of the left and
++/// right ends, the tangent weights of the left and right ends, and the
++/// derivatives of each.
++fn hermite_weights(s: f64) -> ([f64; 2], [f64; 2], [f64; 2], [f64; 2]) {
++    let (s2, s3) = (s * s, s * s * s);
++    (
++        [2. * s3 - 3. * s2 + 1., -2. * s3 + 3. * s2],
++        [s3 - 2. * s2 + s, s3 - s2],
++        [6. * s2 - 6. * s, -6. * s2 + 6. * s],
++        [3. * s2 - 4. * s + 1., 3. * s2 - 2. * s],
++    )
++}
++
++/// The point and its U and V partial derivatives of a bicubic Hermite patch,
++/// from the cell's four corner nodes.
++fn hermite_patch(
++    u_params: &[f64],
++    v_params: &[f64],
++    nodes: &[[Point; 4]],
++    u: f64,
++    v: f64,
++) -> (Point, Point, Point) {
++    let nu = u_params.len();
++    let (ju, s, hu) = hermite_cell(u_params, u);
++    let (iv, t, hv) = hermite_cell(v_params, v);
++    let (vs, ts, dvs, dts) = hermite_weights(s);
++    let (vt, tt, dvt, dtt) = hermite_weights(t);
++    let (mut p, mut pu, mut pv) = ([0.; 3], [0.; 3], [0.; 3]);
++    for a in 0..2 {
++        for b in 0..2 {
++            let c = nodes[(iv + b) * nu + (ju + a)];
++            // d/ds and d/dt of the corner's terms, before the cell scaling.
++            let ds = add(
++                add(mul(c[0], dvs[a] * vt[b]), mul(c[1], hu * dts[a] * vt[b])),
++                add(mul(c[2], hv * dvs[a] * tt[b]), mul(c[3], hu * hv * dts[a] * tt[b])),
++            );
++            let dt = add(
++                add(mul(c[0], vs[a] * dvt[b]), mul(c[1], hu * ts[a] * dvt[b])),
++                add(mul(c[2], hv * vs[a] * dtt[b]), mul(c[3], hu * hv * ts[a] * dtt[b])),
++            );
++            let value = add(
++                add(mul(c[0], vs[a] * vt[b]), mul(c[1], hu * ts[a] * vt[b])),
++                add(mul(c[2], hv * vs[a] * tt[b]), mul(c[3], hu * hv * ts[a] * tt[b])),
++            );
++            p = add(p, value);
++            pu = add(pu, mul(ds, 1. / hu));
++            pv = add(pv, mul(dt, 1. / hv));
+         }
+     }
++    (p, pu, pv)
++}
++
 +fn hermite_segment(params: &[f64], t: f64) -> (usize, f64, f64) {
 +    let last = params.len() - 2;
 +    let i = params
@@ -1304,12 +1450,10 @@ index b902e19..776ab72 100644
 +
 +pub fn new_rules() -> bool {
 +    NEW_RULES.load(std::sync::atomic::Ordering::Relaxed)
-+}
-+
+ }
+ 
  #[derive(Debug, Clone)]
- pub enum ParametricSurface {
-     SurfRev {
-@@ -200,6 +430,19 @@ pub enum ParametricSurface {
+@@ -200,6 +492,19 @@ pub enum ParametricSurface {
          profile1: Curve,
          profile2: Curve,
      },
@@ -1329,7 +1473,25 @@ index b902e19..776ab72 100644
      /// A cone `apex + v (cos α z + sin α (cos u x + sin u y))`: `v` is the
      /// distance from the apex along the generator, and the radius at `v` is
      /// `v sin α` (RE-311).
-@@ -249,8 +492,8 @@ impl ParametricSurface {
+@@ -212,6 +517,17 @@ pub enum ParametricSurface {
+         envelope: [[f64; 2]; 2],
+         orient: bool,
+     },
++    /// A bicubic Hermite patch (`HermiteSurf`, round-9 retry only). The knots
++    /// are `u_params` and `v_params`; `nodes[iv * u_params.len() + iu]` holds
++    /// the point, the U tangent, the V tangent and the mixed derivative, all
++    /// in parameter units.
++    Hermite {
++        envelope: [[f64; 2]; 2],
++        orient: bool,
++        u_params: Vec<f64>,
++        v_params: Vec<f64>,
++        nodes: Vec<[Point; 4]>,
++    },
+ }
+ 
+ impl ParametricSurface {
+@@ -249,8 +565,8 @@ impl ParametricSurface {
                  orient: s.fields["m_orientFlag"]
                      .as_bool()
                      .context("surface orientation")?,
@@ -1340,12 +1502,79 @@ index b902e19..776ab72 100644
              }),
              "ConeSurf" => {
                  let (x, y, z) = basis(&s.fields)?;
-@@ -285,14 +528,16 @@ impl ParametricSurface {
+@@ -278,6 +594,65 @@ impl ParametricSurface {
+                         .context("surface orientation")?,
+                 })
+             }
++            "HermiteSurf" if new_rules() => {
++                let knots = |field: &str| -> Result<Vec<f64>> {
++                    s.fields[field]
++                        .as_array()
++                        .context("Hermite knots")?
++                        .iter()
++                        .map(|k| k.as_f64().context("Hermite knot"))
++                        .collect()
++                };
++                let u_params = knots("m_uParams")?;
++                let v_params = knots("m_vParams")?;
++                ensure!(
++                    u_params.len() >= 2 && v_params.len() >= 2,
++                    "Hermite patch needs two knots per direction"
++                );
++                let increasing = |k: &[f64]| k.windows(2).all(|w| w[1] > w[0]);
++                ensure!(
++                    increasing(&u_params) && increasing(&v_params),
++                    "Hermite knots are not increasing"
++                );
++                ensure!(
++                    (envelope[0][0] - u_params[0]).abs() < 1e-9
++                        && (envelope[1][0] - u_params[u_params.len() - 1]).abs() < 1e-9
++                        && (envelope[0][1] - v_params[0]).abs() < 1e-9
++                        && (envelope[1][1] - v_params[v_params.len() - 1]).abs() < 1e-9,
++                    "Hermite envelope is not its knot range"
++                );
++                let node_values = s.fields["m_NodeArray"]
++                    .as_array()
++                    .context("Hermite node array")?;
++                ensure!(
++                    node_values.len() == u_params.len() * v_params.len(),
++                    "Hermite node count"
++                );
++                let nodes = node_values
++                    .iter()
++                    .map(|node| {
++                        let tangents = node["m_iTangent"]
++                            .as_array()
++                            .context("Hermite node tangents")?;
++                        ensure!(tangents.len() == 2, "Hermite node tangent count");
++                        Ok([
++                            p(&node["m_iPoint"], "Hermite node point")?,
++                            p(&tangents[0], "Hermite U tangent")?,
++                            p(&tangents[1], "Hermite V tangent")?,
++                            p(&node["m_iMixedDer"], "Hermite mixed derivative")?,
++                        ])
++                    })
++                    .collect::<Result<Vec<_>>>()?;
++                Ok(Self::Hermite {
++                    envelope,
++                    orient: s.fields["m_orientFlag"]
++                        .as_bool()
++                        .context("surface orientation")?,
++                    u_params,
++                    v_params,
++                    nodes,
++                })
++            }
+             name => bail!("unsupported parametric surface {name}"),
+         }
+     }
+@@ -285,14 +660,18 @@ impl ParametricSurface {
          match self {
              Self::SurfRev { envelope, .. }
              | Self::RuledSurf { envelope, .. }
 -            | Self::ConeSurf { envelope, .. } => *envelope,
 +            | Self::ConeSurf { envelope, .. }
++            | Self::Hermite { envelope, .. }
 +            | Self::Cylinder { envelope, .. } => *envelope,
          }
      }
@@ -1355,11 +1584,12 @@ index b902e19..776ab72 100644
              | Self::RuledSurf { orient, .. }
 -            | Self::ConeSurf { orient, .. } => *orient,
 +            | Self::ConeSurf { orient, .. }
++            | Self::Hermite { orient, .. }
 +            | Self::Cylinder { orient, .. } => *orient,
          }
      }
      pub fn evaluate(&self, u: f64, v: f64) -> Result<Point> {
-@@ -336,6 +581,23 @@ impl ParametricSurface {
+@@ -336,6 +715,23 @@ impl ParametricSurface {
                      mul(profile2.eval(t(profile2)), v),
                  )
              }
@@ -1383,7 +1613,20 @@ index b902e19..776ab72 100644
              Self::ConeSurf {
                  apex,
                  x,
-@@ -403,6 +665,19 @@ impl ParametricSurface {
+@@ -349,6 +745,12 @@ impl ParametricSurface {
+                 let radial = add(mul(*x, cu), mul(*y, su));
+                 add(*apex, mul(add(mul(*z, ca), mul(radial, sa)), v))
+             }
++            Self::Hermite {
++                u_params,
++                v_params,
++                nodes,
++                ..
++            } => hermite_patch(u_params, v_params, nodes, u, v).0,
+         })
+     }
+     pub fn normal(&self, u: f64, v: f64) -> Result<Point> {
+@@ -403,6 +805,36 @@ impl ParametricSurface {
              }
              return Ok(mul(n, if *orient { 1. / len(n) } else { -1. / len(n) }));
          }
@@ -1400,10 +1643,27 @@ index b902e19..776ab72 100644
 +            let (s, c) = u.sin_cos();
 +            return Ok(add(mul(*x, sign * c), mul(*y, sign * s)));
 +        }
++        if let Self::Hermite {
++            u_params,
++            v_params,
++            nodes,
++            orient,
++            ..
++        } = self
++        {
++            let (_, pu, pv) = hermite_patch(u_params, v_params, nodes, u, v);
++            let n = cross(pu, pv);
++            let l = len(n);
++            ensure!(
++                n.iter().all(|value| value.is_finite()) && l > 1e-12,
++                "surface normal is singular"
++            );
++            return Ok(mul(n, if *orient { 1. / l } else { -1. / l }));
++        }
          if let Self::ConeSurf {
              x,
              y,
-@@ -436,28 +711,51 @@ impl ParametricSurface {
+@@ -436,28 +868,51 @@ impl ParametricSurface {
          };
          let r1 = c_range(profile1);
          let r2 = c_range(profile2);
@@ -1471,10 +1731,10 @@ index b902e19..776ab72 100644
  }
 diff --git a/src/research/native_parametric_trim.rs b/src/research/native_parametric_trim.rs
 new file mode 100644
-index 0000000..0f92639
+index 0000000..41db1f4
 --- /dev/null
 +++ b/src/research/native_parametric_trim.rs
-@@ -0,0 +1,1490 @@
+@@ -0,0 +1,1491 @@
 +//! Parametric faces whose saved trim is not a UV rectangle. Each trim loop is
 +//! read as a UV polygon. A single-loop trim is triangulated in UV by its
 +//! boundary samples, which are the samples neighbouring faces share, and the
@@ -2965,8 +3225,9 @@ index 0000000..0f92639
 +        trim_uv: outer,
 +    })
 +}
++
 diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
-index 199cbbe..d1c9995 100644
+index 199cbbe..ecf0bbc 100644
 --- a/src/research/native_saved_mesh.rs
 +++ b/src/research/native_saved_mesh.rs
 @@ -3,7 +3,9 @@ use crate::native_parameters::ObjectGraph;
@@ -3244,7 +3505,18 @@ index 199cbbe..d1c9995 100644
  fn face_indexed(g: &ObjectGraph, index: &PointerIndex<'_>, fi: usize) -> Result<Option<FaceMesh>> {
      let f = g.objects.get(fi).context("face index")?;
      ensure!(f.class_name == "Face", "not Face");
-@@ -968,12 +1114,72 @@ pub fn cylinder_face(
+@@ -733,7 +879,9 @@ fn face_indexed(g: &ObjectGraph, index: &PointerIndex<'_>, fi: usize) -> Result<
+             CylinderTessellationProfile::default(),
+         )?));
+     }
+-    if matches!(p.class_name.as_str(), "SurfRev" | "RuledSurf" | "ConeSurf") {
++    if matches!(p.class_name.as_str(), "SurfRev" | "RuledSurf" | "ConeSurf")
++        || (crate::research::native_parametric_surface::new_rules() && p.class_name == "HermiteSurf")
++    {
+         return Ok(Some(crate::native_parametric_mesh::face(g, fi)?));
+     }
+     ensure!(
+@@ -968,12 +1116,72 @@ pub fn cylinder_face(
      let loop_index = index
          .resolve(fi, &face.fields["m_pFirstLoop"])?
          .context("cylinder trim loop")?;
@@ -3323,7 +3595,7 @@ index 199cbbe..d1c9995 100644
      let trim_uv = ring(g, &index, fi, loop_index)?;
      ensure!(!trim_uv.is_empty(), "empty cylinder trim");
      let mut trim_min = [f64::INFINITY; 2];
-@@ -1318,6 +1524,16 @@ pub struct GraphicsMeshes {
+@@ -1318,6 +1526,16 @@ pub struct GraphicsMeshes {
      pub excluded_non_surface_branches: usize,
      #[serde(default)]
      pub profile_observations: Vec<String>,
@@ -3340,7 +3612,7 @@ index 199cbbe..d1c9995 100644
  }
  /// Decode selected saved graphics. Positions and normals are in the owning
  /// document frame; length units remain Revit internal feet.
-@@ -1417,13 +1633,34 @@ fn graphics_impl<'a>(
+@@ -1417,13 +1635,34 @@ fn graphics_impl<'a>(
          let mut decoded = Vec::new();
          let result = (|| -> Result<()> {
              if obj.class_name == "Geometry" {
@@ -3376,8 +3648,14 @@ index 199cbbe..d1c9995 100644
                              let normals = if m.normals.len() == m.vertices.len() {
                                  m.normals.clone()
                              } else {
-@@ -1555,8 +1792,179 @@ fn graphics_impl<'a>(
-             Err(e) => out.diagnostics.push(format!("object {oi}: {e:#}")),
+@@ -1552,11 +1791,184 @@ fn graphics_impl<'a>(
+         })();
+         match result {
+             Ok(()) => out.primitives.extend(decoded),
+-            Err(e) => out.diagnostics.push(format!("object {oi}: {e:#}")),
++            Err(e) => {
++                out.diagnostics.push(format!("object {oi}: {e:#}"))
++            }
          }
      }
 +    // A curved-profile face is drawn only where the element's shell is closed

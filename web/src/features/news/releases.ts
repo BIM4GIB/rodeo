@@ -22,6 +22,14 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-07T09:50:00Z",
+    "revit-duct-transitions",
+    "Revit duct transitions come in",
+    `More Revit duct fittings come in as Revit drew them, instead of see-through boxes.
+- Square-to-round duct transitions are drawn with their real shape.`,
+    "walls",
+  ),
+  release(
     "2026-11-07T09:42:00Z",
     "clearer-views",
     "Clearer 2D, 3D and split views",

@@ -23,10 +23,10 @@ model's levels, elements, geometry and parameters with it, in the import's worke
   the boundary (never splitting it) does. An element still boxed because a trim loop's
   corners miss by up to 1e-3 ft is decoded once more with that join, and with a ruled surface's
   point end read as its apex, islands meshed beside the outline, and constraints recovered by
-  cavity retriangulation; on that pass a boundary chord too coarse for the tolerance is split at one point on the shared edge in both faces, and a curved edge may sit up to 1e-4 ft off the plane beside it. The retry is kept only where the element then passes every check. An element with
+  cavity retriangulation; on that pass a boundary chord too coarse for the tolerance is split at one point on the shared edge in both faces, and a curved edge may sit up to 1e-4 ft off the plane beside it; it also reads Hermite surfaces (bicubic patches), meshed inside their trim loops, and joins model-space trim loops within 1e-3 ft. The retry is kept only where the element then passes every check. An element with
   up to four faces (at most a tenth) that did not decode is drawn from the rest where they fill its
   box on every axis with no triangle spanning it; railings excepted.
 - Built with rustc 1.97.1 and wasm-bindgen 0.2.118 (`--target web --out-name rvt`).
-- `rvt_bg.wasm` sha256 `0744f93c8a2dbefff9442c8d2c5cbe0494eea1f7237a8c8480c4462a4d001b46`.
+- `rvt_bg.wasm` sha256 `7f6806101d3d7f734c868eae9b9d8804829cf74728286770238769c6853e7da0`.
 
 Rebuild with `scripts/rvt-wasm.sh [tag]`. These files are generated: don't edit them.
