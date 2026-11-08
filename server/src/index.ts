@@ -41,6 +41,7 @@ import { archiveAssets, registerStatic } from "./static.ts";
 import { registerUploads } from "./uploads.ts";
 import { registerVisits } from "./visits.ts";
 import { registerVoice } from "./voice.ts";
+import { registerImage } from "./image.ts";
 
 openDatabase();
 // Temp files are left behind only by a crash mid-upload.
@@ -70,6 +71,7 @@ registerSettings(app);
 registerFeedback(app);
 registerAi(app);
 registerVoice(app);
+registerImage(app);
 registerCredit(app);
 registerRender(app);
 registerReports(app);

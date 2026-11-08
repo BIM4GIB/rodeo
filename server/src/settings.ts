@@ -10,6 +10,7 @@ import { config, type Provider } from "./config.ts";
 import { creditTerms } from "./credit.ts";
 import { renderTerms } from "./render.ts";
 import { voiceTerms } from "./voice.ts";
+import { imageTerms } from "./image.ts";
 import { get, run } from "./db.ts";
 import { readJson, readJsonAny } from "./http.ts";
 import { cleanBody, cleanLine, fail, newId, nowIso } from "./util.ts";
@@ -191,6 +192,7 @@ export function registerSettings(app: Hono): void {
       credit: creditTerms(),
       render: renderTerms(),
       voice: voiceTerms(),
+      image: imageTerms(),
       maxUploadBytes: config.maxUploadBytes,
     };
     return c.json(body);
