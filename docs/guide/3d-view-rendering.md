@@ -106,9 +106,9 @@ While the plan is rotated:
 - **Sketch**: hidden line drawn as two pencil strokes per edge on paper
 - **Shaded**
 - **Textured**
-- **Realistic** or **Path Traced** (see Rendering, below)
+- **Realistic**, **Path Traced** or **AI Render** (see Rendering, below)
 
-A selected object is drawn highlighted over the model in every mode, in the selection colour that **Preferences › Appearance** sets: its edges, faint where other faces hide them, and its visible faces tinted, except in Wireframe. In Realistic and Path Traced only its edges show, all of them.
+A selected object is drawn highlighted over the model in every mode, in the selection colour that **Preferences › Appearance** sets: its edges, faint where other faces hide them, and its visible faces tinted, except in Wireframe. In Realistic, Path Traced and AI Render only its edges show, all of them.
 
 ### Shaded Options
 
@@ -235,9 +235,26 @@ Where the browser has WebGPU (recent Chrome, Edge and Safari), the path tracer r
 
 **Limits:** the WebGL path tracer leaves out clear coats (the glossy top layer of tile, wood and glossy paint), which Realistic and the WebGPU path tracer show.
 
+### AI Render
+
+**AI Render** (**View › Rendering**, or **AI** in the Render palette) has an image model on Rodeo's server paint the 3D view as a finished render. While the view moves you see the Realistic picture; once it rests for a moment, that picture is sent to be painted and the painting fades in over it, usually within several seconds. Move again and the Realistic picture is back at once; come back to a view already painted and its painting shows again without painting it anew.
+
+The Render palette's **AI** section sets:
+
+- **Style**: photoreal daylight, golden hour, overcast, dusk with the lights on, night, after the rain, winter snow, a warm interior, a competition render, watercolour, a hand sketch or a white card model, or **My own words only**
+- **Describe it**: your own words, added to the style's ("oak cladding, a birch grove behind")
+- **Strength**: **Subtle** makes the model's own materials and light real; **Balanced** also adds a ground, sky and planting where the model shows none; **Creative** reads the style freely. The building, its openings and the camera always stay.
+- **Paint each time the view rests**: off, the view is painted only with **Paint now**
+
+**Paint now** paints the view as it is. **Open picture** opens the latest painting in the render viewer, to compare it with the Realistic picture it came from, save it or restyle it.
+
+Each picture is paid for from your AI credit where Rodeo sells it; the AI section says what a picture costs, and the line under the modes counts the pictures and what they took this session. You need to be signed in.
+
+**Limits:** the image model paints at about 1K, at the nearest of its shapes (16:9, 4:3, 1:1 and so on): the rest of the view stays Realistic. It may change small details, such as window bars or a railing's spacing, and can't be told to keep one exactly. Painting each rest stops after 30 pictures in a session until you press Paint now. View panes show the Realistic picture.
+
 ### Render palette
 
-The Render palette (**View › Render Settings**, after Renderworks Style) sets:
+The Render palette (**View › Render Settings**, after Renderworks Style) has the 3D view's Realistic, Path Traced and AI modes at its top, with a line on what the one shown does, and sets:
 
 - the sky (physical for the sun, a gradient, a solid colour or a studio), its haze and intensity
 - a ground plane under a model that stands on level ground (a sloping site model is its own ground)
@@ -250,6 +267,7 @@ The Render palette (**View › Render Settings**, after Renderworks Style) sets:
 - the effects: ambient occlusion, bloom, vignette, contrast, saturation
 - each material's library material (see Material library, below), with its scale and bump
 - the quality: preview samples, bounces, denoise, the path tracer (WebGPU or WebGL) and what shows while the view moves
+- in AI Render, the style, your words and the strength (see AI Render, above)
 
 Its Cameras list looks through the drawing's cameras. The settings belong to the drawing on this machine, not the file.
 
@@ -296,15 +314,39 @@ Each sets the render mode (Realistic, or Path Traced for Final) and the Render p
 
 - at HD, QHD, 4K UHD, 4K DCI, square, A4 at 300 dpi, the camera's shape or any size up to 8192 px a side
 - with the Realistic engine (a 4K picture in a second) or path traced (64 to 4096 samples, with a time limit and denoise)
+- or with an engine that starts from one of those: **AI** (below), or a plug-in's
 - as PNG or JPEG
 
 It shows its progress, with **Finish now** and **Cancel**, then shows the pictures to save or copy.
+
+### AI pictures
+
+Choose **AI — painted by an image model** as the Engine to have Rodeo's image model paint the picture as a finished render. **Start from** chooses the picture it paints: Realistic (quick) or path traced (truer light to start from). Then choose the **Style**, **Describe it** in your own words, the **Strength** (as in AI Render, above) and up to 4 **Variations** of each picture. The line under them says what the pictures will cost from your AI credit.
+
+The picture it starts from is drawn at no more than 1536 px a side, and the image model paints at about 1K, whatever the size chosen.
+
+### The render viewer
+
+The finished pictures open over the editor: click one to see it at 100 %, use the strip or the arrow keys for the others, **Copy** or **Save** it.
+
+- **Compare** shows a picture an engine made beside the one it started from: the picture it started from on the left of a line that follows the pointer.
+- **Restyle with AI…** paints the picture shown again in another style, strength or words (an AI picture is painted again from the picture it came from). The new pictures join the strip.
+
+### Render engines from plug-ins
+
+A plug-in can add an engine to Render Image with `openvwx.render.engine` (**Help › Plug-in API…**): a bridge to another renderer, a render farm or a service. Its engine is listed after Rodeo's while the plug-in is turned on, with the fields it asks for. It gets either the built-in engine's picture or the visible model as glTF with the camera and the sun, and gives back its pictures.
+
+Rodeo's repository has one for Blender in `integrations/blender`: a bridge that Blender runs on your computer, and the plug-in that sends it the model and camera and brings back Cycles' or EEVEE's picture.
+
+**Limits:** a plug-in engine that takes the model gets its meshes, colours and opacity, not its textures, the Render palette's materials or its light objects. Enscape and D5 Render can't be bridged this way unless they let another program start a render.
 
 ### Batch rendering
 
 **View › Rendering › Create Batch Render Job…** keeps Render Image's choices under a name, with the 3D view's view as it is then. **Start Batch Render…** renders the jobs chosen, in the order chosen, and downloads their pictures as one zip of a folder named for the date and time. <kbd>Esc</kbd> drops the job in hand and goes on.
 
 **Duplicate**, **Edit** and **Delete** manage the jobs, which are kept for the file on this machine, not in it.
+
+**Limits:** batch jobs and Export HDRI use the Realistic and path-traced engines, not AI or a plug-in's.
 
 ### Export HDRI
 

@@ -1,5 +1,6 @@
 // The Render palette (loaded with the editor): how the realistic views are drawn. At the top, the
-// Realistic and Path Traced modes and Render Image; below, the sky, sun, light objects, camera, fog,
+// Realistic, Path Traced and AI modes (AI where the server paints AI renders), a line on what the
+// one shown does, and Render Image; in AI, its style, words, strength and Paint now; below, the sky, sun, light objects, camera, fog,
 // each material's finish, the lighting effects, the lens, the colour (with its looks), the clay and
 // outline styles, and the quality. The settings belong to the drawing on this machine
 // (settings.ts). No three.js here: the renderers load when first used.
@@ -13,7 +14,10 @@ import { reportFailure } from "../../app/reports.ts";
 import { setViz, store } from "../../app/state.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
 import type { RealisticMode } from "../../app/view3d.ts";
-import { materialList, onMaterials, onStatus, renderStatus, type MaterialItem } from "./bridge.ts";
+import { onUser } from "../../platform/api.ts";
+import { config, onConfig } from "../account/config.ts";
+import { AI_STRENGTHS, AI_STYLES, aiCostLine, aiTerms, readyToPaint } from "./ai.ts";
+import { aiLive, materialList, onMaterials, onStatus, renderStatus, type MaterialItem } from "./bridge.ts";
 import { webgpuAvailable, webgpuKnown } from "./gpuSupport.ts";
 import { LIBRARY, libraryEntry, libraryUrl } from "./library.ts";
 import { pickLibraryMaterial } from "./libraryPicker.ts";
@@ -38,7 +42,15 @@ import {
 const MODES: readonly (readonly [RealisticMode, string])[] = [
   ["realistic", "Realistic"],
   ["pathtraced", "Path Traced"],
+  ["ai", "AI"],
 ];
+/** what each mode does, under the modes */
+const MODE_NOTES: Readonly<Record<RealisticMode, string>> = {
+  realistic: "Lit like a photograph and drawn as you move: quick on any computer.",
+  pathtraced: "Light traced as it really falls, refined while the view rests.",
+  ai: "An image model paints the Realistic view each time it rests. Each picture is paid for from your AI credit.",
+};
+const AI_STYLE_OPTIONS: readonly (readonly [string, string])[] = AI_STYLES.map((s): [string, string] => [s.id, s.label]);
 const SKY_OPTIONS: readonly (readonly [SkyKind, string])[] = [
   ["physical", "Physical sky"],
   ["gradient", "Gradient"],
@@ -420,6 +432,7 @@ export function renderPalette(): HTMLElement {
     });
     return { mode, btn };
   });
+  const modeNote = h("p", { cls: "muted render-mode-note" });
   const status = h("p", { cls: "muted render-status" });
   const showStatus = (text: string): void => {
     status.textContent = text;
@@ -438,8 +451,59 @@ export function renderPalette(): HTMLElement {
     "section",
     { cls: "info-section" },
     h("div", { cls: "seg render-seg", attrs: { role: "group", "aria-label": "Rendering" } }, ...modes.map((m) => m.btn)),
+    modeNote,
     status,
     still,
+  );
+
+  // AI: what the image model paints the view as, and when
+  const aiStyle = dropdown("Style", AI_STYLE_OPTIONS, (id) => patchRender("ai", { style: id }));
+  const aiWords = h("textarea", {
+    cls: "text-content render-words-box",
+    attrs: { rows: "3", "aria-label": "Describe it", placeholder: "Oak cladding, a birch grove behind, people on the terrace…", maxlength: "600" },
+  });
+  // taken when it is left or Enter is pressed, not at each key: each change paints the view again
+  aiWords.addEventListener("change", () => patchRender("ai", { words: aiWords.value }));
+  aiWords.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      aiWords.blur();
+    }
+  });
+  const aiStrength = dropdown("Strength", AI_STRENGTHS, (v) => patchRender("ai", { strength: v }));
+  aiStrength.title = "How far the AI may go from the picture: the building, its openings and the camera always stay";
+  const aiAuto = check("Paint each time the view rests", (on) => patchRender("ai", { auto: on }));
+  const paintNow = h("button", { cls: "btn small primary", text: "Paint now", title: "Paint the view as it is now", attrs: { type: "button" } });
+  paintNow.addEventListener("click", () => {
+    void (async () => {
+      if (appContext()?.renderMode() !== "ai") await showMode("ai");
+      if (await readyToPaint(1)) aiLive()?.paintNow();
+    })();
+  });
+  const openPicture = h("button", { cls: "btn small", text: "Open picture", title: "The latest painting in the render viewer, to compare, save or restyle", attrs: { type: "button" } });
+  openPicture.addEventListener("click", () => {
+    const p = aiLive()?.picture();
+    if (!p) {
+      toast("Nothing is painted yet: Paint now first.", "info");
+      return;
+    }
+    void import("./viewer.ts")
+      .then((m) => m.showRenderResult([{ blob: p.blob, before: p.before, width: p.width, height: p.height, name: "Current view", engine: "AI", note: p.note, samples: null, seconds: 0 }]))
+      .catch((err: unknown) => {
+        toast(`Render: ${errorMessage(err)}`);
+        reportFailure("render", err, { step: "loading the render viewer" });
+      });
+  });
+  const aiCost = h("p", { cls: "muted render-note" });
+  const aiSection = section(
+    "AI",
+    field("Style", aiStyle),
+    h("div", { cls: "render-words" }, h("span", { cls: "field-label", text: "Describe it" }), aiWords),
+    field("Strength", aiStrength),
+    aiAuto.row,
+    h("div", { cls: "row-end render-ai-actions" }, openPicture, paintNow),
+    aiCost,
   );
 
   // environment
@@ -671,11 +735,24 @@ export function renderPalette(): HTMLElement {
   const sync = (): void => {
     const s = renderSettings();
     const mode = appContext()?.renderMode();
+    const offersAi = config()?.image != null;
     for (const { mode: m, btn } of modes) {
       const on = store.view3d && mode === m;
       btn.classList.toggle("active", on);
       btn.setAttribute("aria-pressed", String(on));
+      if (m === "ai") btn.hidden = !offersAi;
     }
+    const shown = store.view3d && (mode === "realistic" || mode === "pathtraced" || mode === "ai") ? mode : null;
+    modeNote.textContent = shown ? MODE_NOTES[shown] : "";
+    modeNote.hidden = shown === null;
+    const a = s.ai;
+    aiSection.hidden = !(offersAi && shown === "ai");
+    aiStyle.value = a.style;
+    if (document.activeElement !== aiWords) aiWords.value = a.words;
+    aiStrength.value = a.strength;
+    aiAuto.box.checked = a.auto;
+    const terms = aiTerms();
+    aiCost.textContent = terms ? `${aiCostLine(1)} Painted by ${terms.by}: it keeps the building and the camera, and may change small details.` : "";
 
     const e = s.environment;
     sky.value = e.sky;
@@ -778,6 +855,9 @@ export function renderPalette(): HTMLElement {
   onMaterials(refreshMaterials);
   onRender(() => sync());
   store.on(["viz3d", "view3d", "session"], sync);
+  // the AI mode shows once the server says it paints AI renders; the cost line follows the credit
+  onConfig(() => sync());
+  onUser(() => sync());
   store.on("session", listCameras);
   listCameras();
   refreshMaterials();
@@ -785,5 +865,5 @@ export function renderPalette(): HTMLElement {
   // asks once whether this browser has WebGPU, so the note under the path tracer shows when it has not
   void webgpuAvailable().then(() => sync());
 
-  return h("div", { cls: "info render-palette" }, head, environment, sun, lights, camera, fog, materials, lighting, lens, colourSection, style, quality);
+  return h("div", { cls: "info render-palette" }, head, aiSection, environment, sun, lights, camera, fog, materials, lighting, lens, colourSection, style, quality);
 }

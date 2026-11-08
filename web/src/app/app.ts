@@ -320,7 +320,7 @@ function imperialRegion(): boolean {
 }
 
 /** Vectorworks' render mode numbers (a design layer's saved view) for the 3D view's modes, and back */
-const CODE_OF_MODE: Record<RenderMode, number> = { wireframe: 0, hidden: 6, dashed: 7, sketch: 6, shaded: 11, textured: 11, realistic: 11, pathtraced: 11 };
+const CODE_OF_MODE: Record<RenderMode, number> = { wireframe: 0, hidden: 6, dashed: 7, sketch: 6, shaded: 11, textured: 11, realistic: 11, pathtraced: 11, ai: 11 };
 const MODE_OF_CODE = new Map<number, RenderMode>([
   [0, "wireframe"],
   [6, "hidden"],
@@ -2906,7 +2906,7 @@ export class App {
 }
 
 /** the render modes the 3D view draws in, to check a kept one against */
-const RENDER_MODES: readonly RenderMode[] = ["shaded", "textured", "wireframe", "hidden", "dashed", "sketch", "realistic", "pathtraced"];
+const RENDER_MODES: readonly RenderMode[] = ["shaded", "textured", "wireframe", "hidden", "dashed", "sketch", "realistic", "pathtraced", "ai"];
 
 /** the 3D conversion resolution last given to the core */
 let turnStepsSet = 0;

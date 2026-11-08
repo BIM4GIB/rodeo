@@ -174,6 +174,11 @@ export interface RenderSettings {
     /** what the Path Traced view shows while it moves: a path-traced picture kept steady over frames (trace), or the Realistic one (raster) */
     readonly motion: "trace" | "raster";
   };
+  /**
+   * the 3D view's AI mode (aiLive.ts): the style it paints in (ai.ts AI_STYLES), the person's own
+   * words, how far it may go from the picture, and whether it paints each time the view rests
+   */
+  readonly ai: { readonly style: string; readonly words: string; readonly strength: "subtle" | "balanced" | "creative"; readonly auto: boolean };
   /** each material's finish, by materialKey */
   readonly materials: Readonly<Record<string, MaterialOverride>>;
 }
@@ -218,6 +223,7 @@ export const DEFAULT_RENDER: RenderSettings = {
   },
   clay: { on: false, color: "#ecebe7" },
   quality: { previewSamples: 256, bounces: 5, denoise: true, engine: "auto", motion: "trace" },
+  ai: { style: "daylight", words: "", strength: "balanced", auto: true },
   materials: {},
 };
 

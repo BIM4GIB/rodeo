@@ -7,13 +7,16 @@
 // three-gpu-pathtracer and the engines load with the first realistic frame or render.
 
 import { appContext, on3d, registerMenu, registerPalette } from "../../app/ext.ts";
+import { setRenderModeReason } from "../../app/viewbar.ts";
 import { store } from "../../app/state.ts";
 import { threeDOnScreen } from "../../app/viewTargets.ts";
 import { reportFailure } from "../../app/reports.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
 import type { RenderHook } from "../../app/view3d.ts";
 import { need, whyIn } from "../../app/menuReasons.ts";
-import { config } from "../account/config.ts";
+import { config, onConfig } from "../account/config.ts";
+import { AI_ENGINE } from "./ai.ts";
+import { registerRenderEngine } from "./engines.ts";
 import { renderPalette } from "./palette.ts";
 // its Object Info and right-click menu, for animation paths a drawing holds
 import "./animationPathObject.ts";
@@ -60,6 +63,19 @@ function createAnimation(kind: "orbit" | "spin" | "walkthrough" | "views"): void
     .then((m) => m.createAnimation(kind))
     .catch(report);
 }
+
+// Render Image's AI engine, while the server paints AI renders (ai.ts)
+let dropAi: (() => void) | null = null;
+function syncAi(): void {
+  const on = config()?.image != null;
+  if (on && !dropAi) dropAi = registerRenderEngine(AI_ENGINE);
+  else if (!on && dropAi) {
+    dropAi();
+    dropAi = null;
+  }
+}
+onConfig(syncAi);
+setRenderModeReason("ai", () => (config()?.image ? null : config() ? "This server doesn't offer AI renders" : "AI Render needs Rodeo's server"));
 
 registerPalette({ id: PALETTE_ID, title: "Render", side: "right", icon: ICON, fill: true, weight: 360, hidden: true, body: renderPalette() });
 

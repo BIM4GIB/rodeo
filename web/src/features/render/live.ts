@@ -1,4 +1,4 @@
-// The 3D view's Realistic and Path Traced modes (View3D.setRenderHook). It builds the render scene
+// The 3D view's Realistic, Path Traced and AI modes (View3D.setRenderHook). It builds the render scene
 // from what the view shows, once the textures are decoded, and builds it again when the model, what
 // is visible, the light objects or a library material change. Realistic rasterises each frame.
 // Path Traced traces with WebGPU where the browser has it (gpuEngine.ts), else with WebGL
@@ -6,14 +6,16 @@
 // motion.ts; once it rests, a picture refined a sample a frame up to the Render palette's preview
 // samples, which takes over from the moving view's last picture once it has a few samples. The view
 // panes without the live view get a still Realistic picture each (picture), or a path-traced one
-// refined on a renderer of their own (tracePane, paneTrace.ts). Loaded with the first realistic
-// frame or picture, with three.js.
+// refined on a renderer of their own (tracePane, paneTrace.ts). AI draws the Realistic picture and
+// has aiLive.ts paint it once the view rests. Loaded with the first realistic frame or picture, with
+// three.js.
 
 import * as THREE from "three";
 import type { PhysicalCamera } from "three-gpu-pathtracer";
 import { store } from "../../app/state.ts";
 import type { RealisticMode, RenderHook, View3D } from "../../app/view3d.ts";
 import type { Light3D } from "../../core/index.ts";
+import { AiLive } from "./aiLive.ts";
 import { publishMaterials, publishStatus, type MaterialItem } from "./bridge.ts";
 import { renderCamera, shotOfView, type ViewOffset } from "./camera.ts";
 import { webgpuAvailable, webgpuKnown } from "./gpuSupport.ts";
@@ -81,6 +83,8 @@ export class LiveRenderer implements RenderHook {
   private gpuLoading = false;
   /** WebGPU failed this session (no adapter, a lost device, a scene it couldn't take): WebGL traces from then on */
   private gpuFailed = false;
+  /** the AI mode's paintings, once it has drawn */
+  private ai: AiLive | null = null;
 
   constructor(view: View3D) {
     this.view = view;
@@ -101,6 +105,13 @@ export class LiveRenderer implements RenderHook {
     const settings = renderSettings();
     const camera = this.cameraFor(renderer, viewCamera);
     const moving = performance.now() - this.movedAt < SETTLE_MS;
+    if (mode !== "ai") this.ai?.idle();
+
+    if (mode === "ai") {
+      this.rasterise(renderer, scene, camera, settings);
+      this.ai ??= new AiLive(() => this.view.redraw());
+      return this.ai.draw(renderer, this.viewKey(renderer), performance.now() - this.movedAt, settings);
+    }
 
     if (mode === "realistic") {
       this.rasterise(renderer, scene, camera, settings);
@@ -382,6 +393,13 @@ export class LiveRenderer implements RenderHook {
     this.camera = renderCamera(shotOfView(viewCamera, this.view.orbitTarget), size.x / Math.max(1, size.y), renderSettings().camera, this.camera, offset);
     this.engine?.setCamera(this.camera);
     return this.camera;
+  }
+
+  /** What the view shows now, for the AI mode's paintings: the camera, the canvas, the scene and the settings. */
+  private viewKey(renderer: THREE.WebGLRenderer): string {
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const round = (m: THREE.Matrix4): string => m.elements.map((v) => v.toFixed(4)).join(",");
+    return `${round(this.lastWorld)}|${round(this.lastProjection)}|${size.x}x${size.y}|${this.builtFrom}|${this.settingsVersion}`;
   }
 
   /** A render setting or the Heliodon changed: the next frame takes it up. */

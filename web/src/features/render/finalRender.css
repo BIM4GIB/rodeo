@@ -17,6 +17,26 @@
   color: var(--text-2);
 }
 
+/* an engine's own fields: its words box takes the dialog's width under its label */
+.menu-dialog.render-dialog .render-text-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.menu-dialog.render-dialog .render-words {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.4em;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.35;
+}
+
+.render-engine-note {
+  line-height: 1.4;
+}
+
 /* the progress window: a picture so far, a line, a bar, then Finish now and Cancel */
 .menu-dialog.render-progress {
   width: min(360px, 100%);
@@ -85,6 +105,7 @@
 
 /* fitted by default; .is-actual shows the picture at its own size, scrolled from its middle */
 .render-viewer-stage {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
@@ -109,6 +130,51 @@
   max-width: none;
   max-height: none;
   cursor: zoom-out;
+}
+
+/* Compare: the picture an engine started from, over the one it made, cut off at the wipe */
+.render-viewer-before,
+.render-viewer-divider {
+  position: absolute;
+  pointer-events: none;
+}
+
+.render-viewer-before {
+  border-radius: 4px;
+  object-fit: fill;
+}
+
+.render-viewer-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--wipe, 50%);
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.render-viewer-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.render-viewer-tag.is-after {
+  right: 8px;
+  left: auto;
+}
+
+.render-viewer-stage.is-compare .render-viewer-picture {
+  cursor: ew-resize;
 }
 
 .render-viewer-strip {

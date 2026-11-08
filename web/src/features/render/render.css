@@ -47,6 +47,35 @@
   margin: 8px 0 0;
 }
 
+/* what the mode shown does, under the modes */
+.render-mode-note {
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+/* AI: the words box under its label, the full width of the section */
+.render-words {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.render-words-box {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 52px;
+  padding: 5px 7px;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.render-ai-actions {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 .render-go {
   width: 100%;
   margin-top: 8px;

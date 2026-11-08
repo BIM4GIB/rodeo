@@ -220,6 +220,8 @@ export interface ServerConfig {
   readonly render?: RenderTerms | null;
   /** voice commands' speech to text on the server (null or missing: none) */
   readonly voice?: VoiceTerms | null;
+  /** AI renders: an image model paints pictures of the model (null or missing: none) */
+  readonly image?: ImageTerms | null;
   /** the largest drawing or render job the server takes, in bytes */
   readonly maxUploadBytes?: number;
 }
@@ -254,6 +256,38 @@ export interface VoiceCharge {
 /** Its answer: the words heard ("" for none). */
 export interface VoiceTranscript extends VoiceCharge {
   readonly text: string;
+}
+
+/** AI renders: an image model paints a picture of the model, rendered in the editor, as a finished render. */
+export interface ImageTerms {
+  /** who paints the pictures, for the privacy text ("Google, through OpenRouter") */
+  readonly by: string;
+  /** about what a picture takes from the credit, in its currency, and for Rodeo Plus (null: free) */
+  readonly perPicture: number | null;
+  readonly plusPerPicture: number | null;
+  /** pictures one account may ask for in an hour */
+  readonly perHour: number;
+}
+/** How far the model may go from the picture: its materials and light only, the surroundings too, or a free reading of it. */
+export type AiStrength = "subtle" | "balanced" | "creative";
+/** The aspect ratios the image models paint at ("16:9"); a picture is painted at the nearest. */
+export const AI_ASPECTS = ["21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"] as const;
+export type AiAspect = (typeof AI_ASPECTS)[number];
+/** POST /api/ai/image: the picture (base64 PNG or JPEG), what it is to become, how far it may go, and its aspect. */
+export interface AiImageRequest {
+  readonly image: string;
+  readonly mime: "image/png" | "image/jpeg";
+  /** the style and the person's own words, at most 1000 characters */
+  readonly prompt: string;
+  readonly strength: AiStrength;
+  readonly aspect: AiAspect;
+  /** for the 3D view's AI mode: the quicker model paints it */
+  readonly live: boolean;
+}
+/** Its answer: the painted picture, base64, and its type. */
+export interface AiImage extends VoiceCharge {
+  readonly image: string;
+  readonly mime: string;
 }
 
 /** POST /api/render/jobs: what the job is, in its X-Render-Job header (JSON); the body is the gzipped pack. */

@@ -161,6 +161,12 @@ const ART = {
     tint(rect(26, 7, 18, 7, 1.5)) +
     ink(rect(46, 7, 18, 7, 1.5) + rect(24, 14, 72, 28, 2) + "M60 14v28M60 28h36M66 33h24M66 37h16" + box(iso(78, 21), 4, 4, 4)) +
     acc("M31 20h22v16H31zM42 20v8"),
+  // a white model sent off and painted as a picture, with sparkles
+  paint:
+    ink(box(iso(34, 22), 9, 9, 9) + "M52 26h7M57 24l2 2-2 2" + rect(64, 10, 34, 28, 1.5)) +
+    tint("M64 38l10-11 7 6 5-4 12 9z") +
+    acc("M64 38l10-11 7 6 5-4 12 9" + ellipse(90, 18, 3)) +
+    afill(sparkle(100, 8, 4.5)),
   // a tree in plan and a north arrow
   site: ink(ellipse(40, 24, 12) + "M40 14v20M30 24h20M33 17l14 14M47 17L33 31") + acc(ellipse(80, 24, 9)) + afill("M80 13.5l4.5 15-4.5-3-4.5 3z"),
   // a door swinging in a wall, and a window

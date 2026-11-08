@@ -22,10 +22,11 @@ import { ACCENT } from "./renderer.ts";
 
 /**
  * Hidden Line: white faces hide the edges behind them; Dashed Hidden Line also dashes those edges.
- * Realistic and Path Traced are drawn by the render feature (setRenderHook); Shaded without one.
+ * Realistic, Path Traced and AI are drawn by the render feature (setRenderHook); Shaded without one.
  */
 export type RenderMode = "shaded" | "textured" | "wireframe" | "hidden" | "dashed" | "sketch" | RealisticMode;
-export type RealisticMode = "realistic" | "pathtraced";
+/** AI: the Realistic picture painted by the server's image model once the view rests (features/render/aiLive.ts) */
+export type RealisticMode = "realistic" | "pathtraced" | "ai";
 /** the standard views; "iso" is Right Isometric */
 export type ViewPreset =
   | "top"
@@ -44,7 +45,7 @@ export type ViewPreset =
   | "lowerLeftRearIso";
 
 export function isRealistic(mode: RenderMode): mode is RealisticMode {
-  return mode === "realistic" || mode === "pathtraced";
+  return mode === "realistic" || mode === "pathtraced" || mode === "ai";
 }
 
 /** What draws the Realistic and Path Traced modes (features/render), with the view's renderer and camera. */
@@ -1884,6 +1885,11 @@ export class View3D {
 
   private isLayerVisible(layer: string): boolean {
     return this.visibleLayers === null || this.visibleLayers.has(layer);
+  }
+
+  /** The layers the view shows (setVisibleLayers), or null for all of them. */
+  get shownLayers(): ReadonlySet<string> | null {
+    return this.visibleLayers;
   }
 
   /** Points the camera at the visible geometry from `dir`, sized to fit whatever the window's shape. */

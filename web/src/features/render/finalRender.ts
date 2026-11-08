@@ -2,7 +2,10 @@
 // (the 3D view's current view, or a Renderworks camera's; each camera for All cameras) in a canvas of
 // its own. Fast uses the Realistic engine; Photoreal the path tracer, a few samples per slice so the
 // progress window stays live. Cancel discards the job; Finish now keeps the picture in hand and stops.
-// The pictures open in the render viewer (viewer.ts). Batch render jobs (batch.ts) are edited in
+// An engine of engines.ts (AI, or a plug-in's) takes the built-in engine's picture, or the model and
+// its camera, and makes the pictures from it: its fields show under the Engine, and the viewer shows
+// what it made beside the picture it started from. Batch render jobs and Export HDRI keep to the two
+// built-in engines. The pictures open in the render viewer (viewer.ts). Batch render jobs (batch.ts) are edited in
 // its dialog and made by its makePictures. File > Export > Export HDRI… asks the same without the
 // format or the cloud and saves each picture as a Radiance HDR file, linear and unclipped (hdr.ts).
 // This file loads with the renderers, not the editor.
@@ -10,6 +13,8 @@
 import { h } from "../../app/dom.ts";
 import { appContext } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
+import { sunPlace } from "../../app/heliodon.ts";
+import { withoutHidden } from "../../app/hiddenObjects.ts";
 import { showDialog, type DialogCheck } from "../../app/menubar.ts";
 import { store } from "../../app/state.ts";
 import { note, reportFailure } from "../../app/reports.ts";
@@ -17,6 +22,8 @@ import { errorMessage, toast } from "../../app/toast.ts";
 import type { View3D } from "../../app/view3d.ts";
 import type { CameraInfo } from "../../core/index.ts";
 import { shotOfCamera, shotOfView, type Shot } from "./camera.ts";
+import { EngineRefusal, optionValues, renderEngines, type EngineOutput, type OptionValues, type RenderEngine } from "./engines.ts";
+import { engineFields, type EngineFields } from "./engineFields.ts";
 import { prepareLibrary } from "./library.ts";
 import { buildScene, type RenderScene } from "./sceneBuilder.ts";
 import { renderSettings, type RenderSettings } from "./settings.ts";
@@ -51,6 +58,10 @@ export interface Prefs {
   readonly denoise: boolean;
   readonly format: Format;
   readonly where: Where;
+  /** "" for the built-in engine alone, else the id of the engine of engines.ts that makes the pictures */
+  readonly via: string;
+  /** each such engine's fields as last chosen, by its id */
+  readonly options: Readonly<Record<string, OptionValues>>;
 }
 
 /** One picture to make: null camera is the 3D view's current view, or `shot` when there is one. */
@@ -76,6 +87,8 @@ export interface Plan {
   readonly format: Format;
   /** where a Photoreal job runs (a Fast one always runs here) */
   readonly where: Where;
+  /** the engine of engines.ts that makes the pictures from the built-in one's (or from the model), with its fields' values */
+  readonly via: { readonly engine: RenderEngine; readonly options: OptionValues } | null;
   readonly prefs: Prefs;
 }
 
@@ -133,6 +146,8 @@ export async function renderImageDialog(): Promise<void> {
   const plan = await askRender(session.doc.cameras(), cloudTerms());
   if (!plan) return;
   savePrefs(plan.prefs);
+  // the engine's own checks before anything is drawn: signing in, enough credit
+  if (plan.via?.engine.prepare && !(await plan.via.engine.prepare(plan.via.options, plan.shots.length))) return;
   if (plan.where === "cloud") await runCloud(plan);
   else await runJob(plan);
 }
@@ -230,6 +245,7 @@ export async function renderPicture(spec: PictureSpec): Promise<RenderResult | n
     denoise: renderSettings().quality.denoise,
     format: spec.format,
     where: "local",
+    via: null,
     prefs: {
       camera: VIEW,
       size: "custom",
@@ -241,6 +257,8 @@ export async function renderPicture(spec: PictureSpec): Promise<RenderResult | n
       denoise: true,
       format: spec.format,
       where: "local",
+      via: "",
+      options: {},
     },
   };
   const job: Job = { cancelled: false, finishNow: false };
@@ -304,12 +322,30 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
   const height = dimension(start.height, "Height in pixels");
   const hint = h("p", { cls: "render-hint" });
 
+  // the engines of engines.ts after the built-in ones, for a Render Image of its own
+  const extra = form || hdr ? [] : renderEngines();
   const engineSel = h(
     "select",
     { cls: SELECT_CLS, attrs: { "aria-label": "Engine" } },
     ...ENGINE_IDS.map((id) => h("option", { text: ENGINE_LABELS[id], value: id })),
+    ...extra.map((e) => {
+      const why = e.unavailable();
+      return h("option", { text: why ? `${e.label} (${why})` : e.label, value: e.id, disabled: why !== null });
+    }),
   );
-  engineSel.value = start.engine;
+  engineSel.value = extra.some((e) => e.id === start.via && e.unavailable() === null) ? start.via : start.engine;
+  const chosenVia = (): RenderEngine | null => extra.find((e) => e.id === engineSel.value) ?? null;
+  // what a picture-taking engine starts from: a built-in engine's picture
+  const baseSel = h(
+    "select",
+    { cls: SELECT_CLS, attrs: { "aria-label": "Start from" } },
+    ...ENGINE_IDS.map((id) => h("option", { text: ENGINE_LABELS[id], value: id })),
+  );
+  baseSel.value = start.engine;
+  const baseRow = field("Start from", baseSel);
+  const fieldsBy = new Map<string, EngineFields>(extra.map((e) => [e.id, engineFields(e, optionValues(e, start.options[e.id]), () => update())]));
+  const engineRows = [...fieldsBy.values()].flatMap((f) => f.rows);
+  const describe = h("p", { cls: "render-hint render-engine-note" });
   const qualitySel = h(
     "select",
     { cls: SELECT_CLS, attrs: { "aria-label": "Quality" } },
@@ -338,6 +374,7 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
   whereSel.value = cloud ? start.where : "local";
   const whereHint = h("p", { cls: "render-hint", text: cloud ? cloudPrice(cloud) : "" });
   const whereRows = cloud ? [field("Render on", whereSel), whereHint] : [];
+  const formatRow = field("Format", formatSel);
 
   const customRows = [field("Width", width, "px"), field("Height", height, "px")];
   const pathRows = [
@@ -368,22 +405,41 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
     return { size: { width: PRESETS[id].width, height: PRESETS[id].height } };
   };
 
+  /** the pictures the job makes before an engine's variations: one a camera */
+  const shotCount = (): number => (cameraSel.value === ALL ? cams.length : 1);
+  /** a path-traced picture is drawn: the built-in engine's, or the one an engine starts from */
+  const tracing = (): boolean => {
+    const via = chosenVia();
+    return via ? via.takes === "picture" && baseSel.value === "pathtraced" : engineSel.value === "pathtraced";
+  };
+
   const update = (): void => {
-    const path = engineSel.value === "pathtraced";
+    const via = chosenVia();
+    const path = tracing();
+    baseRow.hidden = via?.takes !== "picture";
     for (const row of pathRows) row.hidden = !path;
-    for (const row of whereRows) row.hidden = !path;
-    whereHint.hidden = !path || whereSel.value !== "cloud";
+    for (const row of whereRows) row.hidden = !path || via !== null;
+    whereHint.hidden = !path || via !== null || whereSel.value !== "cloud";
+    formatRow.hidden = via !== null;
+    for (const [id, f] of fieldsBy) f.show(via?.id === id);
+    const said = via ? (via.describe?.(fieldsBy.get(via.id)?.values() ?? {}, shotCount()) ?? "") : "";
+    describe.textContent = said;
+    describe.hidden = said === "";
     for (const row of customRows) row.hidden = sizeSel.value !== "custom";
     const size = sizeCheck();
+    const fitted = "size" in size && via?.maxSide ? fit(size.size, via.maxSide) : null;
     hint.textContent =
-      "size" in size ? `${size.size.width} × ${size.size.height} px · ${megapixels(size.size.width, size.size.height)} megapixels` : "";
+      "size" in size
+        ? `${size.size.width} × ${size.size.height} px · ${megapixels(size.size.width, size.size.height)} megapixels` +
+          (fitted && fitted.width < size.size.width ? ` · drawn at ${fitted.width} × ${fitted.height} px for ${via?.short ?? "the engine"}` : "")
+        : "";
   };
 
   cameraSel.addEventListener("change", () => {
     fillSizes(sizeSel.value);
     update();
   });
-  const live: readonly HTMLElement[] = [sizeSel, engineSel, width, height, minutes, whereSel];
+  const live: readonly HTMLElement[] = [sizeSel, engineSel, baseSel, width, height, minutes, whereSel];
   for (const el of live) {
     el.addEventListener("input", update);
     el.addEventListener("change", update);
@@ -399,12 +455,17 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
     if (hdr && size.size.width * size.size.height > MAX_HDR_PIXELS) {
       return { error: `An HDR picture is at most ${megapixels(4096, 4096)} megapixels (4096 × 4096): choose a smaller size.`, focus: sizeSel };
     }
-    const path = engineSel.value === "pathtraced";
+    const via = chosenVia();
+    const why = via?.unavailable() ?? null;
+    if (why) return { error: why, focus: engineSel };
+    const path = tracing();
     const mins = Number(minutes.value);
     const minutesOk = minutes.value.trim() !== "" && mins >= 0 && mins <= MAX_MINUTES;
     if (path && !minutesOk) return { error: `Stop after: from 0 to ${MAX_MINUTES} minutes (0 for no limit).`, focus: minutes };
 
-    const engine = pick<Engine>(engineSel.value, ENGINE_IDS, "pathtraced");
+    const engine = via ? pick<Engine>(baseSel.value, ENGINE_IDS, "realistic") : pick<Engine>(engineSel.value, ENGINE_IDS, "pathtraced");
+    const options: Record<string, OptionValues> = { ...start.options };
+    for (const [id, f] of fieldsBy) options[id] = f.values();
     const quality = pick<Quality>(qualitySel.value, QUALITY_IDS, "good");
     const format: Format = hdr ? "hdr" : pick<Format>(formatSel.value, FORMAT_IDS, "png");
     const where = cloud ? pick<Where>(whereSel.value, WHERE_IDS, "local") : start.where;
@@ -429,6 +490,8 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
       denoise: denoise.checked,
       format,
       where,
+      via: via?.id ?? "",
+      options,
     };
     return {
       value: {
@@ -441,7 +504,8 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
         minutes: minutesOk ? mins : 0,
         denoise: denoise.checked,
         format,
-        where: engine === "pathtraced" && cloud ? where : "local",
+        where: engine === "pathtraced" && cloud && !via ? where : "local",
+        via: via ? { engine: via, options: options[via.id] } : null,
         prefs,
       },
     };
@@ -458,9 +522,12 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
       ...customRows,
       hint,
       field("Engine", engineSel),
+      baseRow,
+      ...engineRows,
+      describe,
       ...pathRows,
       ...whereRows,
-      ...(hdr ? [] : [field("Format", formatSel)]),
+      ...(hdr ? [] : [formatRow]),
     ],
     check,
   });
@@ -478,8 +545,13 @@ async function runJob(plan: Plan): Promise<void> {
   try {
     await makePictures(plan, job, box, results);
   } catch (err) {
-    toast(`Render failed: ${errorMessage(err)}`);
-    reportFailure("render", err, { ...planDetails(plan), made: results.length });
+    // an engine's own refusal (signing in, credit, its provider's no) is said, not reported
+    if (err instanceof EngineRefusal) {
+      toast(err.message);
+    } else {
+      toast(`Render failed: ${errorMessage(err)}`);
+      reportFailure("render", err, { ...planDetails(plan), made: results.length });
+    }
   } finally {
     box.close();
   }
@@ -497,6 +569,7 @@ export function planDetails(plan: Plan): Record<string, string | number | boolea
     denoise: plan.denoise,
     format: plan.format,
     where: plan.where,
+    via: plan.via?.engine.id ?? "",
   };
 }
 
@@ -545,30 +618,124 @@ export async function makePictures(plan: Plan, job: Job, box: StillBox, results:
   const settings = jobSettings(plan);
   await prepareLibrary(settings);
   if (job.cancelled) return;
+  const via = plan.via;
+  // the model as glTF, made once for an engine that takes the scene
+  let glb: Promise<Uint8Array> | null = null;
+  const sceneOf = (): Promise<Uint8Array> => (glb ??= sceneGlb(view));
   // one scene for every picture of the job: it is built once, from the first picture that fits
   let scene: RenderScene | null = null;
   try {
     for (const [i, target] of plan.shots.entries()) {
       if (job.cancelled || (results.length > 0 && job.finishNow)) return;
       const prefix = plan.shots.length > 1 ? `Shot ${i + 1} of ${plan.shots.length} · ` : "";
+      const started = performance.now();
+      if (via?.engine.takes === "scene") {
+        const outputs = await runEngine(via, { plan, shot: shotFor(view, target), name: target.label, picture: null, scene: sceneOf, job, box, prefix });
+        for (const o of outputs) results.push(await engineResult(o, via.engine, target.label, null, started));
+        continue;
+      }
       if (!scene) {
         const started = performance.now();
         scene = buildScene({ faces: view.modelFaces(), content: view.visibleContent(), lights: view.visibleLights() }, settings, store.viz3d);
         note(`render: scene built in ${Math.round(performance.now() - started)} ms`);
       }
-      const still = await renderStill(scene, shotFor(view, target), plan, settings, job, box, { prefix, laterShots: plan.shots.length - i - 1 });
+      // an engine that paints the picture gets it at its own size
+      const drawn = via?.engine.maxSide ? { ...plan, ...fit(plan, via.engine.maxSide) } : plan;
+      const shot = shotFor(view, target);
+      const still = await renderStill(scene, shot, drawn, settings, job, box, { prefix, laterShots: plan.shots.length - i - 1 });
       if (!still) return;
-      results.push({
-        ...still,
-        width: plan.width,
-        height: plan.height,
-        name: target.label,
-        engine: plan.engine === "realistic" ? "Realistic" : "Path traced",
-      });
+      if (!via) {
+        results.push({ ...still, width: drawn.width, height: drawn.height, name: target.label, engine: plan.engine === "realistic" ? "Realistic" : "Path traced" });
+        continue;
+      }
+      if (job.cancelled) return;
+      const outputs = await runEngine(via, { plan: drawn, shot, name: target.label, picture: still.blob, scene: sceneOf, job, box, prefix });
+      for (const o of outputs) results.push(await engineResult(o, via.engine, target.label, still.blob, started));
     }
   } finally {
     scene?.dispose();
   }
+}
+
+/** What runEngine hands an engine for one shot. */
+interface EngineShot {
+  readonly plan: Pick<Plan, "width" | "height">;
+  readonly shot: Shot;
+  readonly name: string;
+  readonly picture: Blob | null;
+  readonly scene: () => Promise<Uint8Array>;
+  readonly job: Job;
+  readonly box: StillBox;
+  readonly prefix: string;
+}
+
+/** Has `via`'s engine make one shot's pictures; Cancel stops it (none then). */
+async function runEngine(via: NonNullable<Plan["via"]>, s: EngineShot): Promise<readonly EngineOutput[]> {
+  const stop = new AbortController();
+  // the progress window's Cancel sets job.cancelled: the engine's request stops with it
+  const watch = window.setInterval(() => s.job.cancelled && stop.abort(), 200);
+  s.box.bar(null);
+  try {
+    return await via.engine.render({
+      width: s.plan.width,
+      height: s.plan.height,
+      name: s.name,
+      camera: { eye: s.shot.eye, target: s.shot.target, perspective: s.shot.perspective, fov: s.shot.fov, halfHeight: s.shot.halfHeight },
+      sun: sunToward(),
+      options: via.options,
+      picture: s.picture,
+      scene: s.scene,
+      signal: stop.signal,
+      progress: (text, fraction) => {
+        s.box.label(s.prefix + text);
+        s.box.bar(fraction);
+      },
+    });
+  } catch (err) {
+    if (stop.signal.aborted) return [];
+    throw err;
+  } finally {
+    window.clearInterval(watch);
+  }
+}
+
+/** A picture an engine made, as the viewer shows it: its size read from the picture itself. */
+async function engineResult(o: EngineOutput, engine: RenderEngine, name: string, before: Blob | null, started: number): Promise<RenderResult> {
+  let width = 0;
+  let height = 0;
+  try {
+    const bitmap = await createImageBitmap(o.blob);
+    width = bitmap.width;
+    height = bitmap.height;
+    bitmap.close();
+  } catch {
+    // not a picture this browser decodes: the viewer says so when it shows it
+  }
+  return { blob: o.blob, width, height, name, engine: engine.short, samples: null, seconds: (performance.now() - started) / 1000, ...(o.note ? { note: o.note } : {}), ...(before ? { before } : {}) };
+}
+
+/** Toward the sun (world, z up), as the Realistic and path-traced pictures place it; null with the sun off or down. */
+function sunToward(): [number, number, number] | null {
+  // where the Realistic and path-traced pictures have it: the Heliodon's, whenever the Render palette's sun is on
+  if (!renderSettings().sun.on) return null;
+  const place = sunPlace(store.viz3d);
+  return place.altitude > 0 ? [place.dir.x, place.dir.y, place.dir.z] : null;
+}
+
+/** The design layers the 3D view shows, as binary glTF, without hidden objects. */
+async function sceneGlb(view: View3D): Promise<Uint8Array> {
+  const session = store.session;
+  if (!session) throw new Error("no drawing is open");
+  const doc = withoutHidden(session.doc);
+  const layers = view.shownLayers ?? new Set(doc.layers().filter((l) => l.kind === "design" && l.visibility !== "hidden").map((l) => l.id));
+  const { exportGlb } = await import("../../export/model3d.ts");
+  return new Uint8Array(await exportGlb(doc, layers));
+}
+
+/** `size` shrunk to fit `side` px on its longer side, its shape kept, in whole pixels (never larger). */
+function fit(size: Size, side: number): Size {
+  const scale = Math.min(1, side / Math.max(size.width, size.height));
+  return { width: Math.max(MIN_SIDE, Math.round(size.width * scale)), height: Math.max(MIN_SIDE, Math.round(size.height * scale)) };
 }
 
 /** The render settings for this job: the palette's, with the dialog's denoise and sample count. */
@@ -635,6 +802,8 @@ function defaultPrefs(): Prefs {
     denoise: renderSettings().quality.denoise,
     format: "png",
     where: "local",
+    via: "",
+    options: {},
   };
 }
 
@@ -663,7 +832,17 @@ export function prefsFrom(parsed: unknown, defaults: Prefs = defaultPrefs()): Pr
     denoise: typeof raw.denoise === "boolean" ? raw.denoise : defaults.denoise,
     format: pick<Format>(raw.format, FORMAT_IDS, defaults.format),
     where: pick<Where>(raw.where, WHERE_IDS, defaults.where),
+    via: typeof raw.via === "string" ? raw.via : defaults.via,
+    options: optionsFrom(raw.options) ?? defaults.options,
   };
+}
+
+/** Engines' kept fields: an object of objects (each engine checks its own values when it reads them). */
+function optionsFrom(v: unknown): Record<string, OptionValues> | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const out: Record<string, OptionValues> = {};
+  for (const [id, values] of Object.entries(v)) if (typeof values === "object" && values !== null && !Array.isArray(values)) out[id] = values as OptionValues;
+  return out;
 }
 
 function savePrefs(prefs: Prefs, key = PREFS_KEY): void {

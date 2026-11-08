@@ -152,6 +152,24 @@ export interface VoiceConfig {
   readonly perDay: number;
 }
 
+/**
+ * AI renders (image.ts): an image model paints a picture of the model, rendered in the editor, as a
+ * finished render. Offered with an OpenRouter-style key unless AI_IMAGES=off.
+ */
+export interface ImageConfig {
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  /** the model that paints Render Image's AI pictures */
+  readonly model: string;
+  /** the quicker model the 3D view's AI mode paints with */
+  readonly liveModel: string;
+  /** about what a picture costs at the provider, dollars: the estimate the editor shows before it asks */
+  readonly usdPerPicture: number;
+  /** pictures each user may ask for in an hour, and in a day */
+  readonly perHour: number;
+  readonly perDay: number;
+}
+
 /** Modal's price of an hour of each GPU, US dollars (modal.com/pricing, October 2026) */
 const GPU_USD_PER_HOUR: Readonly<Record<string, number>> = {
   T4: 0.59,
@@ -254,6 +272,22 @@ function voiceFromEnv(): VoiceConfig | null {
 
 const voice = voiceFromEnv();
 
+/** AI renders: on with an OpenRouter-style key unless AI_IMAGES=off. */
+function imageFromEnv(): ImageConfig | null {
+  if (!openAiKey || !envBool("AI_IMAGES", true)) return null;
+  return {
+    baseUrl: (env("AI_BASE_URL") ?? "https://openrouter.ai/api/v1").replace(/\/+$/, ""),
+    apiKey: openAiKey,
+    model: env("AI_IMAGE_MODEL") ?? "google/gemini-nano-banana-2.1",
+    liveModel: env("AI_IMAGE_LIVE_MODEL") ?? "google/gemini-3.1-flash-lite-image",
+    usdPerPicture: positive("AI_IMAGE_USD", 0.04),
+    perHour: envInt("AI_IMAGES_PER_HOUR", 120),
+    perDay: envInt("AI_IMAGES_PER_DAY", 400),
+  };
+}
+
+const image = imageFromEnv();
+
 const free: Limits = {
   files: envInt("FREE_FILES", 5),
   bytes: envBytes("FREE_BYTES", 250 * MB),
@@ -339,6 +373,8 @@ export const config = {
   ai: aiFromEnv(),
   /** voice commands' speech to text (null: not offered; Firefox can't use voice) */
   voice,
+  /** AI renders (null: not offered) */
+  image,
   /** the credit the agents and cloud renders take from (null: they are free, or neither is set up) */
   credit,
   render,

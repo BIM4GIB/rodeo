@@ -22,6 +22,18 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-08T12:00:00Z",
+    "ai-render",
+    "AI renders, and render engines from plug-ins",
+    `An image model can now paint your 3D view and your Render Image pictures as finished renders, and plug-ins can add their own render engines, starting with Blender.
+- AI Render is a new render mode (View › Rendering, or AI in the Render palette): when the view rests, an image model paints it as a finished render and the painting fades in over the Realistic picture. Pick a style (golden hour, overcast, dusk, snow, watercolour, a white card model and more), add your own words, and say how freely it may paint. Your building, its openings and the camera stay as they are.
+- Render Image has an Engine field: choose AI, then whether it starts from the Realistic or the path-traced picture, the style and up to 4 variations. The cost shows before you render.
+- The render viewer compares a picture with the one it started from, with a line that follows the pointer, and Restyle with AI… paints any picture again in another style.
+- Plug-ins can add an engine to Render Image with openvwx.render.engine and get the picture or the model as glTF with the camera and the sun. integrations/blender in Rodeo's repository renders through Blender's Cycles or EEVEE on your computer.
+- AI pictures are paid for from your AI credit and need you signed in.`,
+    "paint",
+  ),
+  release(
     "2026-11-07T12:01:00Z",
     "live-path-tracing",
     "Path tracing while you move, and a material library",

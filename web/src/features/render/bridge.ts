@@ -1,5 +1,5 @@
 // What the live renderer (live.ts, loaded with the 3D view) tells the Render palette (loaded with the
-// editor): the model's materials and how far the picture has come. No three.js here.
+// editor): the model's materials, how far the picture has come, and the AI mode's controls. No three.js here.
 
 import type { MaterialPresetId } from "./settings.ts";
 
@@ -56,4 +56,34 @@ export function publishStatus(text: string): void {
   if (text === status) return;
   status = text;
   for (const fn of statusListeners) fn(text);
+}
+
+// ---- the 3D view's AI mode (aiLive.ts), for the palette's Paint now and Open picture ----
+
+/** A painting of the view, and the Realistic picture it was painted from. */
+export interface AiPicture {
+  readonly blob: Blob;
+  readonly before: Blob;
+  readonly width: number;
+  readonly height: number;
+  /** the style's name */
+  readonly note: string;
+}
+
+export interface AiLiveControl {
+  /** paints the view as it is now, whatever Auto says */
+  paintNow(): void;
+  /** the latest painting shown, or null */
+  picture(): AiPicture | null;
+}
+
+let aiControl: AiLiveControl | null = null;
+
+/** The AI mode's controls once it has drawn, else null. */
+export function aiLive(): AiLiveControl | null {
+  return aiControl;
+}
+
+export function publishAiLive(control: AiLiveControl | null): void {
+  aiControl = control;
 }

@@ -74,6 +74,19 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
     ],
   },
   {
+    title: "Render engines (openvwx.render.engine)",
+    blocks: [
+      ["p", "render.engine(spec, handler) adds an engine to File > Export > Render Image… while the plug-in is turned on: a bridge to another renderer, a render farm or a service."],
+      ["code", 'openvwx.render.engine({ name: "My renderer", takes: "scene", options: [\n  { key: "samples", label: "Samples", kind: "number", initial: 128, min: 1, max: 4096 },\n] }, async (job) => {\n  const res = await openvwx.fetch("http://127.0.0.1:7416/render", { method: "POST", body: job.scene });\n  return { bytes: res.bytes, type: "image/png" };\n});'],
+      ["list", [
+        'takes "picture": job.picture is the Realistic or path-traced picture (PNG bytes); "scene": job.scene is the visible model as binary glTF (y up, metres)',
+        "every job has width, height, name, camera (eye, target in mm, z up; perspective; fov; halfHeight), sun (toward the sun, or null) and options",
+        'options are fields under the Engine: kind "choice" (choices), "text", "number" (min, max) or "check", with initial and hint',
+        "return { bytes, type, note } or a list of them; type is image/png, image/jpeg or image/webp",
+      ]],
+    ],
+  },
+  {
     title: "Web requests (openvwx.fetch)",
     blocks: [
       ["p", "fetch(url, init) sends an http or https request from the page, on the plug-in's behalf, with no cookies. The first request to each site asks Allow {plug-in} to reach {site}?; the answer is remembered for that plug-in."],

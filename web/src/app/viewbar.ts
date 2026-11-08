@@ -60,7 +60,16 @@ export const RENDER_MODES: readonly (readonly [RenderMode, string])[] = [
   ["textured", "Textured"],
   ["realistic", "Realistic"],
   ["pathtraced", "Path Traced"],
+  ["ai", "AI Render"],
 ];
+
+/** Why a render mode can't be chosen now, as the feature drawing it says (AI Render needs the server's AI renders). */
+const modeReasons = new Map<RenderMode, () => string | null>();
+
+/** Has View > Rendering grey out `mode`, saying `why`, while `why` gives a reason. */
+export function setRenderModeReason(mode: RenderMode, why: () => string | null): void {
+  modeReasons.set(mode, why);
+}
 
 /** The perspectives View > Projection names, with their view angles (degrees from the picture's top to its bottom). */
 const LENSES: readonly (readonly [string, number])[] = [
@@ -203,11 +212,15 @@ export function standardViewRows(actions: View3dActions): Row[] {
 export function renderModeRows(actions: View3dActions, styles = true): Row[] {
   const hasDoc = (): boolean => store.session !== null;
   return [
-    ...RENDER_MODES.map(([mode, label]) => ({
-      label,
-      checked: () => actions.renderMode() === mode,
-      run: () => actions.setRenderMode(mode),
-    })),
+    ...RENDER_MODES.map(([mode, label]) => {
+      const why = modeReasons.get(mode);
+      return {
+        label,
+        checked: () => actions.renderMode() === mode,
+        run: () => actions.setRenderMode(mode),
+        ...(why ? { why, enabled: () => why() === null } : {}),
+      };
+    }),
     // the View bar's menu lists the Renderworks styles too, as Vectorworks' does (the View menu has its own)
     ...(styles ? ["-" as const, { label: "Renderworks Style", items: () => renderStyleRows(actions) }] : []),
     "-",
