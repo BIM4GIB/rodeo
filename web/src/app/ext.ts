@@ -108,6 +108,8 @@ export interface AppContext {
   show3d(): Promise<View3D | null>;
   /** The 3D view if it has been created. */
   view3d(): View3D | null;
+  /** The 3D view alone, in one pane, as the top bar's 3D shows it (null if WebGL is unavailable). */
+  show3dAlone(): Promise<View3D | null>;
   /** Back to the 2D drawing from the 3D view (nothing when it shows already). */
   show2d(): void;
   /** How the 3D view draws the model (View > Rendering), and setting it as that menu does. */

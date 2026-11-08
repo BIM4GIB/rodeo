@@ -1,0 +1,90 @@
+/* The Output tab (outputTab.ts): the size's readout, the custom size's swap, the engine's note and its own
+   fields. The fields come from engineFields.ts with the dialog's classes; here they take the panel's rows
+   (a label, then the control). Solid panels in the tokens of tokens.css, so both themes follow. */
+
+.rs-output-size,
+.rs-output-engine-note {
+  font-variant-numeric: tabular-nums;
+}
+
+.rs-note.is-warn {
+  color: var(--warn);
+}
+
+.rs-output-swap {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0 4px;
+}
+
+.rs-output-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rs-output-fields:empty {
+  display: none;
+}
+
+.rs-output-fields .menu-dialog-field {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.rs-output-fields .menu-dialog-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-output-fields .menu-dialog-field > .menu-dialog-input,
+.rs-output-fields .menu-dialog-field > .menu-dialog-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.rs-output-fields .menu-dialog-input {
+  height: 26px;
+  text-align: left;
+}
+
+.rs-output-fields .menu-dialog-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin: 0;
+  color: var(--text-2);
+}
+
+.rs-output-fields .menu-dialog-check input {
+  accent-color: var(--accent);
+}
+
+.rs-output-fields .render-text-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-height: 28px;
+  margin: 0;
+}
+
+.rs-output-fields .render-words {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.4em;
+  height: auto;
+  padding: 5px 7px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.35;
+  text-align: left;
+}

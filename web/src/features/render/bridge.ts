@@ -87,3 +87,60 @@ export function aiLive(): AiLiveControl | null {
 export function publishAiLive(control: AiLiveControl | null): void {
   aiControl = control;
 }
+
+// ---- how far the live view has come, for the Render panel's status and Render Studio's HUD ----
+
+/** The live view's picture: the mode drawing it and how far it has come. */
+export interface LiveProgress {
+  /** the realistic mode drawing, or null while the 3D view draws in another mode */
+  readonly mode: "realistic" | "pathtraced" | "ai" | null;
+  /** preparing: the scene is being built; moving: the view moves; refining: samples are added; done: the target is reached; paused: Render has the GPU */
+  readonly phase: "preparing" | "moving" | "refining" | "done" | "paused";
+  /** samples taken and the target (Path Traced), else 0 */
+  readonly samples: number;
+  readonly target: number;
+  /** the path tracer drawing, or null */
+  readonly engine: "webgl" | "webgpu" | null;
+}
+
+const IDLE: LiveProgress = { mode: null, phase: "done", samples: 0, target: 0, engine: null };
+let progress: LiveProgress = IDLE;
+const progressListeners = new Set<(p: LiveProgress) => void>();
+
+export function liveProgress(): LiveProgress {
+  return progress;
+}
+
+export function onProgress(fn: (p: LiveProgress) => void): () => void {
+  progressListeners.add(fn);
+  return () => progressListeners.delete(fn);
+}
+
+/** For live.ts; the 3D view leaving the realistic modes publishes `null`. */
+export function publishProgress(p: LiveProgress | null): void {
+  const next = p ?? IDLE;
+  if (next.mode === progress.mode && next.phase === progress.phase && next.samples === progress.samples && next.target === progress.target && next.engine === progress.engine) return;
+  progress = next;
+  for (const fn of progressListeners) fn(progress);
+}
+
+// ---- Render at work: while pictures are made here, the live view stops tracing ----
+
+let busy = false;
+const busyListeners = new Set<(on: boolean) => void>();
+
+/** Render is making pictures on this computer's GPU (studio/queue.ts). */
+export function renderBusy(): boolean {
+  return busy;
+}
+
+export function setRenderBusy(on: boolean): void {
+  if (on === busy) return;
+  busy = on;
+  for (const fn of busyListeners) fn(on);
+}
+
+export function onRenderBusy(fn: (on: boolean) => void): () => void {
+  busyListeners.add(fn);
+  return () => busyListeners.delete(fn);
+}

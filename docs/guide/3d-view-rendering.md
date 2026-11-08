@@ -231,15 +231,15 @@ The 3D view's **Realistic** mode draws the model each frame in physically based 
 - While the view moves it keeps tracing, at a lower resolution, and steadies the picture by reusing what the frames before saw of each surface, so you orbit and walk inside the path-traced picture.
 - Once the view rests it refines the full picture up to the preview's samples, denoised as it goes.
 
-Where the browser has WebGPU (recent Chrome, Edge and Safari), the path tracer runs on it and denoises with Open Image Denoise, a neural denoiser that keeps edges and textures sharp; elsewhere it runs on WebGL. The Render palette's Quality section chooses (**Path tracer**: Auto, WebGPU or WebGL), and **While moving › Realistic** shows the Realistic picture while the view moves instead, for slow graphics cards.
+Where the browser has WebGPU (recent Chrome, Edge and Safari), the path tracer runs on it and denoises with Open Image Denoise, a neural denoiser that keeps edges and textures sharp; elsewhere it runs on WebGL. The Render palette's **Output › Live view** chooses (**Path tracer**: Auto, WebGPU or WebGL), and **While moving › Realistic** shows the Realistic picture while the view moves instead, for slow graphics cards.
 
 **Limits:** the WebGL path tracer leaves out clear coats (the glossy top layer of tile, wood and glossy paint), which Realistic and the WebGPU path tracer show.
 
 ### AI Render
 
-**AI Render** (**View › Rendering**, or **AI** in the Render palette) has an image model on Rodeo's server paint the 3D view as a finished render. While the view moves you see the Realistic picture; once it rests for a moment, that picture is sent to be painted and the painting fades in over it, usually within several seconds. Move again and the Realistic picture is back at once; come back to a view already painted and its painting shows again without painting it anew.
+**AI Render** (**View › Rendering**, or **AI** in the Render palette and Render Studio) has an image model on Rodeo's server paint the 3D view as a finished render. While the view moves you see the Realistic picture; once it rests for a moment, that picture is sent to be painted and the painting fades in over it, usually within several seconds. Move again and the Realistic picture is back at once; come back to a view already painted and its painting shows again without painting it anew.
 
-The Render palette's **AI** section sets:
+While the view draws in AI, the Render palette shows an **AI** card above its tabs, which sets:
 
 - **Style**: photoreal daylight, golden hour, overcast, dusk with the lights on, night, after the rain, winter snow, a warm interior, a competition render, watercolour, a hand sketch or a white card model, or **My own words only**
 - **Describe it**: your own words, added to the style's ("oak cladding, a birch grove behind")
@@ -248,28 +248,31 @@ The Render palette's **AI** section sets:
 
 **Paint now** paints the view as it is. **Open picture** opens the latest painting in the render viewer, to compare it with the Realistic picture it came from, save it or restyle it.
 
-Each picture is paid for from your AI credit where Rodeo sells it; the AI section says what a picture costs, and the line under the modes counts the pictures and what they took this session. You need to be signed in.
+Each picture is paid for from your AI credit where Rodeo sells it; the AI card says what a picture costs, and the line under the modes counts the pictures and what they took this session. You need to be signed in.
 
 **Limits:** the image model paints at about 1K, at the nearest of its shapes (16:9, 4:3, 1:1 and so on): the rest of the view stays Realistic. It may change small details, such as window bars or a railing's spacing, and can't be told to keep one exactly. Painting each rest stops after 30 pictures in a session until you press Paint now. View panes show the Realistic picture.
 
+### Render Studio
+
+Render Studio is the render workspace: the 3D view on its own in a realistic mode, the Render palette alone beside it, and the controls a render needs laid over the view. Open it with **Render** on the top bar, **View › Render Studio**, or the palette's Studio button; **File › Export › Render Image…** opens it at the Output tab.
+
+- **The frame** shows what Render takes: the picture's shape, centred in the view, with the rest darkened. Its label names the size, the shape and the camera ("4K · 3840 × 2160 · 16:9"). Orbit and walk as usual; what is inside the frame is the picture.
+- **Across the top**: Realistic, Path Traced or AI, how far the live picture has come (samples, and the WebGPU path tracer when it runs), and **Done**.
+- **Along the bottom**: the sun on or off, the solar time, the date (a month and a day), and the shutter, which renders as Output says. The caret beside it has the other ways to render: batch jobs, panoramas, HDRI, animations and the cloud.
+
+<kbd>Esc</kbd>, **Done**, **2D**, **Split** or **Render** again leave it, and the palettes come back as they were. While a render is being made, the live Path Traced view pauses and shows the Realistic picture, so the two don't share the graphics card.
+
 ### Render palette
 
-The Render palette (**View › Render Settings**, after Renderworks Style) has the 3D view's Realistic, Path Traced and AI modes at its top, with a line on what the one shown does, and sets:
+The Render palette (**View › Render Settings**, after Renderworks Style, or in Render Studio) has the 3D view's Realistic, Path Traced and AI modes at its top, with a line on what the live picture is doing, then five tabs:
 
-- the sky (physical for the sun, a gradient, a solid colour or a studio), its haze and intensity
-- a ground plane under a model that stands on level ground (a sloping site model is its own ground)
-- the sun's date, time, intensity and softness
-- the light objects' intensity
-- exposure and tone (AgX, ACES Filmic or Neutral)
-- fog: how far it hides, how it thins going up, its glow toward the sun
-- two-point perspective and depth of field
-- each material's finish: Auto guesses one from its texture's name and colour (wood, glass, metal, foliage and so on), each with its roughness, metalness, transmission, glow and tint to change
-- the effects: ambient occlusion, bloom, vignette, contrast, saturation
-- each material's library material (see Material library, below), with its scale and bump
-- the quality: preview samples, bounces, denoise, the path tracer (WebGPU or WebGL) and what shows while the view moves
-- in AI Render, the style, your words and the strength (see AI Render, above)
+- **Scene**: presets that set the sky, sun, lights and fog together (clear day, morning, golden hour, overcast, dusk, night, studio, foggy); the sky (physical for the sun, a gradient, a solid colour or a studio), its haze and intensity; the sun's date, solar time, intensity and softness; a ground plane under a model that stands on level ground (a sloping site model is its own ground), its colour and gloss; the light objects' intensity and haze; fog: how far it hides, how it thins going up, its glow toward the sun
+- **Camera**: the shots Render takes (the current view or the drawing's Renderworks cameras; choosing a camera looks through it); the lens: perspective or orthogonal, the focal length in millimetres, two-point perspective; depth of field, with its f-stop, strength and focus distance, or **Pick focus** to click where the picture should be sharp
+- **Materials**: every material the view shows, with a search box when there are many. Open one, or **Pick** it by clicking the model, to set its finish (Auto guesses one from its texture's name and colour: wood, glass, metal, foliage and so on), its roughness, metalness, transmission, glow and tint, and its library material (see Material library, below). Double-click a slider's label to give it back to the finish. **Match library materials** matches them all in one go
+- **Look**: looks that set the colour and effects at once (natural, crisp, warm afternoon, cool morning, soft and airy, moody, film, black and white); exposure and tone (AgX, ACES Filmic or Neutral); colour: temperature, tint, contrast, highlights, shadows, saturation; effects: ambient occlusion, reflections, bloom; lens effects: vignette, fringing, grain, sharpen; and the style: outlines and the clay model
+- **Output**: what Render makes (see Render, below), and the **Live view**'s quality: preview samples, bounces, denoise, the path tracer (WebGPU or WebGL) and what shows while the view moves
 
-Its Cameras list looks through the drawing's cameras. The settings belong to the drawing on this machine, not the file.
+Double-click a slider to put it back to its default. The palette's foot says what Render will make; **Render** makes it, and its caret has the other ways to render and **Reset Render Settings**. The settings belong to the drawing on this machine, not the file.
 
 ### Material library
 
@@ -287,9 +290,9 @@ Rodeo comes with 34 scanned materials, free to use (CC0, from Poly Haven and amb
 - Roofing: clay roof tiles, roof slates
 - Fabric: cotton, tan leather
 
-In the Render palette's Materials list, open a material and use **Library › Choose…** to pick one (search or browse by category). **Scale** makes it bigger or smaller than its real size and **Bump** sets how deep its relief looks; **Remove** goes back to the drawing's own texture. **Match library materials** gives every material Rodeo guessed as wood, brick, stone, concrete, plaster, tile, metal or fabric the closest library material in one go.
+In the Render palette's **Materials** tab, open a material (or **Pick** it on the model) and use **Choose…** under Library to pick one (search or browse by category). **Scale** makes it bigger or smaller than its real size and **Bump** sets how deep its relief looks; **Remove** goes back to the drawing's own texture. **Match library materials** gives every material Rodeo guessed as wood, brick, stone, concrete, plaster, tile, metal or fabric the closest library material in one go.
 
-Library materials show in Realistic, Path Traced, Render Image and the cloud renders. They're laid on each face at their real size; a face with a texture keeps that texture's placement.
+Library materials show in Realistic, Path Traced, Render and the cloud renders. They're laid on each face at their real size; a face with a texture keeps that texture's placement.
 
 **Limits:** library materials belong to the Render palette's settings on this machine, like the other finishes: the drawing and the file keep their own textures, and Vectorworks doesn't see them. Each map is 1K, so a library material seen from very close looks soft.
 
@@ -306,35 +309,48 @@ Each sets the render mode (Realistic, or Path Traced for Final) and the Render p
 
 **Limits:** Vectorworks doesn't publish its library styles' settings, so these are Rodeo's readings of their names; the file's own styles aren't read.
 
-## Render Image and other exports
+## Render and other exports
 
-### Render Image
+### Render
 
-**File › Export › Render Image…** renders the current view, one camera or all of them:
+**Render** (the shutter in Render Studio, or the Render palette's foot) makes pictures as the **Output** tab says, and **File › Export › Render Image…** opens Render Studio at that tab:
 
-- at HD, QHD, 4K UHD, 4K DCI, square, A4 at 300 dpi, the camera's shape or any size up to 8192 px a side
-- with the Realistic engine (a 4K picture in a second) or path traced (64 to 4096 samples, with a time limit and denoise)
-- or with an engine that starts from one of those: **AI** (below), or a plug-in's
-- as PNG or JPEG
+- **Shots**: the current view, one camera, or all of them
+- **Size**: HD, QHD, 4K, 4K DCI, 21:9, square, 4:5, A4 at 300 dpi, the camera's shape or any size up to 8192 px a side; the line under them gives the pixels, megapixels and shape
+- **Engine**: **Fast** (the Realistic picture: a 4K picture in a second) or **Photoreal** (path traced), or an engine that starts from one of those: **AI** (below), or a plug-in's
+- **Quality** for Photoreal: Draft, Good, High or Best (64 to 4096 samples), a time limit a picture and denoise
+- **File**: PNG or JPEG
 
-It shows its progress, with **Finish now** and **Cancel**, then shows the pictures to save or copy.
+The current view is rendered as the frame shows it in Render Studio, whatever the window's shape, and as it was when Render was pressed: you can go on orbiting and editing while it renders.
+
+### The render queue
+
+Each Render is a card in the **Renders** tray at the bottom right: its picture so far, then the finished one, its size and engine, a bar and how long is left. Renders run one after another, and Render can be pressed again while one runs; the editor stays free. **Finish now** keeps a path-traced picture as it is, **Cancel** drops it, and **Open** shows a finished one in the viewer. When the last one is done, its pictures open in the viewer and the tray folds to its title; **Clear** takes away the ones that have ended.
+
+**Limits:** while a picture is made on the WebGPU path tracer, its card shows a placeholder until the picture is done. Batch renders and Export HDRI show their own progress window. Leaving the drawing while a render runs asks first.
 
 ### AI pictures
 
-Choose **AI — painted by an image model** as the Engine to have Rodeo's image model paint the picture as a finished render. **Start from** chooses the picture it paints: Realistic (quick) or path traced (truer light to start from). Then choose the **Style**, **Describe it** in your own words, the **Strength** (as in AI Render, above) and up to 4 **Variations** of each picture. The line under them says what the pictures will cost from your AI credit.
+Choose **AI** as Output's Engine to have Rodeo's image model paint the picture as a finished render. **Start from** chooses the picture it paints: Realistic (quick) or path traced (truer light to start from). Then choose the **Style**, **Describe it** in your own words, the **Strength** (as in AI Render, above) and up to 4 **Variations** of each picture. The line under them says what the pictures will cost from your AI credit.
 
 The picture it starts from is drawn at no more than 1536 px a side, and the image model paints at about 1K, whatever the size chosen.
 
 ### The render viewer
 
-The finished pictures open over the editor: click one to see it at 100 %, use the strip or the arrow keys for the others, **Copy** or **Save** it.
+The finished pictures open in a viewer over the whole window, with the pictures made this session along its foot.
 
-- **Compare** shows a picture an engine made beside the one it started from: the picture it started from on the left of a line that follows the pointer.
-- **Restyle with AI…** paints the picture shown again in another style, strength or words (an AI picture is painted again from the picture it came from). The new pictures join the strip.
+- **Fit** and **100 %**, **−** and **+**, the mouse wheel (about the pointer) or a pinch zoom; drag to pan; double-click switches between fit and 100 % at that point
+- the arrows on the picture, the strip, or <kbd>←</kbd> and <kbd>→</kbd> go through the pictures
+- **Info** shows the picture's name, size, engine, samples, time and file
+- **Compare** shows a picture an engine made over the one it started from, with a line to drag (or move with the arrow keys) between them
+- **Restyle with AI…** paints the picture shown again in another style, strength or words (an AI picture is painted again from the picture it came from). The new pictures join the strip
+- **Copy** (<kbd>⌘C</kbd>) and **Save** (<kbd>⌘S</kbd>)
+
+Keys: <kbd>F</kbd> fits, <kbd>1</kbd> shows 100 %, <kbd>C</kbd> compares, <kbd>Esc</kbd> closes it.
 
 ### Render engines from plug-ins
 
-A plug-in can add an engine to Render Image with `openvwx.render.engine` (**Help › Plug-in API…**): a bridge to another renderer, a render farm or a service. Its engine is listed after Rodeo's while the plug-in is turned on, with the fields it asks for. It gets either the built-in engine's picture or the visible model as glTF with the camera and the sun, and gives back its pictures.
+A plug-in can add an engine to Render with `openvwx.render.engine` (**Help › Plug-in API…**): a bridge to another renderer, a render farm or a service. Its engine is listed in Output after Rodeo's while the plug-in is turned on, with the fields it asks for. It gets either the built-in engine's picture or the visible model as glTF with the camera and the sun, and gives back its pictures.
 
 Rodeo's repository has one for Blender in `integrations/blender`: a bridge that Blender runs on your computer, and the plug-in that sends it the model and camera and brings back Cycles' or EEVEE's picture.
 
@@ -342,7 +358,7 @@ Rodeo's repository has one for Blender in `integrations/blender`: a bridge that 
 
 ### Batch rendering
 
-**View › Rendering › Create Batch Render Job…** keeps Render Image's choices under a name, with the 3D view's view as it is then. **Start Batch Render…** renders the jobs chosen, in the order chosen, and downloads their pictures as one zip of a folder named for the date and time. <kbd>Esc</kbd> drops the job in hand and goes on.
+**View › Rendering › Create Batch Render Job…** keeps Output's choices under a name, with the 3D view's view as it is then. **Start Batch Render…** renders the jobs chosen, in the order chosen, and downloads their pictures as one zip of a folder named for the date and time. <kbd>Esc</kbd> drops the job in hand and goes on.
 
 **Duplicate**, **Edit** and **Delete** manage the jobs, which are kept for the file on this machine, not in it.
 
@@ -350,7 +366,7 @@ Rodeo's repository has one for Blender in `integrations/blender`: a bridge that 
 
 ### Export HDRI
 
-**File › Export › Export HDRI…** asks the same as Render Image (no format or cloud) and saves each picture as a Radiance .hdr file, linear and unclipped: fog, exposure and white balance applied, tone mapping and grading left to the imaging program. Several cameras' pictures come in one zip, and pictures go up to 16.8 megapixels.
+**File › Export › Export HDRI…** asks the same as Output (no format or cloud) and saves each picture as a Radiance .hdr file, linear and unclipped: fog, exposure and white balance applied, tone mapping and grading left to the imaging program. Several cameras' pictures come in one zip, and pictures go up to 16.8 megapixels.
 
 ### Export Panorama
 

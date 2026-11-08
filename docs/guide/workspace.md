@@ -487,7 +487,7 @@ Each 3D pane keeps its own render mode and projection. The top bar's **Render mo
 
 A Realistic pane without the live 3D view shows the render feature's picture through its own camera, Shaded until that has loaded.
 
-A Path Traced one refines a path-traced picture of its own, a sample a frame up to the Render palette's preview samples (512 at most), on a renderer the panes share, so the live view isn't drawn again meanwhile. The panes refine one at a time, each showing a Realistic picture until its turn, and start over as their camera, size, the model or the settings change.
+A Path Traced one refines a path-traced picture of its own, a sample a frame up to the Render palette's preview samples (**Output › Live view**, 512 at most), on a renderer the panes share, so the live view isn't drawn again meanwhile. The panes refine one at a time, each showing a Realistic picture until its turn, and start over as their camera, size, the model or the settings change.
 
 ### Resizing panes
 

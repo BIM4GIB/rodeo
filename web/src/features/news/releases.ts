@@ -22,6 +22,18 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-08T12:03:00Z",
+    "render-studio",
+    "Render Studio: a render workspace",
+    `Rendering has its own workspace now. Press Render on the top bar: the 3D view stands alone in a realistic mode, the Render palette beside it, and a frame on the view shows exactly what the picture takes.
+- The frame follows the size you choose (4K, square, 21:9, A4 and more) and names it. Along the bottom: the sun, the time of day, the date and a shutter that renders.
+- The Render palette is in five tabs: Scene (presets such as golden hour, dusk or foggy that set the sky, sun and fog at once), Camera (shots, focal length, depth of field with a focus you click), Materials (search, or pick a material on the model), Look (one-click looks and the colour and effects), and Output (size, engine, quality, file).
+- Renders queue in a tray instead of a window that waits: keep orbiting and editing while they run, render again, and finish or cancel each one.
+- The finished pictures open in a full-window viewer: zoom and pan, step through the session's pictures, compare, restyle, copy or save.
+- Esc or Done leaves Render Studio and puts the palettes back as they were.`,
+    "camera",
+  ),
+  release(
     "2026-11-08T12:02:00Z",
     "dwg-solids-xrefs",
     "DWG multileaders, xrefs and 3D solids come in",

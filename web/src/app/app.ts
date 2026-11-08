@@ -1254,6 +1254,12 @@ export class App {
         return this.view3d;
       },
       view3d: () => this.view3d,
+      show3dAlone: async () => {
+        await this.view3dAlone();
+        clearTimeout(this.rebuild3dTimer);
+        this.update3d();
+        return this.view3d;
+      },
       show2d: () => this.topPlan(),
       renderMode: () => this.renderMode3d,
       setRenderMode: (mode) => this.setRenderMode(mode),

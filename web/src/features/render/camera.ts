@@ -63,6 +63,18 @@ export function shotOfView(camera: THREE.PerspectiveCamera | THREE.OrthographicC
   };
 }
 
+/**
+ * `shot` cut down to the middle `scale` of its picture's height (0 < scale ≤ 1), the eye and target kept:
+ * the 3D view's shot as the frame shows it (studio/output.ts frameRect), the frame's height over the view's.
+ */
+export function fitShot(shot: Shot, scale: number): Shot {
+  const s = Math.min(1, Math.max(1e-3, scale));
+  if (s === 1) return shot;
+  if (!shot.perspective) return { ...shot, halfHeight: shot.halfHeight * s };
+  const fov = (2 * Math.atan(Math.tan((shot.fov / 2) * DEG) * s)) / DEG;
+  return { ...shot, fov, halfHeight: shot.halfHeight * s };
+}
+
 /** A Renderworks camera's shot (its viewAngle spans its picture's width, aspect wide over high). */
 export function shotOfCamera(info: CameraInfo): Shot {
   const distance = Math.hypot(info.target[0] - info.eye[0], info.target[1] - info.eye[1], info.target[2] - info.eye[2]);

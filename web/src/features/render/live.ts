@@ -16,7 +16,7 @@ import { store } from "../../app/state.ts";
 import type { RealisticMode, RenderHook, View3D } from "../../app/view3d.ts";
 import type { Light3D } from "../../core/index.ts";
 import { AiLive } from "./aiLive.ts";
-import { publishMaterials, publishStatus, type MaterialItem } from "./bridge.ts";
+import { onRenderBusy, publishMaterials, publishProgress, publishStatus, renderBusy, type MaterialItem } from "./bridge.ts";
 import { renderCamera, shotOfView, type ViewOffset } from "./camera.ts";
 import { webgpuAvailable, webgpuKnown } from "./gpuSupport.ts";
 import { onLibraryLoaded } from "./library.ts";
@@ -61,6 +61,7 @@ export class LiveRenderer implements RenderHook {
   private readonly lastWorld = new THREE.Matrix4();
   private readonly lastProjection = new THREE.Matrix4();
   private movedAt = 0;
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
   /** the lens settings the render camera was made with */
   private lens = "";
   /** the path tracer has the current scene */
@@ -92,6 +93,10 @@ export class LiveRenderer implements RenderHook {
     store.on("viz3d", () => this.settingsChanged());
     // a library material's textures arrived: the materials that use it take them up
     onLibraryLoaded(() => this.settingsChanged());
+    // Render's job has finished with the GPU: the Path Traced view refines again
+    onRenderBusy((on) => {
+      if (!on) this.view.redraw();
+    });
   }
 
   draw(mode: RealisticMode, renderer: THREE.WebGLRenderer, viewCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera): boolean {
@@ -100,6 +105,7 @@ export class LiveRenderer implements RenderHook {
       // the textures are decoding: the view's own picture meanwhile
       renderer.render(this.view.threeScene, viewCamera);
       publishStatus("Preparing the render…");
+      publishProgress({ mode, phase: "preparing", samples: 0, target: 0, engine: null });
       return false;
     }
     const settings = renderSettings();
@@ -109,6 +115,7 @@ export class LiveRenderer implements RenderHook {
 
     if (mode === "ai") {
       this.rasterise(renderer, scene, camera, settings);
+      publishProgress({ mode, phase: moving ? "moving" : "done", samples: 0, target: 0, engine: null });
       this.ai ??= new AiLive(() => this.view.redraw());
       return this.ai.draw(renderer, this.viewKey(renderer), performance.now() - this.movedAt, settings);
     }
@@ -116,6 +123,17 @@ export class LiveRenderer implements RenderHook {
     if (mode === "realistic") {
       this.rasterise(renderer, scene, camera, settings);
       publishStatus("Realistic");
+      publishProgress({ mode, phase: moving ? "moving" : "done", samples: 0, target: 0, engine: null });
+      // nothing else draws once the view rests, so one more frame then says it has settled
+      if (moving) this.redrawWhenSettled();
+      return false;
+    }
+
+    // Render is making pictures here: the GPU is the job's, so the view shows the Realistic picture until it ends
+    if (renderBusy()) {
+      this.rasterise(renderer, scene, camera, settings);
+      publishStatus("Path traced · paused while rendering");
+      publishProgress({ mode, phase: "paused", samples: 0, target: settings.quality.previewSamples, engine: null });
       return false;
     }
 
@@ -125,6 +143,7 @@ export class LiveRenderer implements RenderHook {
       // a clean raster picture while the path tracer loads or builds
       this.rasterise(renderer, scene, camera, settings);
       publishStatus(!engine ? "Path traced · starting…" : this.pathBuilding ? "Path traced · building the scene…" : "Path traced · moving");
+      publishProgress({ mode, phase: !engine || this.pathBuilding ? "preparing" : "moving", samples: 0, target: settings.quality.previewSamples, engine: engine?.kind ?? null });
       // keep frames coming until the view has rested
       return moving;
     }
@@ -135,6 +154,7 @@ export class LiveRenderer implements RenderHook {
         this.rasterise(renderer, scene, camera, settings);
       }
       publishStatus(`Path traced · moving${engine.kind === "webgpu" ? " · WebGPU" : ""}`);
+      publishProgress({ mode, phase: "moving", samples: 0, target: settings.quality.previewSamples, engine: engine.kind });
       return true;
     }
 
@@ -146,6 +166,8 @@ export class LiveRenderer implements RenderHook {
     else if (!engine.hasPicture) this.rasterise(renderer, scene, camera, settings);
     else this.still = null;
     publishStatus(`Path traced · ${Math.min(Math.floor(engine.samples), target)} of ${target >= 100000 ? "∞" : target} samples${engine.kind === "webgpu" ? " · WebGPU" : ""}`);
+    const taken = Math.min(Math.floor(engine.samples), target);
+    publishProgress({ mode, phase: taken < target ? "refining" : "done", samples: taken, target, engine: engine.kind });
     return engine.samples < target;
   }
 
@@ -285,6 +307,15 @@ export class LiveRenderer implements RenderHook {
     this.motion?.reset();
     engine?.dispose();
     if (scene) this.retire(scene);
+  }
+
+  /** Draws the view again once it has rested SETTLE_MS (a view that moved draws no frame of its own after). */
+  private redrawWhenSettled(): void {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      this.settleTimer = null;
+      this.view.redraw();
+    }, SETTLE_MS + 20);
   }
 
   /** The render scene for what the view shows now, with the settings taken up; null while one is being prepared. */

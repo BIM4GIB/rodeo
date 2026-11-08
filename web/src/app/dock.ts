@@ -463,6 +463,8 @@ export class Palettes {
    * the put-away state the saved arrangement keeps, brought back as the window widens (endVisit).
    */
   private kept: Pick<Layout, "palettes" | "away"> | null = null;
+  /** `kept` holds the arrangement from before solo (Render Studio), not a narrow window's visit */
+  private soloing = false;
   /** an auto-hidden dock's palette about to slide out or back */
   private hoverTimer = 0;
   /** an auto-hidden View bar about to go out of sight */
@@ -875,6 +877,29 @@ export class Palettes {
     this.commit();
   }
 
+  /**
+   * Shows `id` alone, every other palette closed, for a while (Render Studio): the arrangement saved
+   * stays as it was until endSolo brings it back. A phone's sheet, or a window whose palettes are put
+   * away for its visit, just shows it.
+   */
+  solo(id: string): void {
+    if (this.phone || this.kept !== null) {
+      this.show(id);
+      return;
+    }
+    this.kept = JSON.parse(JSON.stringify({ palettes: this.layout.palettes, away: this.layout.away })) as Pick<Layout, "palettes" | "away">;
+    this.soloing = true;
+    for (const { id: other } of this.list()) if (other !== id && this.layout.palettes[other]?.shown) this.hide(other);
+    this.show(id);
+  }
+
+  /** Ends solo: the palettes come back as they were before it. */
+  endSolo(): void {
+    if (!this.soloing) return;
+    this.soloing = false;
+    this.endVisit();
+  }
+
   /** Ends the visit's put-away palettes (awayForVisit): they come back as the saved arrangement has them. */
   endVisit(): void {
     if (this.kept === null) return;
@@ -1055,6 +1080,7 @@ export class Palettes {
   /** Back to the arrangement openvwx starts with. */
   reset(): void {
     this.kept = null;
+    this.soloing = false;
     this.layout = defaults([...this.specs.values()]);
     this.commit();
   }
@@ -1068,6 +1094,7 @@ export class Palettes {
   restore(snapshot: unknown): void {
     const opened = this.layout.opened;
     this.kept = null;
+    this.soloing = false;
     this.layout = parse([...this.specs.values()], snapshot);
     // the palettes opened before stay on their rails whatever the workspace
     this.layout.opened = { ...opened, ...this.layout.opened };

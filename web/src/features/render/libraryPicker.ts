@@ -4,6 +4,7 @@
 // open at a time, as colorPicker.ts's popover. Its keys stay in the picker: the arrows move through the
 // thumbnails, and Enter in the search box picks the first match. Solid panels (render.css), no glass.
 
+import "./libraryPicker.css";
 import { h } from "../../app/dom.ts";
 import { t } from "../../app/i18n.ts";
 import { LIBRARY, libraryUrl, type LibraryCategory } from "./library.ts";

@@ -1188,6 +1188,15 @@ export class View3D {
   }
 
   /** The insets to keep clear, or none when the palettes would leave too little of a narrow canvas. */
+  /**
+   * The part of the view the picture is centred in, CSS px from the view's left and right edges (both 0
+   * unless palettes cover its sides): the camera's axis meets the middle of what is left. Render
+   * Studio's frame is laid out from it.
+   */
+  get clearSides(): { left: number; right: number } {
+    return this.clearInsets(this.host.clientWidth);
+  }
+
   private clearInsets(w: number): { left: number; right: number } {
     const { left, right } = this.insets;
     return left + right < w * 0.6 ? { left, right } : { left: 0, right: 0 };

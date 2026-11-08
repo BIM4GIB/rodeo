@@ -21,8 +21,8 @@ import { note, reportFailure } from "../../app/reports.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
 import type { View3D } from "../../app/view3d.ts";
 import type { CameraInfo } from "../../core/index.ts";
-import { shotOfCamera, shotOfView, type Shot } from "./camera.ts";
-import { EngineRefusal, optionValues, renderEngines, type EngineOutput, type OptionValues, type RenderEngine } from "./engines.ts";
+import { fitShot, shotOfCamera, shotOfView, type Shot } from "./camera.ts";
+import { optionValues, renderEngines, type EngineOutput, type OptionValues, type RenderEngine } from "./engines.ts";
 import { engineFields, type EngineFields } from "./engineFields.ts";
 import { prepareLibrary } from "./library.ts";
 import { buildScene, type RenderScene } from "./sceneBuilder.ts";
@@ -35,34 +35,46 @@ import { requireSignIn } from "../account/signin.ts";
 import { zipFiles } from "../../export/zip.ts";
 import { showProgress } from "./progress.ts";
 import { renderStill, type Engine, type Format, type Job, type StillBox } from "./still.ts";
-import { showRenderResult, type RenderResult } from "./viewer.ts";
+import type { RenderResult } from "./viewer.ts";
+import { enterStudio, studioOn } from "./studio/state.ts";
+import {
+  ALL,
+  CAMERA_PREFIX,
+  ENGINE_IDS,
+  ENGINE_LABELS,
+  FORMAT_IDS,
+  FORMAT_LABELS,
+  MAX_MINUTES,
+  MIN_SIDE,
+  MAX_SIDE,
+  QUALITY,
+  QUALITY_IDS,
+  SHAPE_WIDTH,
+  SIZE_IDS,
+  SIZE_PRESETS,
+  SIZE_PRESET_IDS,
+  STUDIO_FRAME_PAD,
+  VIEW,
+  WHERE_IDS,
+  chosenCamera,
+  frameRect,
+  isSide,
+  megapixels,
+  outputPrefs,
+  pick,
+  prefsFrom,
+  readPrefs,
+  savePrefs,
+  sizeOf,
+  type Prefs,
+  type Quality,
+  type Size,
+  type SizeId,
+  type Where,
+} from "./studio/output.ts";
 import "./finalRender.css";
 
-type Quality = "draft" | "good" | "high" | "best";
-/** this computer's GPU, or the server's cloud renders (cloud.ts) */
-type Where = "local" | "cloud";
-type SizePreset = "hd" | "qhd" | "uhd" | "dci" | "square" | "a4";
-type SizeId = SizePreset | "shape" | "custom";
-
-/** The choices kept between renders (localStorage), and with each batch render job (batch.ts). */
-export interface Prefs {
-  /** VIEW, ALL, or CAMERA_PREFIX and a camera's id */
-  readonly camera: string;
-  readonly size: SizeId;
-  readonly width: number;
-  readonly height: number;
-  readonly engine: Engine;
-  readonly quality: Quality;
-  /** minutes a picture may take, 0 for no limit */
-  readonly minutes: number;
-  readonly denoise: boolean;
-  readonly format: Format;
-  readonly where: Where;
-  /** "" for the built-in engine alone, else the id of the engine of engines.ts that makes the pictures */
-  readonly via: string;
-  /** each such engine's fields as last chosen, by its id */
-  readonly options: Readonly<Record<string, OptionValues>>;
-}
+export type { Prefs } from "./studio/output.ts";
 
 /** One picture to make: null camera is the 3D view's current view, or `shot` when there is one. */
 export interface ShotPlan {
@@ -92,64 +104,103 @@ export interface Plan {
   readonly prefs: Prefs;
 }
 
-interface Size {
-  readonly width: number;
-  readonly height: number;
-}
-
 type SizeCheck = { readonly size: Size } | { readonly error: string; readonly focus?: HTMLElement };
 
-const PREFS_KEY = "openvwx.renderImage.v1";
 /** Export HDRI's choices, kept apart from Render Image's */
 const HDR_PREFS_KEY = "openvwx.exportHdri.v1";
-const VIEW = "view";
-const ALL = "all";
-const CAMERA_PREFIX = "camera:";
-const MIN_SIDE = 16;
-const MAX_SIDE = 8192;
-const SHAPE_WIDTH = 3840;
-const MAX_MINUTES = 600;
 /** The most pixels an HDR file's picture takes: it is drawn in 32-bit floats, 16 bytes a pixel on the graphics card */
 const MAX_HDR_PIXELS = 4096 * 4096;
 const SELECT_CLS = "menu-dialog-input menu-dialog-select render-select";
 
-const PRESETS: Readonly<Record<SizePreset, { readonly label: string; readonly width: number; readonly height: number }>> = {
-  hd: { label: "HD 1920 × 1080", width: 1920, height: 1080 },
-  qhd: { label: "QHD 2560 × 1440", width: 2560, height: 1440 },
-  uhd: { label: "4K UHD 3840 × 2160", width: 3840, height: 2160 },
-  dci: { label: "4K DCI 4096 × 2160", width: 4096, height: 2160 },
-  square: { label: "Square 2160 × 2160", width: 2160, height: 2160 },
-  a4: { label: "A4 at 300 dpi 3508 × 2480", width: 3508, height: 2480 },
-};
-const PRESET_IDS: readonly SizePreset[] = ["hd", "qhd", "uhd", "dci", "square", "a4"];
-const SIZE_IDS: readonly SizeId[] = [...PRESET_IDS, "shape", "custom"];
-const ENGINE_IDS: readonly Engine[] = ["realistic", "pathtraced"];
-const ENGINE_LABELS: Readonly<Record<Engine, string>> = {
-  realistic: "Fast — Realistic",
-  pathtraced: "Photoreal — Path traced",
-};
-const QUALITY_IDS: readonly Quality[] = ["draft", "good", "high", "best"];
-const QUALITY: Readonly<Record<Quality, { readonly label: string; readonly samples: number }>> = {
-  draft: { label: "Draft — 64 samples", samples: 64 },
-  good: { label: "Good — 256 samples", samples: 256 },
-  high: { label: "High — 1024 samples", samples: 1024 },
-  best: { label: "Best — 4096 samples", samples: 4096 },
-};
-const FORMAT_IDS: readonly Format[] = ["png", "jpeg"];
-const WHERE_IDS: readonly Where[] = ["local", "cloud"];
-const FORMAT_LABELS: Readonly<Record<Format, string>> = { png: "PNG", jpeg: "JPEG (92 %)", hdr: "Radiance HDR" };
-
-/** File > Export > Render Image…: asks what to render, makes the pictures and opens them in the render viewer. */
+/** File > Export > Render Image…: Render Studio's Output tab, where Render takes the picture. */
 export async function renderImageDialog(): Promise<void> {
+  await enterStudio("output");
+}
+
+/**
+ * Render (the Render palette's and Render Studio's shutter): Render's choices (studio/output.ts) made
+ * into pictures, here in the queue (studio/queue.ts, the editor free meanwhile) or on the cloud GPU.
+ * The current view is taken as it is now, cut to the frame, so moving the view while the job waits
+ * changes nothing. A choice that can't be made says why and shows the Output tab.
+ */
+export async function renderOutput(): Promise<void> {
   const session = store.session;
   if (!session) return;
-  const plan = await askRender(session.doc.cameras(), cloudTerms());
-  if (!plan) return;
-  savePrefs(plan.prefs);
+  const made = planOf(outputPrefs(), session.doc.cameras(), cloudTerms());
+  if ("error" in made) {
+    toast(made.error, "info");
+    void enterStudio("output");
+    return;
+  }
+  const plan = made.plan;
   // the engine's own checks before anything is drawn: signing in, enough credit
   if (plan.via?.engine.prepare && !(await plan.via.engine.prepare(plan.via.options, plan.shots.length))) return;
-  if (plan.where === "cloud") await runCloud(plan);
-  else await runJob(plan);
+  const view = await appContext()?.show3d();
+  if (!view) {
+    toast("The 3D view is not available here, so there is nothing to render.");
+    return;
+  }
+  const shots = plan.shots.map((s): ShotPlan => (s.camera || s.shot ? s : { ...s, shot: currentShot(view, plan.width, plan.height) }));
+  const fixed: Plan = { ...plan, shots };
+  if (fixed.where === "cloud") {
+    await runCloud(fixed);
+    return;
+  }
+  const { enqueue } = await import("./studio/queue.ts");
+  enqueue(fixed);
+}
+
+/**
+ * The plan Render's choices make, without a dialog: the shots, the size, the engine (built-in or of
+ * engines.ts) and its quality; or why they can't be made now. `cloud` is the server's cloud renders
+ * when this user could pay for one.
+ */
+export function planOf(prefs: Prefs, cams: readonly CameraInfo[], cloud: RenderTerms | null): { readonly plan: Plan } | { readonly error: string } {
+  const sized = sizeOf(prefs, cams);
+  if (!("size" in sized)) return sized;
+  const via = prefs.via ? (renderEngines().find((e) => e.id === prefs.via) ?? null) : null;
+  if (prefs.via && !via) return { error: "That render engine isn't available any more: choose another in Output." };
+  const why = via?.unavailable() ?? null;
+  if (why) return { error: why };
+  const chosen = chosenCamera(prefs, cams);
+  const shots: ShotPlan[] =
+    prefs.camera === ALL && cams.length > 0
+      ? cams.map((c, i) => ({ label: cameraLabel(c, i), camera: c }))
+      : chosen
+        ? [{ label: cameraLabel(chosen, cams.indexOf(chosen)), camera: chosen }]
+        : [{ label: "Current view", camera: null }];
+  const engine = prefs.engine;
+  const options = via ? optionValues(via, prefs.options[via.id]) : null;
+  return {
+    plan: {
+      shots,
+      width: sized.size.width,
+      height: sized.size.height,
+      engine,
+      samples: QUALITY[prefs.quality].samples,
+      minutes: prefs.minutes,
+      denoise: prefs.denoise,
+      format: prefs.format === "hdr" ? "png" : prefs.format,
+      where: engine === "pathtraced" && cloud && !via ? prefs.where : "local",
+      via: via && options ? { engine: via, options } : null,
+      prefs,
+    },
+  };
+}
+
+/**
+ * The 3D view's current view as Render takes it: cut to a picture `width` × `height` as the frame
+ * shows it (the largest rectangle of its shape in the clear part of the view, inside Render Studio's
+ * margins while it is on), the eye and target kept.
+ */
+export function currentShot(view: View3D, width: number, height: number): Shot {
+  const shot = shotOfView(view.activeCamera, view.orbitTarget);
+  const canvas = view.domElement;
+  const w = canvas.clientWidth;
+  const hgt = canvas.clientHeight;
+  if (w === 0 || hgt === 0) return shot;
+  const frame = frameRect(w, hgt, view.clearSides, width / height, studioOn() ? STUDIO_FRAME_PAD : undefined);
+  return fitShot(shot, frame.height / hgt);
 }
 
 /**
@@ -290,7 +341,7 @@ export interface JobForm {
  * null when cancelled.
  */
 export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null, form?: JobForm, hdr = false): Promise<Plan | null> {
-  const start = form?.start ?? readPrefs(defaultPrefs(), hdr ? HDR_PREFS_KEY : PREFS_KEY);
+  const start = form?.start ?? (hdr ? readPrefs(HDR_PREFS_KEY) : outputPrefs());
   const nameInput = h("input", { cls: "menu-dialog-input", value: form?.name ?? "", attrs: { type: "text", "aria-label": "Name" } });
   const singleCamera = (value: string): CameraInfo | null => cams.find((c) => CAMERA_PREFIX + c.id === value) ?? null;
 
@@ -307,7 +358,7 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
   // the shape of one camera is offered only when one camera is chosen
   const sizeSel = h("select", { cls: SELECT_CLS, attrs: { "aria-label": "Size" } });
   const fillSizes = (keep: string): void => {
-    const ids: SizeId[] = [...PRESET_IDS];
+    const ids: SizeId[] = [...SIZE_PRESET_IDS];
     if (singleCamera(cameraSel.value)) ids.push("shape");
     ids.push("custom");
     sizeSel.replaceChildren(...ids.map((id) => h("option", { text: sizeLabel(id), value: id })));
@@ -402,7 +453,7 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
       }
       return { size: { width: SHAPE_WIDTH, height: hgt } };
     }
-    return { size: { width: PRESETS[id].width, height: PRESETS[id].height } };
+    return { size: { width: SIZE_PRESETS[id].width, height: SIZE_PRESETS[id].height } };
   };
 
   /** the pictures the job makes before an engine's variations: one a camera */
@@ -533,31 +584,6 @@ export function askRender(cams: readonly CameraInfo[], cloud: RenderTerms | null
   });
 }
 
-/** Runs the job under its progress window, then opens the pictures made (none when cancelled). */
-async function runJob(plan: Plan): Promise<void> {
-  const job: Job = { cancelled: false, finishNow: false };
-  const box = showProgress({
-    finishable: plan.engine === "pathtraced",
-    onFinish: () => (job.finishNow = true),
-    onCancel: () => (job.cancelled = true),
-  });
-  const results: RenderResult[] = [];
-  try {
-    await makePictures(plan, job, box, results);
-  } catch (err) {
-    // an engine's own refusal (signing in, credit, its provider's no) is said, not reported
-    if (err instanceof EngineRefusal) {
-      toast(err.message);
-    } else {
-      toast(`Render failed: ${errorMessage(err)}`);
-      reportFailure("render", err, { ...planDetails(plan), made: results.length });
-    }
-  } finally {
-    box.close();
-  }
-  if (!job.cancelled && results.length > 0) showRenderResult(results);
-}
-
 /** A render's settings as an error report carries them. */
 export function planDetails(plan: Plan): Record<string, string | number | boolean> {
   return {
@@ -589,7 +615,7 @@ async function runCloud(plan: Plan): Promise<void> {
     still: { width: plan.width, height: plan.height, engine: plan.engine, samples: plan.samples, minutes: plan.minutes, format: plan.format },
     settings: jobSettings(plan),
     viz: store.viz3d,
-    shots: plan.shots.map((target) => ({ label: target.label, shot: shotFor(view, target) })),
+    shots: plan.shots.map((target) => ({ label: target.label, shot: shotFor(view, target, plan.width, plan.height) })),
   });
 }
 
@@ -630,7 +656,7 @@ export async function makePictures(plan: Plan, job: Job, box: StillBox, results:
       const prefix = plan.shots.length > 1 ? `Shot ${i + 1} of ${plan.shots.length} · ` : "";
       const started = performance.now();
       if (via?.engine.takes === "scene") {
-        const outputs = await runEngine(via, { plan, shot: shotFor(view, target), name: target.label, picture: null, scene: sceneOf, job, box, prefix });
+        const outputs = await runEngine(via, { plan, shot: shotFor(view, target, plan.width, plan.height), name: target.label, picture: null, scene: sceneOf, job, box, prefix });
         for (const o of outputs) results.push(await engineResult(o, via.engine, target.label, null, started));
         continue;
       }
@@ -641,11 +667,11 @@ export async function makePictures(plan: Plan, job: Job, box: StillBox, results:
       }
       // an engine that paints the picture gets it at its own size
       const drawn = via?.engine.maxSide ? { ...plan, ...fit(plan, via.engine.maxSide) } : plan;
-      const shot = shotFor(view, target);
+      const shot = shotFor(view, target, plan.width, plan.height);
       const still = await renderStill(scene, shot, drawn, settings, job, box, { prefix, laterShots: plan.shots.length - i - 1 });
       if (!still) return;
       if (!via) {
-        results.push({ ...still, width: drawn.width, height: drawn.height, name: target.label, engine: plan.engine === "realistic" ? "Realistic" : "Path traced" });
+        results.push({ ...still, width: drawn.width, height: drawn.height, name: target.label, engine: plan.engine === "realistic" ? "Fast" : "Photoreal" });
         continue;
       }
       if (job.cancelled) return;
@@ -744,9 +770,9 @@ function jobSettings(plan: Plan): RenderSettings {
   return { ...base, quality: { ...base.quality, previewSamples: plan.samples, denoise: plan.denoise } };
 }
 
-function shotFor(view: View3D, target: ShotPlan): Shot {
+function shotFor(view: View3D, target: ShotPlan, width: number, height: number): Shot {
   if (target.shot) return target.shot;
-  return target.camera ? shotOfCamera(target.camera) : shotOfView(view.activeCamera, view.orbitTarget);
+  return target.camera ? shotOfCamera(target.camera) : currentShot(view, width, height);
 }
 
 function field(label: string, control: HTMLElement, unit = ""): HTMLLabelElement {
@@ -762,7 +788,7 @@ function field(label: string, control: HTMLElement, unit = ""): HTMLLabelElement
 function sizeLabel(id: SizeId): string {
   if (id === "shape") return "Camera's shape at 4K";
   if (id === "custom") return "Custom";
-  return PRESETS[id].label;
+  return SIZE_PRESETS[id].label;
 }
 
 /** A camera's name in the lists, or "Camera n" when it has none. */
@@ -770,85 +796,9 @@ export function cameraLabel(c: CameraInfo, index: number): string {
   return c.name.trim() || `Camera ${index + 1}`;
 }
 
-/** A picture side the dialog and the job accept: a whole number of pixels. */
-function isSide(v: unknown): v is number {
-  return typeof v === "number" && Number.isInteger(v) && v >= MIN_SIDE && v <= MAX_SIDE;
-}
-
-/** Megapixels of a picture, to one decimal place (two below a tenth). */
-function megapixels(width: number, height: number): string {
-  const mp = (width * height) / 1e6;
-  return mp < 0.1 ? mp.toFixed(2) : mp.toFixed(1);
-}
-
-function pick<T extends string>(value: unknown, options: readonly T[], fallback: T): T {
-  return options.find((o) => o === value) ?? fallback;
-}
-
-/** The choices Render Image starts with: the last render's. */
+/** The choices Render starts with: the last render's (batch.ts's new jobs start from them). */
 export function lastPrefs(): Prefs {
-  return readPrefs(defaultPrefs());
+  return outputPrefs();
 }
 
-function defaultPrefs(): Prefs {
-  return {
-    camera: VIEW,
-    size: "uhd",
-    width: 1920,
-    height: 1080,
-    engine: "pathtraced",
-    quality: "good",
-    minutes: 0,
-    denoise: renderSettings().quality.denoise,
-    format: "png",
-    where: "local",
-    via: "",
-    options: {},
-  };
-}
-
-/** The choices kept from the last render, over `defaults`; anything unreadable or out of range falls back. */
-function readPrefs(defaults: Prefs, key = PREFS_KEY): Prefs {
-  let parsed: unknown = {};
-  try {
-    parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
-  } catch {
-    // storage blocked or not JSON: the defaults
-  }
-  return prefsFrom(parsed, defaults);
-}
-
-/** Choices as read back from storage, over `defaults`; anything unreadable or out of range falls back. */
-export function prefsFrom(parsed: unknown, defaults: Prefs = defaultPrefs()): Prefs {
-  const raw: Record<string, unknown> = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-  return {
-    camera: typeof raw.camera === "string" ? raw.camera : defaults.camera,
-    size: pick<SizeId>(raw.size, SIZE_IDS, defaults.size),
-    width: isSide(raw.width) ? raw.width : defaults.width,
-    height: isSide(raw.height) ? raw.height : defaults.height,
-    engine: pick<Engine>(raw.engine, ENGINE_IDS, defaults.engine),
-    quality: pick<Quality>(raw.quality, QUALITY_IDS, defaults.quality),
-    minutes: typeof raw.minutes === "number" && raw.minutes >= 0 && raw.minutes <= MAX_MINUTES ? raw.minutes : defaults.minutes,
-    denoise: typeof raw.denoise === "boolean" ? raw.denoise : defaults.denoise,
-    format: pick<Format>(raw.format, FORMAT_IDS, defaults.format),
-    where: pick<Where>(raw.where, WHERE_IDS, defaults.where),
-    via: typeof raw.via === "string" ? raw.via : defaults.via,
-    options: optionsFrom(raw.options) ?? defaults.options,
-  };
-}
-
-/** Engines' kept fields: an object of objects (each engine checks its own values when it reads them). */
-function optionsFrom(v: unknown): Record<string, OptionValues> | null {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
-  const out: Record<string, OptionValues> = {};
-  for (const [id, values] of Object.entries(v)) if (typeof values === "object" && values !== null && !Array.isArray(values)) out[id] = values as OptionValues;
-  return out;
-}
-
-function savePrefs(prefs: Prefs, key = PREFS_KEY): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(prefs));
-  } catch {
-    // private windows and full storage: the choices last this session
-  }
-}
+export { prefsFrom };
