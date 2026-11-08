@@ -1,13 +1,14 @@
 // The converter's Node setup. Importing this file once, for its side effects, lets the converter run
 // under Node (the command line, the MCP server's headless mode, the checks): it installs a FileReader
 // for three's glTF exporter, which Node lacks, and hands the converter the WebAssembly readers loaded
-// the way Node loads them (web-ifc, rhino3dm and rvt-rs). A browser never imports this file; a page
-// hands its own loaders to useLibraries instead.
+// the way Node loads them (web-ifc, rhino3dm, occt-import-js and rvt-rs). A browser never imports this
+// file; a page hands its own loaders to useLibraries instead.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IfcReader } from "../import/ifc.ts";
+import { loadOcct } from "../import/occt.ts";
 import type { Rhino } from "../import/rhino.ts";
 import { type Libraries, type RvtModule, useLibraries } from "./libs.ts";
 
@@ -77,6 +78,8 @@ useLibraries({
     const { default: rhino3dm } = await import("rhino3dm");
     return (await rhino3dm()) as Rhino;
   }),
+  // occt-import-js's Node build finds its WebAssembly beside its script (the command line copies it there)
+  occt: once(() => loadOcct()),
   revit: once(async (): Promise<RvtModule> => {
     const rvt = await import("../../vendor/rvt-rs/rvt.js");
     const wasmPath = wasmDir ? join(wasmDir, "rvt_bg.wasm") : fileURLToPath(new URL("../../vendor/rvt-rs/rvt_bg.wasm", import.meta.url));

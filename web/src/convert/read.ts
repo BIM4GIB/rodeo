@@ -16,6 +16,7 @@ import { parseIfc } from "../import/ifc.ts";
 import { type MeshFile, parse3ds, parseGltf, parseObj, parseStl } from "../import/mesh.ts";
 import { openPdf, type PdfPage } from "../import/pdf.ts";
 import { readWith } from "../import/rvtModel.ts";
+import { meshSolids } from "../import/solids.ts";
 import { parseUsd, type UsdFile } from "../import/usd.ts";
 import { formatById, formatInfo, formatOfName } from "./formats.ts";
 import { libraries } from "./libs.ts";
@@ -103,7 +104,14 @@ async function cad(id: "dwg" | "dxf", bytes: Uint8Array, name: string, progress:
   } else {
     drawing = parseDxf(utf8OrWindows1252(bytes));
   }
+  if (drawing.solids.length > 0) {
+    progress("Meshing the 3D solids");
+    drawing = await meshSolids(drawing, () => libraries().occt());
+  }
   notes.push("each AutoCAD layer is a class");
+  // the converter is given no external reference files, so those a drawing needs are left out and named
+  const missing = drawing.xrefs.filter((x) => !x.found).map((x) => x.name);
+  if (missing.length > 0) notes.push(`external references not found: ${missing.join(", ")}`);
   // a drawing in feet or inches gets the same units, as the editor's import gives it a new drawing
   const units: "mm" | "ftin" = drawing.mmPerUnit === 25.4 || drawing.mmPerUnit === 304.8 ? "ftin" : "mm";
   const s = openVwx(blankDrawing(units));
@@ -184,6 +192,12 @@ async function readModel(id: string, name: string, base: string, bytes: Uint8Arr
       return (await import("../import/ply.ts")).parsePly(bytes, base);
     case "skp":
       return (await import("../import/skp.ts")).parseSkp(bytes);
+    case "step":
+    case "iges": {
+      progress("Loading the STEP and IGES reader");
+      const [{ readStep, readIges }, occt] = await Promise.all([import("../import/step.ts"), libraries().occt()]);
+      return id === "step" ? readStep(bytes, occt) : readIges(bytes, occt);
+    }
     default:
       throw new Error(`Rodeo doesn't read ${id}`);
   }

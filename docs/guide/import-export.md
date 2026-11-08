@@ -55,12 +55,15 @@ Drawings export as DXF (R12, in the document's units) and SVG, and with **Export
 
 **File › Open** (or dropping a `.dwg` on the start screen) opens an AutoCAD DWG file as a new drawing, and **File › Import › Import DWG…** (or dropping one on the window) brings one into the drawing you have open. It reads every release from R13 to the 2018 format AutoCAD still saves, with no need to save it as DXF first.
 
-- Lines, arcs, circles, ellipses, polylines, splines, points, text, blocks (dynamic blocks too), dimensions, leaders, tables and hatches come in at the drawing's own size, each DWG layer becoming a class.
+- Lines, arcs, circles, ellipses, polylines, splines, points, text, blocks (dynamic blocks too), dimensions, leaders, multileaders, tables and hatches come in at the drawing's own size, each DWG layer becoming a class.
+- A multileader comes in as its leader lines, landing and arrowheads (AutoCAD's closed arrow unless it names another), with its text or block.
 - Objects keep their colour (the nearest in your palette) and line weight. Solid and gradient hatches come in filled, patterned ones as their lines, and layers that are off or frozen become hidden classes.
 - Dashed line types come across when your drawing already has a line type to copy.
 - A drawing with nothing in model space comes in from its paper space.
+- 3D faces, polyface and polygon meshes, MESH objects, and 3D solids, regions and bodies come in as meshes in their colour, and Top/Plan shows them from above. They go in a group of their own beside the 2D objects'. The solids are meshed through [OpenCascade](#step-and-iges), which loads the first time a drawing has one.
+- External references (xrefs) are drawn from their own files, their layers coming in as classes named like AutoCAD's, `SITEPLAN|WALLS`. Drop the files with the drawing to use them straight away; otherwise the import lists the ones it needs and asks for them, and **Import Without Them** leaves them out. An overlay isn't drawn inside another xref, as in AutoCAD.
 
-**Limits:** multileaders, 3D solids, images and xrefs are left out, and the import says how many.
+**Limits:** images, underlays, wipeouts and objects of AutoCAD's vertical apps are left out, and the import says how many. Faces of a solid on a spline surface (a loft, or a blend between curved faces) and elliptical cones are left out of its mesh.
 
 ### Import Image File(s)… and Paste as Bitmap
 
@@ -154,6 +157,17 @@ Models from other design and 3D apps come in the same way, each file saying its 
 Each pen is coloured as Rhino shows it, and everything is grouped by Rhino layer, each group named after its layer path.
 
 **Limits:** a file saved with Save Small has no render meshes, and its surfaces are left out and counted, as are SubDs and bare surfaces.
+
+### STEP and IGES
+
+**File › Import › Import STEP…** and **Import IGES…** (or dropping a `.stp`, `.step`, `.igs` or `.iges`) read the solids and surfaces of mechanical CAD files, through [OpenCascade](https://www.opencascade.com) as WebAssembly (LGPL-2.1, loaded only when such a file is first imported). Units and up axis come from the file, and STEP and IGES are z up.
+
+- Each assembly comes in as a group named after its node, and each part as a mesh named after it.
+- A part's faces keep the colour the file gives them, so a part with coloured faces comes in as one mesh per colour.
+- Curves are triangulated to within 0.1% of a part's size and 14° of its surface, so a large or finely curved part makes many triangles.
+- **File › Open** takes them too, as a drop does: into a new drawing when none is open.
+
+**Limits:** at most 250,000 triangles come in at once, so a model that would make more is triangulated coarser to fit; a file with no shapes in it (wires only) is refused with that said.
 
 ### FBX
 

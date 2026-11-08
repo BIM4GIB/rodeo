@@ -1,4 +1,4 @@
-// Builds the rodeo command into dist/: one self-contained rodeo.mjs, the three WebAssembly readers
+// Builds the rodeo command into dist/: one self-contained rodeo.mjs, the WebAssembly readers
 // beside it, and THIRD-PARTY-NOTICES.txt with the licences of what was bundled. It bundles from the
 // web/ folder and uses the esbuild that web/ already has, so nothing is installed here. Run it with
 // npm run build in cli/, or node cli/build.mjs from anywhere.
@@ -20,8 +20,8 @@ if (!existsSync(join(web, "node_modules"))) {
 const { build } = createRequire(join(web, "package.json"))("esbuild");
 
 // The banner gives the bundle the require, __filename and __dirname that the packages it bundles
-// expect from a CommonJS module (web-ifc's and rhino3dm's Node builds look for their WebAssembly
-// beside themselves through them).
+// expect from a CommonJS module (web-ifc's, rhino3dm's and occt-import-js's Node builds look for their
+// WebAssembly beside themselves through them).
 const BANNER = `#!/usr/bin/env node
 import { createRequire as __rodeoRequire } from "node:module"; import { fileURLToPath as __rodeoPath } from "node:url"; import { dirname as __rodeoDir } from "node:path"; const require = __rodeoRequire(import.meta.url); const __filename = __rodeoPath(import.meta.url); const __dirname = __rodeoDir(__filename);`;
 
@@ -57,6 +57,7 @@ chmodSync(join(dist, "rodeo.mjs"), 0o755);
 const wasm = [
   [join(web, "node_modules/web-ifc/web-ifc-node.wasm"), "web-ifc-node.wasm"],
   [join(web, "node_modules/rhino3dm/rhino3dm.wasm"), "rhino3dm.wasm"],
+  [join(web, "node_modules/occt-import-js/dist/occt-import-js.wasm"), "occt-import-js.wasm"],
   [join(web, "vendor/rvt-rs/rvt_bg.wasm"), "rvt_bg.wasm"],
 ];
 for (const [from, name] of wasm) {

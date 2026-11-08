@@ -1,8 +1,9 @@
-// Where the converter's WebAssembly readers come from: web-ifc (IFC), rhino3dm (Rhino) and rvt-rs
-// (Revit) load differently in Node (node.ts) and in a page's worker (page/worker.ts), so whichever
-// runs the converter hands its loaders over once with useLibraries.
+// Where the converter's WebAssembly readers come from: web-ifc (IFC), rhino3dm (Rhino), OpenCascade (STEP
+// and IGES) and rvt-rs (Revit) load differently in Node (node.ts) and in a page's worker (page/worker.ts),
+// so whichever runs the converter hands its loaders over once with useLibraries.
 
 import type { IfcReader } from "../import/ifc.ts";
+import type { Occt } from "../import/occt.ts";
 import type { Rhino } from "../import/rhino.ts";
 
 /** rvt-rs's module, initialised. */
@@ -12,6 +13,7 @@ export type RvtModule = typeof import("../../vendor/rvt-rs/rvt.js");
 export interface Libraries {
   ifc(): Promise<IfcReader>;
   rhino(): Promise<Rhino>;
+  occt(): Promise<Occt>;
   revit(): Promise<RvtModule>;
 }
 

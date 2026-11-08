@@ -67,7 +67,7 @@ rodeo formats
 - STL (`.stl`), PLY (`.ply`), 3DS (`.3ds`): reads and writes
 - USD (`.usdz`, `.usd`, `.usda`, `.usdc`): reads; writes `.usdz`
 - Blender (`.blend`): reads
-- STEP (`.stp`, `.step`), IGES (`.igs`, `.iges`): writes
+- STEP (`.stp`, `.step`), IGES (`.igs`, `.iges`): reads and writes
 
 PNG is written by the converter page (rodeo.build/convert), not here.
 

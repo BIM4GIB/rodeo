@@ -25,7 +25,7 @@ import { installAutosave } from "./autosave.ts";
 import { type RecentEntry, loadRecent, openRecentEntry, recentRows, rememberRecent } from "./recent.ts";
 import { note, reportFailure } from "./reports.ts";
 import { askPdfOptions, printPdf } from "./exportDialog.ts";
-import { importDroppedDwg, importDroppedDxf, importDwgFile, importDxfFile, openDwgBytes } from "./dxfImport.ts";
+import { importDroppedDwg, importDroppedDxf, importDwgFile, importDxfFile, type ImportOptions, openDwgBytes } from "./dxfImport.ts";
 import { installCrosshair } from "./crosshair.ts";
 import { drawRulers, installRulers } from "./rulers.ts";
 import { drawOriginMarker } from "./origin.ts";
@@ -1152,7 +1152,7 @@ export class App {
     installFileDrop((file, handle, all) => {
       const pictures = all.filter((f) => isImageName(f.name));
       if (store.session && isImageName(file.name)) void importImages(pictures, this.view);
-      else void this.openFile(file, handle);
+      else void this.openFile(file, handle, all);
     });
     void loadRecent();
     installAutosave({ openDocument: async (bytes, name) => void (await this.openDocument(bytes, name, null)) });
@@ -1398,7 +1398,11 @@ export class App {
     try {
       const picked = await pickFile(false, true);
       if (picked && /\.dwg$/i.test(picked.name)) await this.openDwg(picked.file, picked.name);
-      else if (picked && isRevitModelName(picked.name)) await this.openRevitModel(new Uint8Array(await picked.file.arrayBuffer()), picked.name);
+      else if (picked && meshFormat(picked.name)) {
+        // a STEP or IGES model comes in as a dropped one does: into a new drawing when none is open
+        if (!store.session) await this.newDrawing();
+        await importMesh(new File([picked.file], picked.name), this.scene, this.view);
+      } else if (picked && isRevitModelName(picked.name)) await this.openRevitModel(new Uint8Array(await picked.file.arrayBuffer()), picked.name);
       else if (picked && isRevitName(picked.name)) await showRevitFile(new Uint8Array(await picked.file.arrayBuffer()), picked.name, this.view);
       else if (picked && isArchicadName(picked.name)) await this.openArchicadModel(picked.file, picked.name);
       else if (picked) tellFileIn(picked.file, picked.name, await this.openDocument(picked.file, picked.name, picked.handle));
@@ -1421,8 +1425,8 @@ export class App {
   }
 
   /** A .dwg opened with File > Open, or dropped with no drawing open: its objects in a new, untitled drawing. */
-  private async openDwg(file: Blob, name: string): Promise<void> {
-    await openDwgBytes(new Uint8Array(await file.arrayBuffer()), name, () => this.newDrawing(), this.scene, this.view);
+  private async openDwg(file: Blob, name: string, options: ImportOptions = {}): Promise<void> {
+    await openDwgBytes(new Uint8Array(await file.arrayBuffer()), name, () => this.newDrawing(), this.scene, this.view, options);
   }
 
   /** Opens `data` as the next "Untitled n", with no file behind it: Save asks where it goes. */
@@ -1481,17 +1485,19 @@ export class App {
     }
   }
 
-  /** A file dropped on the window: a .dxf, .dwg, .pdf, .emf or 3D model (.obj, .glb, .gltf, .3ds, .stl, .ifc, .usd, .3dm, .fbx, .dae, .kmz, .blend, .ply, .skp) is imported into the open drawing (a DWG or model into a new one when none is open), a .csv, .tsv, .dif, .slk or .xlsx as a worksheet, a Revit project opens as a drawing of its model (a family's or template's details are shown), anything else is opened (with its handle, when the browser gave one). */
-  private async openFile(file: File, handle: Promise<FileSystemFileHandle | null>): Promise<void> {
+  /** A file dropped on the window: a .dxf, .dwg, .pdf, .emf or 3D model (.obj, .glb, .gltf, .3ds, .stl, .ifc, .usd, .3dm, .stp, .step, .igs, .iges, .fbx, .dae, .kmz, .blend, .ply, .skp) is imported into the open drawing (a DWG or model into a new one when none is open), a .csv, .tsv, .dif, .slk or .xlsx as a worksheet, a Revit project opens as a drawing of its model (a family's or template's details are shown), anything else is opened (with its handle, when the browser gave one). */
+  private async openFile(file: File, handle: Promise<FileSystemFileHandle | null>, all: readonly File[] = []): Promise<void> {
+    // the other files dropped with it may be the external references it needs
+    const siblings = all.filter((f) => f !== file);
     if (/\.dxf$/i.test(file.name)) {
-      await importDroppedDxf(file, this.scene, this.view);
+      await importDroppedDxf(file, this.scene, this.view, { siblings });
       return;
     }
     if (/\.dwg$/i.test(file.name)) {
-      if (store.session) await importDroppedDwg(file, this.scene, this.view);
+      if (store.session) await importDroppedDwg(file, this.scene, this.view, { siblings });
       else {
         try {
-          await this.openDwg(file, file.name);
+          await this.openDwg(file, file.name, { siblings });
         } catch (err) {
           toast(`Could not read ${file.name}: ${errorMessage(err)}`);
         }

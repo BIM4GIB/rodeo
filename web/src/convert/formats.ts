@@ -27,8 +27,8 @@ export const FORMATS: readonly FormatInfo[] = [
   { id: "3ds", name: "3DS", long: "3D Studio", readExtensions: ["3ds"], writeExtensions: ["3ds"], kind: "3d", mime: "application/x-3ds" },
   { id: "usdz", name: "USD", long: "Universal Scene Description", readExtensions: ["usdz", "usd", "usda", "usdc"], writeExtensions: ["usdz"], kind: "3d", mime: "model/vnd.usdz+zip" },
   { id: "blend", name: "Blender", long: "Blender file", readExtensions: ["blend"], writeExtensions: [], kind: "3d", mime: "application/octet-stream" },
-  { id: "step", name: "STEP", long: "STEP (AP214)", readExtensions: [], writeExtensions: ["stp", "step"], kind: "3d", mime: "model/step" },
-  { id: "iges", name: "IGES", long: "IGES", readExtensions: [], writeExtensions: ["igs", "iges"], kind: "3d", mime: "model/iges" },
+  { id: "step", name: "STEP", long: "STEP (AP214)", readExtensions: ["stp", "step"], writeExtensions: ["stp", "step"], kind: "3d", mime: "model/step" },
+  { id: "iges", name: "IGES", long: "IGES", readExtensions: ["igs", "iges"], writeExtensions: ["igs", "iges"], kind: "3d", mime: "model/iges" },
 ];
 
 /** The ids of the formats that can be read and written, in table order. */

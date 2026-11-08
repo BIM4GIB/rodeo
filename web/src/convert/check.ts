@@ -48,9 +48,9 @@ async function rejects(what: string, fn: () => Promise<unknown>, text: string): 
 
 // ---- round trip through every format the matrix names ----------------------------------------------
 
-const ROUND_TRIP = ["vwx", "dxf", "pdf", "emf", "ifc", "skp", "3dm", "glb", "obj", "fbx", "dae", "stl", "ply", "3ds", "usdz"];
+const ROUND_TRIP = ["vwx", "dxf", "pdf", "emf", "ifc", "skp", "3dm", "glb", "obj", "fbx", "dae", "stl", "ply", "3ds", "usdz", "step", "iges"];
 /** The formats whose 3D model comes back: the fixture's ground box must keep its size. */
-const THREE_D = new Set(["ifc", "skp", "3dm", "glb", "obj", "fbx", "dae", "stl", "ply", "3ds", "usdz"]);
+const THREE_D = new Set(["ifc", "skp", "3dm", "glb", "obj", "fbx", "dae", "stl", "ply", "3ds", "usdz", "step", "iges"]);
 /** How each format's file says its units and up axis, when it doesn't say them itself. */
 const READ_AS: Readonly<Record<string, ReadOptions>> = {
   obj: { units: "m", yUp: true },

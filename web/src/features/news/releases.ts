@@ -22,6 +22,27 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-08T12:02:00Z",
+    "dwg-solids-xrefs",
+    "DWG multileaders, xrefs and 3D solids come in",
+    `The parts of a DWG that used to be left out now come in: multileaders, the drawings it references, and its 3D solids.
+- A multileader comes in as its leader lines, landing and arrowheads, with its text or block.
+- External references (xrefs) are drawn from their own files, their layers becoming classes named like AutoCAD's, SITEPLAN|WALLS. Drop the files with the drawing, or choose them when the import asks; Import Without Them leaves them out.
+- 3D solids, regions and bodies come in as meshes in their colour, in a group of their own, and Top/Plan shows them from above. 3D faces, polyface and polygon meshes and MESH objects come in the same way.
+- DXF files get all of this too, and so does the file converter.`,
+    "solids",
+  ),
+  release(
+    "2026-11-08T12:01:00Z",
+    "step-iges-import",
+    "Import STEP and IGES models",
+    `Mechanical CAD models come in: File > Import STEP… and Import IGES…, or drop a .stp, .step, .igs or .iges on the window.
+- Each assembly comes in as a group and each part as a mesh, both named as the file names them, in the colours of their faces.
+- File > Open takes them too, into a new drawing when none is open.
+- The file converter turns STEP and IGES into OBJ, GLB and STL, and STEP into IFC.`,
+    "gears",
+  ),
+  release(
     "2026-11-08T12:00:00Z",
     "ai-render",
     "AI renders, and render engines from plug-ins",

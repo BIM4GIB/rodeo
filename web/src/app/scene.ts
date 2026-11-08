@@ -367,7 +367,8 @@ export class Scene {
     let box: BBox | null = null;
     for (const layer of this.drawnLayers(activeId)) {
       for (const obj of this.index(layer.id).objects) {
-        if (!obj.shape || !this.isObjectVisible(obj)) continue;
+        // a mesh draws in plan as its plan lines
+        if ((!obj.shape && !obj.planLines) || !this.isObjectVisible(obj)) continue;
         box = unionBBox(box, this.shownBox(obj));
       }
       // what viewports draw: a plan viewport its crop on the sheet (a sheet may hold nothing else), a design-layer one the box round its drawing

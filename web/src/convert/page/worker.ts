@@ -14,6 +14,7 @@ import {
   type Unit,
 } from "../index.ts";
 import { ifcReader } from "../../import/ifc.ts";
+import { occtLib } from "../../import/occt.ts";
 import { rhinoLib } from "../../import/rhino3dm.ts";
 import type { PreviewMesh } from "./preview3d.ts";
 
@@ -51,6 +52,7 @@ function once<T>(load: () => Promise<T>): () => Promise<T> {
 useLibraries({
   ifc: ifcReader,
   rhino: rhinoLib,
+  occt: occtLib,
   revit: once(async () => {
     const rvt = await import("../../../vendor/rvt-rs/rvt.js");
     await rvt.default({ module_or_path: new URL("../../../vendor/rvt-rs/rvt_bg.wasm", import.meta.url) });

@@ -1,12 +1,12 @@
 // File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, FBX…, Collada (SketchUp)…,
-// Blender…, PLY… and SketchUp…: a 3D model's parts as meshes on the active layer, in the active class,
-// grouped, selected and zoomed to, as one undo step.
+// Blender…, PLY…, SketchUp…, STEP… and IGES…: a 3D model's parts as meshes on the active layer, in the
+// active class, grouped, selected and zoomed to, as one undo step.
 // OBJ, 3DS, STL and PLY files say nothing reliable of their units or which way is up, so the user
 // says (metres, with y up for OBJ and z up for 3DS and PLY, as most are and as File > Export writes
 // them; millimetres and z up for STL, as 3D printing has it); a glTF file is metres and y up by
-// definition, and IFC, Rhino, FBX, Collada and Blender files say their units and up axis. A SketchUp
-// file is inches and z up whatever units its model shows. A USD file says its units per metre and up
-// axis, and Vectorworks' Import USD Options can re-scale it, redefine its up axis and offset it.
+// definition, and IFC, Rhino, FBX, Collada, Blender, STEP and IGES files say their units and up axis.
+// A SketchUp file is inches and z up whatever units its model shows. A USD file says its units per
+// metre and up axis, and Vectorworks' Import USD Options can re-scale it, redefine its up axis and offset it.
 // Coordinates are kept, so a model exported from here comes back where it was. An STL or USD model
 // can come in as a symbol, as Vectorworks' Import as symbol does: its definition holds the meshes, an
 // instance at the origin shows them where they were. A Rhino file's blocks, a Collada file's instanced
@@ -18,14 +18,16 @@
 // scene node, a Blender collection, a SketchUp model's top-level groups and components), each group
 // named after it. A SketchUp tag is a class of the same name, as a DXF layer is: an existing one is
 // reused, otherwise one is made. A Rhino file's curves, text and points come in as 2D objects in plan,
-// in their layer's group, pen coloured as in Rhino. The reading is in import/; the readers of the
-// newer formats (and Rhino's WebAssembly) load only when such a file is imported. New meshes copy
-// their settings from one in the drawing, as Convert to Mesh does, or from the built-in one in a
-// drawing that has none.
+// in their layer's group, pen coloured as in Rhino. A STEP or IGES file's assembly comes in as groups,
+// each named after its node, with a mesh for each colour its shape's faces have. The reading is in
+// import/; the readers of the newer formats (and Rhino's and OpenCascade's WebAssembly) load only when
+// such a file is imported. New meshes copy their settings from one in the drawing, as Convert to Mesh
+// does, or from the built-in one in a drawing that has none.
 
 import type { Attributes, ImageTextureSpec, MeshNode } from "../core/index.ts";
 import { ifcReader, parseIfc } from "../import/ifc.ts";
 import { countOf, MAX_FACES, parse3ds, parseGltf, parseObj, parseStl, treeFaces, treeLines, type MeshFile, type MeshPart, type MeshTexture, type MeshTree, type MeshTreeNode } from "../import/mesh.ts";
+import { occtLib } from "../import/occt.ts";
 import { rhinoLib } from "../import/rhino3dm.ts";
 import { parseUsd, type UsdFile } from "../import/usd.ts";
 import { attempt, setEditGroup, zoomToSelection } from "./commands.ts";
@@ -42,7 +44,7 @@ import { formatLength, parseLength } from "./units.ts";
 import type { View } from "./view.ts";
 
 /** The 3D formats File > Import reads. */
-export type MeshImportFormat = "obj" | "gltf" | "3ds" | "stl" | "ifc" | "usd" | "3dm" | "fbx" | "dae" | "blend" | "ply" | "skp";
+export type MeshImportFormat = "obj" | "gltf" | "3ds" | "stl" | "ifc" | "usd" | "3dm" | "fbx" | "dae" | "blend" | "ply" | "skp" | "step" | "iges";
 type Format = MeshImportFormat;
 /** Most meshes an import names after the file's objects: past it they stay unnamed, as each name takes one of the drawing's 65,535. */
 const MAX_NAMED = 2000;
@@ -50,7 +52,7 @@ const MAX_NAMED = 2000;
 type Asks = "obj" | "3ds" | "stl" | "ply";
 const ASKS: ReadonlySet<Format> = new Set<Format>(["obj", "3ds", "stl", "ply"]);
 /** the formats that may take a while to read (a WebAssembly reader to load, or big files), which show a progress note */
-const SLOW: ReadonlySet<Format> = new Set<Format>(["ifc", "3dm", "fbx", "dae", "blend", "skp"]);
+const SLOW: ReadonlySet<Format> = new Set<Format>(["ifc", "3dm", "fbx", "dae", "blend", "skp", "step", "iges"]);
 
 const FORMAT_NAME: Record<Format, string> = {
   obj: "OBJ",
@@ -65,6 +67,8 @@ const FORMAT_NAME: Record<Format, string> = {
   blend: "Blender",
   ply: "PLY",
   skp: "SketchUp",
+  step: "STEP",
+  iges: "IGES",
 };
 /** "a glTF", "an OBJ": the article each name takes as it is said */
 const A_FORMAT: Record<Format, string> = {
@@ -80,6 +84,8 @@ const A_FORMAT: Record<Format, string> = {
   blend: "a Blender",
   ply: "a PLY",
   skp: "a SketchUp",
+  step: "a STEP",
+  iges: "an IGES",
 };
 const ACCEPT: Record<Format, string> = {
   obj: ".obj",
@@ -94,6 +100,8 @@ const ACCEPT: Record<Format, string> = {
   blend: ".blend",
   ply: ".ply",
   skp: ".skp",
+  step: ".stp,.step,model/step",
+  iges: ".igs,.iges,model/iges",
 };
 /** each format's file names */
 const EXTENSIONS: readonly [Format, RegExp][] = [
@@ -110,6 +118,8 @@ const EXTENSIONS: readonly [Format, RegExp][] = [
   ["blend", /\.blend\d*$/i],
   ["ply", /\.ply$/i],
   ["skp", /\.skp$/i],
+  ["step", /\.(stp|step)$/i],
+  ["iges", /\.(igs|iges)$/i],
 ];
 
 /** OBJ units the dialog offers, in millimetres each. */
@@ -164,7 +174,7 @@ function ready(format: Format): boolean {
   return true;
 }
 
-/** File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, FBX…, Collada…, Blender…, PLY… or SketchUp…: asks for the file and imports it. */
+/** File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, FBX…, Collada…, Blender…, PLY…, SketchUp…, STEP… or IGES…: asks for the file and imports it. */
 export function importMeshFile(format: Format, scene: Scene, view: View): void {
   if (!ready(format)) return;
   const input = h("input", { attrs: { type: "file", accept: ACCEPT[format] }, hidden: true });
@@ -218,6 +228,11 @@ async function readModel(format: Format, name: string, bytes: Uint8Array): Promi
       return (await import("../import/ply.ts")).parsePly(bytes, base);
     case "skp":
       return (await import("../import/skp.ts")).parseSkp(bytes);
+    case "step":
+    case "iges": {
+      const [{ readStep, readIges }, occt] = await Promise.all([import("../import/step.ts"), occtLib()]);
+      return format === "step" ? readStep(bytes, occt) : readIges(bytes, occt);
+    }
   }
 }
 

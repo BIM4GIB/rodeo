@@ -4,7 +4,7 @@
 // app/meshImport.ts: when one of those changes its placing, change the matching placer too.
 
 import type { Attributes, EditSession, MeshGroupNode, MeshModel, MeshNode, NewShape, Pt } from "../core/index.ts";
-import { dxfPlacements, type DxfDrawing, type DxfPlacement } from "../import/dxf.ts";
+import { dxfPlacements, type DxfDrawing, type DxfMesh, type DxfPlacement } from "../import/dxf.ts";
 import { MAX_NESTED_SUBPATHS, type PdfColor, type PdfPage } from "../import/pdf.ts";
 import { type MeshFile, type MeshPart, type MeshTree, type MeshTreeNode, treeFaces, treeLines } from "../import/mesh.ts";
 
@@ -274,6 +274,42 @@ export function placeDxf(s: EditSession, layerId: string, drawing: DxfDrawing): 
       for (const shape of shapes) run.items.push({ p, shape, attrs });
     }
     flush();
+    // the 3D surfaces (3DFACE, polyface and polygon meshes, MESH) are meshes, one per entity, filled in
+    // their colour; one add per class, as the objects go, and a surface the document cannot hold is left out
+    const attrsByColor = new Map<number, Partial<Attributes>>();
+    const byClass = new Map<number | undefined, { m: DxfMesh; attrs: Partial<Attributes> }[]>();
+    for (const m of drawing.meshes) {
+      try {
+        const color = paletteOf(m.style.color);
+        let attrs = attrsByColor.get(color);
+        if (!attrs) {
+          // the pen draws its outline from above in plan
+          attrs = { lineStyle: 2, penFore: color, penOpacity: 100, fillPattern: 1, fillFore: color, fillBack: color, fillOpacity: 100 };
+          attrsByColor.set(color, attrs);
+        }
+        const cls = classOf(m.layer);
+        const items = byClass.get(cls) ?? [];
+        items.push({ m, attrs });
+        byClass.set(cls, items);
+      } catch {
+        skipped[m.type] = (skipped[m.type] ?? 0) + 1;
+      }
+    }
+    for (const [cls, items] of byClass) {
+      const parts = items.map((it) => it.m.faces.map((f) => f.map((v) => v * drawing.mmPerUnit)));
+      try {
+        count += s.addMeshes(layerId, parts, cls, items.map((it) => it.attrs)).length;
+      } catch {
+        // a batch the document refuses goes one surface at a time, to leave out just the ones it cannot hold
+        items.forEach((it, i) => {
+          try {
+            count += s.addMeshes(layerId, [parts[i]], cls, it.attrs).length;
+          } catch {
+            skipped[it.m.type] = (skipped[it.m.type] ?? 0) + 1;
+          }
+        });
+      }
+    }
   });
   return { count, skipped };
 }

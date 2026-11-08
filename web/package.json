@@ -29,6 +29,7 @@
     "leaflet": "^1.9.4",
     "modern-screenshot": "4.7.0",
     "nspell": "2.1.5",
+    "occt-import-js": "0.0.23",
     "oidn-webgpu": "0.6.0",
     "openskp": "1.5.0",
     "polygon-clipping": "0.15.7",
