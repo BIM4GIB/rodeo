@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-08T12:04:00Z",
+    "revit-detail",
+    "More of a Revit model drawn in full",
+    `A Revit model now fills in more of its parts a moment after it opens: a spiral stair's railing, a laundry appliance and a run of doors that came in as see-through boxes are drawn as Revit shows them.
+- The model opens as quickly as before. Rodeo then reads the file again in the background for the parts only a slower decode can draw, and swaps them in, keeping your view, with a note saying how many more came in.
+- If you have already changed or saved the drawing by then, it stays as it is and the note says so: open the file again to get them.`,
+    "walls",
+  ),
+  release(
     "2026-11-08T12:03:00Z",
     "render-studio",
     "Render Studio: a render workspace",

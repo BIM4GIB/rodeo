@@ -5,11 +5,15 @@
 # rvt-wasm.patch lets the open limits ask for every boxed element's saved mesh (savedMeshes: "all")
 # and for family extrusions (familyExtrusions), which rvt-rs's own binding doesn't offer, reads saved
 # graphics on Revit 2015 to 2022 too, and draws Revit 2022 stairs and turned family boxes from them.
-#   scripts/rvt-wasm.sh [tag]   (default v0.15.0)
+# With "detail", it builds vendor/rvt-rs-detail from rvt-wasm-detail.patch instead: the same with
+# the slow last pass for the elements left as boxes, which the import's worker runs once the
+# drawing is open (thirdPass: "only").
+#   scripts/rvt-wasm.sh [tag] [detail]   (default v0.15.0)
 set -eu
 TAG="${1:-v0.15.0}"
-PATCH="$(cd "$(dirname "$0")" && pwd)/rvt-wasm.patch"
-OUT="$(cd "$(dirname "$0")/.." && pwd)/vendor/rvt-rs"
+SUFFIX="${2:+-$2}"
+PATCH="$(cd "$(dirname "$0")" && pwd)/rvt-wasm$SUFFIX.patch"
+OUT="$(cd "$(dirname "$0")/.." && pwd)/vendor/rvt-rs$SUFFIX"
 SRC="$(mktemp -d)"
 git clone --quiet --depth 1 --branch "$TAG" https://github.com/DrunkOnJava/rvt-rs.git "$SRC"
 (cd "$SRC" && git apply "$PATCH" && cargo build -p rvt-wasm --release --target wasm32-unknown-unknown --locked)

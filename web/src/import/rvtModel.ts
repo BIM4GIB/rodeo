@@ -95,3 +95,26 @@ export function readWith(rvt: Rvt, bytes: Uint8Array, progress?: (step: string) 
   const glb = rvt.modelToGlb(result.model);
   return { model: result.model, diagnostics: result.diagnostics, glb };
 }
+
+/**
+ * `read` with the elements rvt-rs could draw in full only by its slow last pass (a spiral railing,
+ * an appliance, a door) in place of the boxes it gave them, or null when there are none. `rvt` is
+ * the build with that pass (vendor/rvt-rs-detail), which reads the file `bytes` again, so it runs
+ * after the drawing is open; a model too large to read twice isn't.
+ */
+export function readDetailWith(rvt: Rvt, bytes: Uint8Array, read: RvtRead): { read: RvtRead; count: number } | null {
+  if (bytes.length > 256 * 1024 * 1024) return null;
+  const result = rvt.openRvtBytesWithDiagnosticsModeAndOpenLimits(bytes, "scaffold", { savedMeshes: "all", thirdPass: "only" }) as {
+    replaced: { element_id: string; entity: RvtEntity }[];
+  };
+  const better = new Map(result.replaced.map((r) => [r.element_id, r.entity]));
+  let count = 0;
+  const entities = read.model.entities.map((e) => {
+    const b = e.type_guid ? better.get(e.type_guid) : undefined;
+    if (b) count++;
+    return b ?? e;
+  });
+  if (!count) return null;
+  const model = { ...read.model, entities };
+  return { read: { model, diagnostics: read.diagnostics, glb: rvt.modelToGlb(model) }, count };
+}

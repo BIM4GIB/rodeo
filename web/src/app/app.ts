@@ -1452,8 +1452,14 @@ export class App {
   private async openRevitModel(bytes: Uint8Array, fileName: string): Promise<void> {
     const before = store.session;
     let made: RevitDrawing | null = null;
+    // the drawing made again with more elements in full, from the worker once this one is open
+    let tab: OpenDrawing | null = null;
+    let detail: { drawing: RevitDrawing; count: number } | null = null;
     const opened = await this.openReading(fileName, async (say, signal) => {
-      const drawing = await revitModelDrawing(bytes, fileName, (step) => say(`${step}…`), signal);
+      const drawing = await revitModelDrawing(bytes, fileName, (step) => say(`${step}…`), signal, (d, count) => {
+        detail = { drawing: d, count };
+        if (tab) void this.detailRevit(tab, d, count);
+      });
       made = drawing;
       return { data: drawing.bytes, name: `${drawing.name.replace(/[\\/:*?"<>|]+/g, "-")}.vwx`, handle: null };
     });
@@ -1461,6 +1467,50 @@ export class App {
     if (store.session === before || !made) return;
     this.untitled = true;
     toast(revitSummary(made), "info");
+    tab = this.shown;
+    const early = detail as { drawing: RevitDrawing; count: number } | null;
+    if (tab && early) void this.detailRevit(tab, early.drawing, early.count);
+  }
+
+  /**
+   * A Revit model's drawing `d`, open as it came in, takes the place of `drawing`, the same made again
+   * with `count` more elements drawn in full instead of as boxes, while it is still untouched (nothing
+   * done, so nothing to undo, and not saved). Its tab, layer and view stay as they were.
+   */
+  private async detailRevit(d: OpenDrawing, drawing: RevitDrawing, count: number): Promise<void> {
+    const untouched = (): boolean => this.drawings.includes(d) && !d.handle && !d.session.canUndo() && !d.session.canRedo();
+    const missed = (): void => {
+      if (this.drawings.includes(d)) toast(`${count.toLocaleString()} more ${count === 1 ? "element" : "elements"} of ${baseName(d.name)} can now be drawn in full. This drawing stays as it is: open the Revit file again to get them.`, "info");
+    };
+    if (!untouched()) return missed();
+    let session: EditSession;
+    try {
+      session = await openVwxStream(bytesSource(drawing.bytes), d.name, inflater());
+    } catch {
+      return;
+    }
+    if (!untouched() || (d === this.shown && leaveRefusal())) return missed();
+    const front = d === this.shown;
+    if (front) this.stash();
+    const camera = front && this.view3d?.visible ? this.view3d.cameraState() : null;
+    const next: OpenDrawing = {
+      ...d,
+      session,
+      fileSize: drawing.bytes.length,
+      layerId: d.layerId && session.doc.layers().some((l) => l.id === d.layerId) ? d.layerId : null,
+      selection: new Set<string>(),
+      ref: this.drawingRef(() => next),
+      behindScene: null,
+      unlisten: session.onChange((e) => this.changedBehind(next, e)),
+    };
+    this.drawings[this.drawings.indexOf(d)] = next;
+    d.unlisten();
+    drawingClosed(d.ref, next.ref);
+    if (front) {
+      this.present(next);
+      if (camera) this.view3d?.setCameraState(camera);
+    }
+    toast(`${count.toLocaleString()} more ${count === 1 ? "element" : "elements"} of ${baseName(d.name)} now drawn in full.`, "info");
   }
 
   /** Opens the Archicad project `file` (named `fileName`) as a new drawing of its model, made off the page; says what came in. */
