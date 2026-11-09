@@ -28,6 +28,8 @@ While a drawing has unsaved changes, a copy is kept in the browser every 5 minut
 
 ### Editing together
 
+If a shared edit cannot be applied, collaboration stops and asks you to keep a copy of your work and reopen the cloud drawing.
+
 A cloud drawing shared with editors is edited live: everyone's changes, and their agents', show as they are made. Changes to different things all stand, wherever they are in the drawing, so an agent can build while you move things elsewhere. Two people or agents adding classes, symbols or names at the same moment both keep theirs. A class both add under one name becomes one class holding what each put in it; a name both give to different things gets "(2)" on the later one.
 
 Only two changes to the same thing at the same moment clash, such as two renames of one class: the later one is undone, with a message saying so.

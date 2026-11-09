@@ -21,6 +21,8 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 });
 
 export const RELEASES: readonly Release[] = [
+  release("2026-11-09T12:06:00Z", "large-shared-edits", "Large shared edits apply safely",
+    `Large edits no longer exceed the browser argument limit. If a shared edit cannot be applied, collaboration stops and asks you to save a copy and reopen the drawing.`, "cloud"),
   release(
     "2026-11-09T12:03:00Z",
     "revit-top-rails",
