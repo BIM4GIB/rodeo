@@ -21,6 +21,8 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 });
 
 export const RELEASES: readonly Release[] = [
+  release("2026-11-09T12:08:00Z", "download-save", "Keep edits made during a download",
+    `Local edits, undo and redo made while a download is being prepared stay unsaved so you can save them again.`, "announce"),
   release(
     "2026-11-09T12:03:00Z",
     "revit-top-rails",

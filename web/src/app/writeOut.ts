@@ -13,10 +13,10 @@ import { deflater, inflater } from "./inflate.ts";
 /** files this big open with their big unread parts left in them */
 export const HOLD_FROM = 256 << 20;
 
-/** Only mark a completed snapshot saved if no change (including undo/redo or remote edits) happened while writing it. */
+/** Only mark a completed snapshot saved if no local edit (including undo/redo) happened while writing it. */
 export async function saveSnapshot<T>(session: EditSession, write: () => Promise<T>, saved: () => void): Promise<T> {
   let changed = false;
-  const off = session.onChange(() => (changed = true));
+  const off = session.onStep(() => (changed = true));
   try {
     const result = await write();
     if (!changed) saved();

@@ -33,7 +33,7 @@ for (const change of ["none", "edit", "undo", "redo", "remote", "failure"] as co
     const stored = openVwx(new Uint8Array(await blob.arrayBuffer())).doc;
     assert.equal(stored.objects(stored.layers()[0].id).length, change === "redo" ? 0 : 1, "snapshot remains the original revision");
   }
-  assert.equal(saved, change === "none" ? 1 : 0);
+  assert.equal(saved, change === "none" || change === "remote" ? 1 : 0);
   // A later save must still work, including after failure; temporary listeners are detached.
   s.doc.write = write;
   await saveSnapshot(s, () => documentBlob(s), () => s.markSaved());

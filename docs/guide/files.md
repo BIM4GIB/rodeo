@@ -14,6 +14,8 @@ Files saved by Vectorworks 2018 or later open as they are. A file saved by Vecto
 
 ### Save a Copy As… and Save All
 
+Local edits, undo and redo made while a download is being prepared remain unsaved; save again to include them. Other people’s live edits do not mark your work unsaved.
+
 **File › Save a Copy As…** writes the drawing as it stands to a new file, while the window goes on working on its own.
 
 **File › Save All** saves every open drawing with unsaved changes, asking where for one never saved.
