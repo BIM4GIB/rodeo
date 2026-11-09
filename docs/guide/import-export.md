@@ -257,7 +257,7 @@ The model is read by rvt-rs (`web/vendor/rvt-rs`, Apache-2.0, WebAssembly loaded
 - Walls come in without their layers yet.
 - The doors and windows aren't Rodeo door and window objects in their walls: a wall's openings are cut into its own geometry, so editing its heights or ends stretches them with it.
 - Elements whose geometry isn't decoded yet come in as their bounding box, drawn see-through, and a note says how many and what was left out.
-- A railing with a top rail stays a box: Revit keeps a top rail as a profile and the path it follows, not as faces, and Rodeo doesn't sweep one yet.
+- Revit keeps a railing's top rail and handrails as a profile and a path, with no faces. Where the rest of a railing falls short of its box, they're swept from those and added. A railing that fills its box without them comes in without them, and a rail placed with an offset, a turn, a flip, an extension or a fillet, or with a profile that isn't symmetric, isn't swept, so its railing stays a box.
 
 ### Revit families and templates
 

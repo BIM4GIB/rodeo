@@ -22,6 +22,15 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-09T12:03:00Z",
+    "revit-top-rails",
+    "Revit railings come in with their top rails",
+    `Railings from Revit that came in as see-through boxes because of their top rails are drawn whole.
+- Revit keeps a top rail as a profile and the path it follows rather than as faces, so Rodeo sweeps the profile along the path, mitred where it bends, and adds it to the railing.
+- A railing on a curved stair that Revit drew in full is drawn too, where Revit's box stands above it: the railing's own records say where its highest rail ends.`,
+    "furniture",
+  ),
+  release(
     "2026-11-09T12:02:00Z",
     "revit-curved-parts",
     "Curved stairs and fittings from Revit drawn in full",

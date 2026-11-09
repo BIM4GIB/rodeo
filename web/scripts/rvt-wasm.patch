@@ -166,7 +166,7 @@ index f405fc8f..aa6f2161 100644
                      });
                  }
 diff --git a/src/ifc/saved_meshes.rs b/src/ifc/saved_meshes.rs
-index 03d4f314..00e53ca9 100644
+index 03d4f314..da8c8a0e 100644
 --- a/src/ifc/saved_meshes.rs
 +++ b/src/ifc/saved_meshes.rs
 @@ -28,10 +28,12 @@
@@ -268,7 +268,7 @@ index 03d4f314..00e53ca9 100644
          by_id.entry(id).or_default().push(index);
      }
      if by_id.is_empty() {
-@@ -170,12 +216,17 @@ pub fn attach_scoped_with_control(
+@@ -170,12 +216,18 @@ pub fn attach_scoped_with_control(
      // Each element is taken as it is meshed and its decoded graphs freed with
      // its batch of shared symbols, rather than all held until the last one is
      // meshed (#1075).
@@ -277,6 +277,7 @@ index 03d4f314..00e53ca9 100644
 +    // decode with the round-5 rules; its pass-one counts are kept aside.
 +    let mut retry_ids = BTreeSet::new();
 +    let mut retry: BTreeMap<u64, SavedMeshReport> = BTreeMap::new();
++    let mut refused: BTreeMap<u64, RefusedRailing> = BTreeMap::new();
      crate::native_saved_scene::extract_in_batches_with_control(
          rf,
          &options,
@@ -287,7 +288,7 @@ index 03d4f314..00e53ca9 100644
              let Some(indices) = by_id.get(&element.identity.element_id) else {
                  return Ok(());
              };
-@@ -184,69 +235,547 @@ pub fn attach_scoped_with_control(
+@@ -184,69 +236,670 @@ pub fn attach_scoped_with_control(
              let [index] = indices.as_slice() else {
                  return Ok(());
              };
@@ -354,7 +355,7 @@ index 03d4f314..00e53ca9 100644
 +            let id = element.identity.element_id;
 +            let turned = turned_ids.contains(&id);
 +            let mut own = SavedMeshReport::default();
-+            admit_element(&element, *index, model, turned, &mut own, curves)?;
++            admit_element(&element, *index, model, turned, &mut own, curves, &mut refused)?;
 +            if own.replaced > 0 || !round5_candidate(&element.meshes.diagnostics, turned) {
 +                absorb(&mut report, &own);
 +            } else {
@@ -390,10 +391,11 @@ index 03d4f314..00e53ca9 100644
 +                };
 +                let turned = turned_ids.contains(&id);
 +                let mut own = SavedMeshReport::default();
-+                admit_element(&element, *index, model, turned, &mut own, curves)?;
++                admit_element(&element, *index, model, turned, &mut own, curves, &mut refused)?;
 +                if own.replaced > 0 {
 +                    absorb(&mut report, &own);
 +                    retry.remove(&id);
++                    refused.remove(&id);
 +                } else if band_candidate(&element.meshes.diagnostics) {
 +                    band_ids.insert(id);
 +                }
@@ -431,10 +433,11 @@ index 03d4f314..00e53ca9 100644
 +                    };
 +                    let turned = turned_ids.contains(&id);
 +                    let mut own = SavedMeshReport::default();
-+                    admit_element(&element, *index, model, turned, &mut own, curves)?;
++                    admit_element(&element, *index, model, turned, &mut own, curves, &mut refused)?;
 +                    if own.replaced > 0 {
 +                        absorb(&mut report, &own);
 +                        retry.remove(&id);
++                        refused.remove(&id);
 +                    }
 +                    Ok(())
 +                },
@@ -449,8 +452,87 @@ index 03d4f314..00e53ca9 100644
 +            absorb(&mut report, own);
 +        }
 +    }
++    // Pass four: a railing refused only for not filling its record box, with
++    // the continuous rails its own records sweep added to its mesh (Revit
++    // keeps a top rail as a profile and the path it follows, with no faces).
++    // Kept only where the whole then fills the box, or ends at the height its
++    // records give its highest rail; nothing admitted above changes.
++    if !refused.is_empty() {
++        let ids: BTreeSet<u64> = refused.keys().copied().collect();
++        let rails = crate::research::native_rails::railing_rails(rf, &ids)?;
++        for (id, railing) in refused {
++            if let Some(found) = rails.get(&id) {
++                admit_railing(railing, found, model, &mut report);
++            }
++        }
++    }
      Ok(report)
  }
++
++/// A railing's mesh, in its element's frame, that the railing rule refused
++/// (RE-303), and the entity it would draw.
++struct RefusedRailing {
++    index: usize,
++    vertices: Vec<[f64; 3]>,
++    triangles: Vec<BrepTriangle>,
++}
++
++/// Pass four's admission of a railing the railing rule refused: its mesh with
++/// its swept rails, kept where the whole fills its record box or reaches the
++/// top its records give it ([`reaches_railing_top`]).
++fn admit_railing(
++    railing: RefusedRailing,
++    rails: &crate::research::native_rails::RailingRails,
++    model: &mut IfcModel,
++    report: &mut SavedMeshReport,
++) {
++    let Some(sweeps) = &rails.sweeps else {
++        return;
++    };
++    let IfcEntity::BuildingElement {
++        location_feet: Some(origin),
++        rotation_radians,
++        extrusion,
++        solid_shape,
++        property_set: Some(set),
++        ..
++    } = &mut model.entities[railing.index]
++    else {
++        return;
++    };
++    let RefusedRailing {
++        mut vertices,
++        mut triangles,
++        ..
++    } = railing;
++    let (sin, cos) = (-rotation_radians.unwrap_or(0.0)).sin_cos();
++    for (points, faces) in sweeps {
++        let base = vertices.len() as u32;
++        vertices.extend(points.iter().map(|p| {
++            let (dx, dy) = (p[0] - origin[0], p[1] - origin[1]);
++            [dx * cos - dy * sin, dx * sin + dy * cos, p[2] - origin[2]]
++        }));
++        triangles.extend(faces.iter().map(|t| BrepTriangle(base + t[0], base + t[1], base + t[2])));
++    }
++    let top = rails.top.map(|z| z - origin[2]);
++    if !(railing_mesh_fills_box(&vertices, extrusion.as_ref())
++        || reaches_railing_top(&vertices, extrusion.as_ref(), top))
++    {
++        return;
++    }
++    report.partial = report.partial.saturating_sub(1);
++    report.replaced += 1;
++    report.triangles += triangles.len();
++    *solid_shape = Some(SolidShape::TriangulatedFaceSet {
++        vertices_feet: vertices,
++        triangles,
++    });
++    for property in &mut set.properties {
++        if property.name == "BodySource" {
++            property.value = PropertyValue::Text(SAVED_MESH_BODY_SOURCE.into());
++        }
++    }
++}
 +
 +/// Whether an element that live leaves boxed has a decoder failure the
 +/// round-6 rules can change: a UV loop that does not join, or a missing
@@ -510,6 +592,7 @@ index 03d4f314..00e53ca9 100644
 +    turned: bool,
 +    report: &mut SavedMeshReport,
 +    curves: &dyn Fn(f64) -> Option<CurveReading>,
++    refused: &mut BTreeMap<u64, RefusedRailing>,
 +) -> anyhow::Result<()> {
 +    let primitives = &element.meshes.primitives;
 +    if primitives.is_empty() {
@@ -639,10 +722,16 @@ index 03d4f314..00e53ca9 100644
 +    // A railing's saved mesh is taken only where it fills its record box
 +    // (RE-303): every vertex within the box and each extent of the box
 +    // reached, to within 0.5 ft. A railing whose graphics leave a part
-+    // out, with no decoder diagnostic to say so, keeps its box.
++    // out, with no decoder diagnostic to say so, keeps its box, unless
++    // pass four completes it.
 +    if ifc_type.as_str() == "IFCRAILING"
 +        && !railing_mesh_fills_box(&vertices, extrusion.as_ref())
 +    {
++        // kept for the rail pass (pass four), which can add the rails the
++        // railing's own records sweep
++        if !partial {
++            refused.insert(element.identity.element_id, RefusedRailing { index, vertices, triangles });
++        }
 +        report.partial += 1;
 +        return Ok(());
 +    }
@@ -891,22 +980,59 @@ index 03d4f314..00e53ca9 100644
 +        && (0..3).all(|k| min[k] <= lo[k] + tol && max[k] >= hi[k] - tol)
 +}
 +
++/// Whether a railing's mesh, in its element's frame, lies within its record
++/// box and reaches each side and the bottom of it, to
++/// [`RAILING_BOX_TOLERANCE_FEET`], and ends at `top`, the height its records
++/// give its highest rail, to [`RAILING_TOP_TOLERANCE_FEET`]. Revit's box over
++/// a railing on a curved stair can stand well above the railing itself, so
++/// there the records say where it ends.
++fn reaches_railing_top(
++    vertices: &[[f64; 3]],
++    extrusion: Option<&crate::ifc::entities::Extrusion>,
++    top: Option<f64>,
++) -> bool {
++    let (Some(e), Some(top)) = (extrusion, top) else {
++        return false;
++    };
++    let half = [e.width_feet / 2.0, e.depth_feet / 2.0];
++    let tol = RAILING_BOX_TOLERANCE_FEET;
++    let lo = [-half[0], -half[1], 0.0];
++    let hi = [half[0], half[1], e.height_feet];
++    let mut min = [f64::INFINITY; 3];
++    let mut max = [f64::NEG_INFINITY; 3];
++    for v in vertices {
++        for k in 0..3 {
++            min[k] = min[k].min(v[k]);
++            max[k] = max[k].max(v[k]);
++        }
++    }
++    (0..3).all(|k| min[k] >= lo[k] - tol && max[k] <= hi[k] + tol)
++        && (0..3).all(|k| min[k] <= lo[k] + tol)
++        && (0..2).all(|k| max[k] >= hi[k] - tol)
++        && (max[2] - top).abs() <= RAILING_TOP_TOLERANCE_FEET
++}
++
++/// How far a railing's mesh may end from the top its records give it, feet.
++const RAILING_TOP_TOLERANCE_FEET: f64 = 0.01;
++
 +/// How far a railing's saved mesh may stop short of its record box, or reach
 +/// beyond it, in feet. Revit's own railing boxes sit about 0.165 ft above the top of
 +/// their graphics on every railing measured on the sample projects.
 +const RAILING_BOX_TOLERANCE_FEET: f64 = 0.5;
 diff --git a/src/research.rs b/src/research.rs
-index 9e098d10..e061f195 100644
+index 9e098d10..bae7e67e 100644
 --- a/src/research.rs
 +++ b/src/research.rs
-@@ -132,6 +132,7 @@ pub mod native_parameter_definitions;
+@@ -132,7 +132,9 @@ pub mod native_parameter_definitions;
  pub mod native_parameters;
  pub mod native_parametric_mesh;
  pub mod native_parametric_surface;
 +pub(crate) mod native_parametric_trim;
  pub mod native_phases;
++pub mod native_rails;
  pub mod native_rendered_content;
  pub mod native_saved_mesh;
+ pub mod native_saved_scene;
 diff --git a/src/research/native_document.rs b/src/research/native_document.rs
 index a369d89e..31f8df68 100644
 --- a/src/research/native_document.rs
@@ -4077,6 +4203,601 @@ index 00000000..05397249
 +    })
 +}
 +
+diff --git a/src/research/native_rails.rs b/src/research/native_rails.rs
+new file mode 100644
+index 00000000..3bf61b3f
+--- /dev/null
++++ b/src/research/native_rails.rs
+@@ -0,0 +1,589 @@
++//! A railing's continuous rails, swept from their native records, and the
++//! height its highest part reaches.
++//!
++//! Revit 2013 and later keep a railing's top rail and handrails as elements
++//! of their own (`TopRail`, `HandRail`), named in the railing's
++//! `m_continuousRailIds`, with no saved faces: a profile family
++//! (`m_profileData.m_profileFamSymId`, else its type's `m_profileId`; the
++//! family's `m_arrProfileLoops`) and the path it follows
++//! (`Path3dRailPathProvider.m_path3dId`, a `Path3d` whose `CurveLoop` holds
++//! `GLine`s and `GArc`s in world feet). The profile's top edge lies on the
++//! path: on the sample projects its loop runs from y = 0 down, and the path
++//! runs along the top of the railing's record box.
++//!
++//! The rails here are swept with the profile in each segment's normal plane,
++//! its y along world up there, mitred where segments meet and capped flat at
++//! the ends. Only rails these records place exactly are swept: no profile
++//! offset, turn or flip, no type offset, extension or fillet, and a profile
++//! that is its own mirror image across its y axis (which side Revit lays a
++//! profile's x on is not confirmed).
++
++use std::collections::{BTreeMap, BTreeSet};
++
++use serde_json::Value;
++
++use crate::RevitFile;
++use crate::native_document::{Options, extract_graphs};
++use crate::native_json::finite_triple;
++use crate::native_parameters::{GraphObject, ObjectGraph};
++
++/// A swept rail: vertices in world feet and triangles into them.
++pub type RailMesh = (Vec<[f64; 3]>, Vec<[u32; 3]>);
++
++/// A railing's rails as its records give them.
++#[derive(Debug, Default, Clone)]
++pub struct RailingRails {
++    /// Each of its continuous rails swept along its path. `None` where one
++    /// of them cannot be swept exactly.
++    pub sweeps: Option<Vec<RailMesh>>,
++    /// The height its highest part reaches, world feet: the top of its path
++    /// (the most of its symbol's `RailingCurveLoopData.m_heights`) plus its
++    /// type's highest rail, where every baluster and post of the type stops
++    /// at one of those rails. `None` where the records do not say.
++    pub top: Option<f64>,
++}
++
++/// How far, in feet, a curve of a path or profile may start from where the
++/// one before it ends.
++const JOIN_TOLERANCE_FEET: f64 = 1e-3;
++
++/// How far a sampled arc's chords may stray from it, feet.
++const ARC_CHORD_FEET: f64 = 0.002;
++
++/// An element id field, `{"m_id":{"m_id64":N}}`, or `{"m_id":{"m_id":N}}`
++/// before Revit 2023. `None` for a missing or unset (negative) id.
++fn element_id(v: &Value, name: &str) -> Option<u64> {
++    let id = v.get(name)?.get("m_id")?;
++    id.get("m_id64").or_else(|| id.get("m_id"))?.as_u64()
++}
++
++/// Every element id a value names, anywhere inside it.
++fn ids_in(v: &Value, out: &mut BTreeSet<u64>) {
++    match v {
++        Value::Object(m) => {
++            if let Some(id) = m
++                .get("m_id")
++                .and_then(|x| x.get("m_id64").or_else(|| x.get("m_id")))
++                .and_then(Value::as_u64)
++            {
++                out.insert(id);
++            }
++            for x in m.values() {
++                ids_in(x, out);
++            }
++        }
++        Value::Array(a) => a.iter().for_each(|x| ids_in(x, out)),
++        _ => {}
++    }
++}
++
++fn number(v: &Value, name: &str) -> Option<f64> {
++    v.get(name)?.as_f64().filter(|x| x.is_finite())
++}
++
++fn point(v: &Value, name: &str) -> Option<[f64; 3]> {
++    finite_triple(v.get(name)?)
++}
++
++/// The graphs of the records `ids` names, keyed by element id.
++fn graphs(rf: &mut RevitFile, ids: &BTreeSet<u64>) -> anyhow::Result<BTreeMap<u64, ObjectGraph>> {
++    let mut out = BTreeMap::new();
++    if ids.is_empty() {
++        return Ok(out);
++    }
++    let options = Options {
++        selected_ids: ids.clone(),
++        ..Options::default()
++    };
++    extract_graphs(rf, &options, |record| {
++        if let Some(graph) = record.graph {
++            out.insert(record.identity.element_id, graph);
++        }
++        Ok(())
++    })?;
++    Ok(out)
++}
++
++fn first<'a>(graph: &'a ObjectGraph, class: &str) -> Option<(usize, &'a GraphObject)> {
++    graph
++        .objects
++        .iter()
++        .enumerate()
++        .find(|(_, o)| o.class_name == class)
++}
++
++/// The points of one curve from its start to its end: a `GLine`'s two ends,
++/// a `GArc` sampled finely enough to stay within [`ARC_CHORD_FEET`] of it.
++/// `None` for any other curve.
++fn curve_points(curve: &GraphObject) -> Option<Vec<[f64; 3]>> {
++    let params = curve.fields.get("m_endParams")?.as_array()?;
++    let [t0, t1] = params.as_slice() else {
++        return None;
++    };
++    let (t0, t1) = (t0.as_f64()?, t1.as_f64()?);
++    if !(t0.is_finite() && t1.is_finite()) {
++        return None;
++    }
++    match curve.class_name.as_str() {
++        "GLine" => {
++            let origin = point(&curve.fields, "m_origin")?;
++            let direction = point(&curve.fields, "m_dirVec")?;
++            Some(
++                [t0, t1]
++                    .iter()
++                    .map(|t| [0, 1, 2].map(|i| origin[i] + direction[i] * t))
++                    .collect(),
++            )
++        }
++        "GArc" => {
++            let centre = point(&curve.fields, "m_center")?;
++            let x = point(&curve.fields, "m_xVec")?;
++            let y = point(&curve.fields, "m_yVec")?;
++            let radius = number(&curve.fields, "m_radius")?;
++            if radius <= 0.0 {
++                return None;
++            }
++            let step = (2.0 * (1.0 - (ARC_CHORD_FEET / radius).min(1.0)).acos())
++                .min(std::f64::consts::PI / 24.0);
++            let count = ((t1 - t0).abs() / step).ceil().clamp(1.0, 512.0) as usize;
++            Some(
++                (0..=count)
++                    .map(|k| {
++                        let t = t0 + (t1 - t0) * k as f64 / count as f64;
++                        [0, 1, 2].map(|i| centre[i] + radius * (t.cos() * x[i] + t.sin() * y[i]))
++                    })
++                    .collect(),
++            )
++        }
++        _ => None,
++    }
++}
++
++fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
++    (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>().sqrt()
++}
++
++/// The curves of the `CurveLoop` at `loop_value` (a pointer from object
++/// `source`) chained end to start into one run of points, a curve turned
++/// round where it runs the other way, with whether the loop is open.
++fn loop_points(graph: &ObjectGraph, source: usize, loop_value: &Value) -> Option<(Vec<[f64; 3]>, bool)> {
++    let index = crate::native_saved_mesh::pointer(graph, source, loop_value).ok()??;
++    let curve_loop = graph.objects.get(index)?;
++    if curve_loop.class_name != "CurveLoop" {
++        return None;
++    }
++    let open = curve_loop.fields.get("m_open")?.as_bool()?;
++    let near = |a: [f64; 3], b: [f64; 3]| distance(a, b) <= JOIN_TOLERANCE_FEET;
++    let mut out: Vec<[f64; 3]> = Vec::new();
++    for (i, curve) in curve_loop.fields.get("m_curves")?.as_array()?.iter().enumerate() {
++        let target = crate::native_saved_mesh::pointer(graph, index, curve).ok()??;
++        let mut points = curve_points(graph.objects.get(target)?)?;
++        if i > 0 {
++            let end = *out.last()?;
++            if !near(end, points[0]) {
++                if near(end, points[points.len() - 1]) {
++                    points.reverse();
++                } else if i == 1
++                    && (near(out[0], points[0]) || near(out[0], points[points.len() - 1]))
++                {
++                    // the first curve runs the other way
++                    out.reverse();
++                    if !near(out[out.len() - 1], points[0]) {
++                        points.reverse();
++                    }
++                } else {
++                    return None;
++                }
++            }
++            out.extend(points.into_iter().skip(1));
++        } else {
++            out = points;
++        }
++    }
++    (out.len() >= 2).then_some((out, open))
++}
++
++/// A profile family's outline in its own x-y plane: the one closed loop of
++/// its `m_arrProfileLoops`, lying at z = 0.
++fn profile_outline(graph: &ObjectGraph) -> Option<Vec<[f64; 2]>> {
++    let (index, symbol) = first(graph, "FamilySymbol")?;
++    let loops = symbol.fields.get("m_arrProfileLoops")?.as_array()?;
++    let [only] = loops.as_slice() else {
++        return None;
++    };
++    let (mut points, open) = loop_points(graph, index, only)?;
++    if open || points.iter().any(|p| p[2].abs() > 1e-6) {
++        return None;
++    }
++    if distance(points[0], points[points.len() - 1]) <= JOIN_TOLERANCE_FEET {
++        points.pop();
++    }
++    (points.len() >= 3).then(|| points.iter().map(|p| [p[0], p[1]]).collect())
++}
++
++/// Whether `outline` is its own mirror image across its y axis, to 1e-4 ft.
++fn mirror_symmetric(outline: &[[f64; 2]]) -> bool {
++    outline.iter().all(|p| {
++        outline
++            .iter()
++            .any(|q| (q[0] + p[0]).abs() <= 1e-4 && (q[1] - p[1]).abs() <= 1e-4)
++    })
++}
++
++fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
++    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
++}
++
++fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
++    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
++}
++
++fn cross3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
++    [
++        a[1] * b[2] - a[2] * b[1],
++        a[2] * b[0] - a[0] * b[2],
++        a[0] * b[1] - a[1] * b[0],
++    ]
++}
++
++fn unit(a: [f64; 3]) -> Option<[f64; 3]> {
++    let length = dot(a, a).sqrt();
++    (length > 1e-9).then(|| a.map(|c| c / length))
++}
++
++/// `outline` swept along `path`: in each segment's normal plane, its y along
++/// world up there and its x to the right looking along the path, mitred
++/// where segments meet and capped flat at both ends. `None` for a path with
++/// an upright segment or one that turns back on itself, and for an outline
++/// that does not cut into triangles.
++pub fn sweep(path: &[[f64; 3]], outline: &[[f64; 2]]) -> Option<RailMesh> {
++    let mut path: Vec<[f64; 3]> = path.to_vec();
++    path.dedup_by(|b, a| distance(*a, *b) <= 1e-6);
++    let n = path.len();
++    if n < 2 {
++        return None;
++    }
++    let ring: Vec<(f64, f64)> = outline.iter().map(|p| (p[0], p[1])).collect();
++    let section = crate::ifc::body_geometry::section(&ring, &[])?;
++    let [outer] = section.rings.as_slice() else {
++        return None;
++    };
++    // `section` falls back to the bounding rectangle of a profile it cannot
++    // cut into triangles; that is not the profile.
++    let area = |r: &[(f64, f64)]| {
++        (0..r.len())
++            .map(|i| r[i].0 * r[(i + 1) % r.len()].1 - r[(i + 1) % r.len()].0 * r[i].1)
++            .sum::<f64>()
++            .abs()
++            / 2.0
++    };
++    if (area(outer) - area(&ring)).abs() > 1e-9_f64.max(area(&ring) * 1e-6) {
++        return None;
++    }
++    let tangents: Vec<[f64; 3]> = (0..n - 1)
++        .map(|j| unit(sub(path[j + 1], path[j])))
++        .collect::<Option<_>>()?;
++    let up = [0.0, 0.0, 1.0];
++    let frames: Vec<([f64; 3], [f64; 3])> = tangents
++        .iter()
++        .map(|&t| {
++            let flat = sub(up, t.map(|c| c * dot(up, t)));
++            // an upright segment has no up of its own
++            if dot(flat, flat) < 1e-6 {
++                return None;
++            }
++            let y = unit(flat)?;
++            Some((cross3(t, y), y))
++        })
++        .collect::<Option<_>>()?;
++    let place = |p: [f64; 3], (x, y): ([f64; 3], [f64; 3]), u: f64, v: f64| {
++        [0, 1, 2].map(|k| p[k] + x[k] * u + y[k] * v)
++    };
++    let mut vertices: Vec<[f64; 3]> =
++        Vec::with_capacity(n * outer.len() + 2 * section.cap_points.len());
++    for j in 0..n {
++        let segment = j.saturating_sub(1).min(n - 2);
++        let (t, f) = (tangents[segment], frames[segment]);
++        // where two segments meet, the section lies in the plane halfway
++        // between their normal planes, reached along the segment before
++        let mitre = if j > 0 && j < n - 1 {
++            let normal = unit([0, 1, 2].map(|k| tangents[j - 1][k] + tangents[j][k]))?;
++            if dot(t, normal) < 1e-3 {
++                return None;
++            }
++            Some(normal)
++        } else {
++            None
++        };
++        for &(u, v) in outer {
++            let q = place(path[j], f, u, v);
++            vertices.push(match mitre {
++                Some(normal) => {
++                    let s = dot(sub(path[j], q), normal) / dot(t, normal);
++                    [0, 1, 2].map(|k| q[k] + s * t[k])
++                }
++                None => q,
++            });
++        }
++    }
++    let m = outer.len() as u32;
++    let mut sides = Vec::with_capacity((n - 1) * outer.len() * 2);
++    for j in 0..(n - 1) as u32 {
++        for k in 0..m {
++            let (a, b) = (j * m + k, j * m + (k + 1) % m);
++            let (c, d) = (a + m, b + m);
++            sides.push([a, b, d]);
++            sides.push([a, d, c]);
++        }
++    }
++    // the sides face out, away from the middle of the outline, as the first
++    // one is made to
++    let middle = (0..m as usize)
++        .fold([0.0; 3], |sum, i| [0, 1, 2].map(|k| sum[k] + vertices[i][k] / m as f64));
++    let [a, b, c] = sides[0].map(|i| vertices[i as usize]);
++    let flip = dot(cross3(sub(b, a), sub(c, a)), sub(a, middle)) < 0.0;
++    let mut triangles: Vec<[u32; 3]> = sides
++        .into_iter()
++        .map(|[a, b, c]| if flip { [a, c, b] } else { [a, b, c] })
++        .collect();
++    for (p, f, facing) in [
++        (path[0], frames[0], tangents[0].map(|c| -c)),
++        (path[n - 1], frames[n - 2], tangents[n - 2]),
++    ] {
++        let base = vertices.len() as u32;
++        vertices.extend(section.cap_points.iter().map(|&(u, v)| place(p, f, u, v)));
++        for t in &section.cap_triangles {
++            let [a, b, c] = t.map(|i| base + i);
++            let [pa, pb, pc] = [a, b, c].map(|i| vertices[i as usize]);
++            let normal = cross3(sub(pb, pa), sub(pc, pa));
++            triangles.push(if dot(normal, facing) < 0.0 { [a, c, b] } else { [a, b, c] });
++        }
++    }
++    Some((vertices, triangles))
++}
++
++/// A continuous rail's record, as read for its sweep.
++struct Rail {
++    path: u64,
++    profile: Option<u64>,
++    rail_type: Option<u64>,
++}
++
++/// The rail of a `TopRail` or `HandRail` record, `None` where its profile is
++/// offset, turned or flipped.
++fn rail_of(graph: &ObjectGraph) -> Option<Rail> {
++    let rail = graph
++        .objects
++        .first()
++        .filter(|o| o.class_name == "TopRail" || o.class_name == "HandRail")?;
++    let data = rail.fields.get("m_profileData")?;
++    let zero = |name: &str| number(data, name) == Some(0.0);
++    if !(zero("m_angle") && zero("m_xOffset") && zero("m_yOffset"))
++        || data.get("m_flippedX")?.as_bool()?
++    {
++        return None;
++    }
++    let (_, provider) = first(graph, "Path3dRailPathProvider")?;
++    Some(Rail {
++        path: element_id(&provider.fields, "m_path3dId")?,
++        profile: element_id(data, "m_profileFamSymId"),
++        rail_type: element_id(&rail.fields, "m_typeId"),
++    })
++}
++
++/// A railing type's (`StairsRailingAttr`) highest rail above the railing's
++/// path, feet, where each baluster and post family of the type stops at or
++/// below one of its rails (`m_topReferenceId` naming one, `m_topOffset` not
++/// above it).
++fn highest_rail(graph: &ObjectGraph) -> Option<f64> {
++    let (_, attr) = first(graph, "StairsRailingAttr")?;
++    let mut highest = f64::NEG_INFINITY;
++    let mut rails = BTreeSet::new();
++    for o in graph.objects.iter().filter(|o| o.class_name == "NonContinuousRailInfo") {
++        highest = highest.max(number(&o.fields, "m_height")?);
++        rails.insert(o.fields.get("m_railId")?.as_i64()?);
++    }
++    if element_id(&attr.fields, "m_topRailTypeId").is_some_and(|id| id > 0) {
++        highest = highest.max(number(&attr.fields, "m_topRailHeight")?);
++    }
++    let stops_at_a_rail = graph
++        .objects
++        .iter()
++        .filter(|o| o.class_name == "BalusterInfo")
++        .all(|o| {
++            element_id(&o.fields, "m_balusterTypeId").is_none_or(|id| id == 0)
++                || o.fields
++                    .get("m_topReferenceId")
++                    .and_then(Value::as_i64)
++                    .is_some_and(|r| rails.contains(&r))
++                    && number(&o.fields, "m_topOffset").is_some_and(|x| x <= 0.0)
++        });
++    (highest.is_finite() && stops_at_a_rail).then_some(highest)
++}
++
++/// The top of a railing's path, world feet: the most of its symbol's
++/// (`BaseRailingSym`) `RailingCurveLoopData.m_heights`.
++fn path_top(graph: &ObjectGraph) -> Option<f64> {
++    graph
++        .objects
++        .iter()
++        .filter(|o| o.class_name == "RailingCurveLoopData")
++        .flat_map(|o| {
++            o.fields
++                .get("m_heights")
++                .and_then(Value::as_array)
++                .into_iter()
++                .flatten()
++                .filter_map(Value::as_f64)
++        })
++        .filter(|h| h.is_finite())
++        .reduce(f64::max)
++}
++
++/// The rails of each railing (`BaseRailing`) in `railings`, keyed by its id.
++pub fn railing_rails(
++    rf: &mut RevitFile,
++    railings: &BTreeSet<u64>,
++) -> anyhow::Result<BTreeMap<u64, RailingRails>> {
++    struct Railing {
++        rails: BTreeSet<u64>,
++        railing_type: Option<u64>,
++        symbol: Option<u64>,
++    }
++    let mut found: BTreeMap<u64, Railing> = BTreeMap::new();
++    for (id, graph) in graphs(rf, railings)? {
++        let Some(railing) = graph.objects.first().filter(|o| o.class_name == "BaseRailing") else {
++            continue;
++        };
++        let mut rails = BTreeSet::new();
++        if let Some(list) = railing.fields.get("m_continuousRailIds") {
++            ids_in(list, &mut rails);
++        }
++        rails.retain(|id| *id > 0);
++        found.insert(
++            id,
++            Railing {
++                rails,
++                railing_type: element_id(&railing.fields, "m_stairsRailingAttrId"),
++                symbol: element_id(&railing.fields, "m_baseRailingSymbolId"),
++            },
++        );
++    }
++    let wanted: BTreeSet<u64> = found
++        .values()
++        .flat_map(|r| r.rails.iter().copied().chain(r.railing_type).chain(r.symbol))
++        .filter(|id| *id > 0)
++        .collect();
++    let second = graphs(rf, &wanted)?;
++    let rails: BTreeMap<u64, Option<Rail>> = found
++        .values()
++        .flat_map(|r| r.rails.iter())
++        .map(|id| (*id, second.get(id).and_then(rail_of)))
++        .collect();
++    let wanted: BTreeSet<u64> = rails
++        .values()
++        .flatten()
++        .flat_map(|r| [Some(r.path), r.profile, r.rail_type])
++        .flatten()
++        .filter(|id| *id > 0)
++        .collect();
++    let mut third = graphs(rf, &wanted)?;
++    // a rail that takes its type's profile reads that profile too
++    let type_profiles: BTreeSet<u64> = rails
++        .values()
++        .flatten()
++        .filter(|r| r.profile.is_none_or(|id| id == 0))
++        .filter_map(|r| r.rail_type.and_then(|t| third.get(&t)))
++        .filter_map(|g| g.objects.first().and_then(|o| element_id(&o.fields, "m_profileId")))
++        .filter(|id| *id > 0 && !third.contains_key(id))
++        .collect();
++    third.extend(graphs(rf, &type_profiles)?);
++    let swept = |rail: &Rail| -> Option<RailMesh> {
++        let type_fields = &third.get(&rail.rail_type?)?.objects.first()?.fields;
++        let zero = |name: &str| number(type_fields, name).is_none_or(|x| x == 0.0);
++        if !(zero("m_offset")
++            && zero("m_startExtensionLength")
++            && zero("m_endExtensionLength")
++            && zero("m_filletRadius"))
++        {
++            return None;
++        }
++        let profile = rail
++            .profile
++            .filter(|id| *id > 0)
++            .or_else(|| element_id(type_fields, "m_profileId"))?;
++        let outline = profile_outline(third.get(&profile)?)?;
++        if !mirror_symmetric(&outline) {
++            return None;
++        }
++        let path_graph = third.get(&rail.path)?;
++        let (index, path) = first(path_graph, "Path3d")?;
++        let loops = path.fields.get("m_curveLoops")?.as_array()?;
++        let [only] = loops.as_slice() else {
++            return None;
++        };
++        let (points, open) = loop_points(path_graph, index, only)?;
++        if !open {
++            return None;
++        }
++        sweep(&points, &outline)
++    };
++    Ok(found
++        .into_iter()
++        .map(|(id, railing)| {
++            let sweeps = railing
++                .rails
++                .iter()
++                .map(|r| rails.get(r)?.as_ref().and_then(&swept))
++                .collect::<Option<Vec<_>>>();
++            let top = railing
++                .symbol
++                .and_then(|s| second.get(&s))
++                .and_then(path_top)
++                .zip(railing.railing_type.and_then(|t| second.get(&t)).and_then(highest_rail))
++                .map(|(path, rail)| path + rail);
++            (id, RailingRails { sweeps, top })
++        })
++        .collect())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn sweeps_a_square_along_a_bent_path_watertight() {
++        // a 2" square hanging below a path that climbs, then runs level
++        let s = 1.0 / 6.0;
++        let outline = [[s / 2.0, 0.0], [s / 2.0, -s], [-s / 2.0, -s], [-s / 2.0, 0.0]];
++        let path = [[0.0, 0.0, 0.0], [0.0, 3.0, 1.5], [0.0, 6.0, 1.5]];
++        let (vertices, triangles) = sweep(&path, &outline).expect("swept");
++        assert_eq!(triangles.len(), 2 * 4 * 2 + 2 * 2);
++        // the top edge runs along the path and the rail hangs below it
++        let top = vertices.iter().map(|v| v[2]).fold(f64::NEG_INFINITY, f64::max);
++        assert!((top - 1.5).abs() < 1e-9);
++        assert!(vertices
++            .iter()
++            .filter(|v| v[1] > 5.9)
++            .all(|v| (v[2] - 1.5).abs() < 1e-9 || (v[2] - (1.5 - s)).abs() < 1e-9));
++        // the mitred joint is shared, so every edge of the sides and caps
++        // bounds two triangles once the caps' corners are merged
++        let key = |v: [f64; 3]| v.map(|c| (c * 1e6).round() as i64);
++        let mut edges = std::collections::HashMap::new();
++        for t in &triangles {
++            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
++                let (a, b) = (key(vertices[a as usize]), key(vertices[b as usize]));
++                *edges.entry(if a < b { (a, b) } else { (b, a) }).or_insert(0) += 1;
++            }
++        }
++        assert!(edges.values().all(|&n| n == 2));
++    }
++
++    #[test]
++    fn refuses_an_upright_path_and_a_lopsided_profile() {
++        let outline = [[0.1, 0.0], [0.1, -0.1], [-0.1, -0.1], [-0.1, 0.0]];
++        assert!(sweep(&[[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]], &outline).is_none());
++        assert!(!mirror_symmetric(&[[0.1, 0.0], [0.1, -0.1], [-0.2, -0.1], [-0.2, 0.0]]));
++        assert!(mirror_symmetric(&outline));
++    }
++}
 diff --git a/src/research/native_saved_mesh.rs b/src/research/native_saved_mesh.rs
 index 199cbbe1..3c0c9c49 100644
 --- a/src/research/native_saved_mesh.rs
