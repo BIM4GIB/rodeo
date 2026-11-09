@@ -1,3 +1,4 @@
+import { COLLAB_PROTOCOL } from "../../web/src/platform/protocol.ts";
 // Tests for a live session's saves against the owner's plan (src/collab.ts, saveRefusal in
 // src/files.ts): node scripts/save-limit-test.ts
 // A real server on a loopback port with its own data folder and a tiny plan, signed in through an
@@ -70,7 +71,7 @@ try {
     ws!.once("open", resolve);
     ws!.once("error", reject);
   });
-  ws.send(JSON.stringify({ t: "hello", versionId: a.headVersionId }));
+  ws.send(JSON.stringify({ t: "hello", proto: COLLAB_PROTOCOL, versionId: a.headVersionId }));
   await until(() => seen.some((m) => m.t === "welcome"), "the welcome");
 
   const count = (t: string): number => seen.filter((m) => m.t === t).length;

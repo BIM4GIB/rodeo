@@ -1,3 +1,4 @@
+import { COLLAB_PROTOCOL } from "../../web/src/platform/protocol.ts";
 // Tests for server/src/collab.ts: node scripts/collab-test.ts
 // Real servers on loopback ports, an in-memory database, and ws clients that
 // check the protocol from the outside.
@@ -188,7 +189,7 @@ async function main(): Promise<void> {
   await a.quiet();
 
   // welcome, join, leave
-  a.send({ t: "hello", versionId: "v1" });
+  a.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   const welcomeA = await a.take("welcome");
   assert.equal(welcomeA.you.userId, "a");
   assert.equal(welcomeA.you.role, "editor");
@@ -198,7 +199,7 @@ async function main(): Promise<void> {
   assert.deepEqual(welcomeA.ops, []);
 
   const b = await open(h.port, "b", "b");
-  b.send({ t: "hello", versionId: "v1" });
+  b.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   const welcomeB = await b.take("welcome");
   assert.deepEqual(
     welcomeB.peers.map((p) => p.userId),
@@ -209,7 +210,7 @@ async function main(): Promise<void> {
   await b.quiet();
 
   const v1 = await open(h.port, "v1", "v");
-  v1.send({ t: "hello", versionId: "v1" });
+  v1.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   const welcomeV1 = await v1.take("welcome");
   assert.equal(welcomeV1.you.role, "viewer");
   assert.equal(welcomeV1.you.color, PEER_COLORS[2]);
@@ -220,7 +221,7 @@ async function main(): Promise<void> {
   assert.equal((await b.take("leave")).clientId, welcomeV1.you.clientId);
 
   const v = await open(h.port, "v", "v");
-  v.send({ t: "hello", versionId: "v1" });
+  v.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   const welcomeV = await v.take("welcome");
   assert.equal(welcomeV.you.color, PEER_COLORS[2]);
   assert.deepEqual(
@@ -334,7 +335,7 @@ async function main(): Promise<void> {
 
   // a late joiner on the new head gets only the later change, with who is there and presence
   const late = await open(h.port, "late", "b");
-  late.send({ t: "hello", versionId: "v2" });
+  late.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v2" });
   const welcomeL = await late.take("welcome");
   assert.equal(welcomeL.seq, N + 1);
   assert.deepEqual(
@@ -351,7 +352,7 @@ async function main(): Promise<void> {
 
   // a client holding an old version is told to reload and is not let into the room
   const stale = await open(h.port, "stale", "a");
-  stale.send({ t: "hello", versionId: "v1" });
+  stale.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   await stale.take("reload");
   stale.send({ t: "op", id: 1, base: N + 1, op: insertOp(0, 0, ["s"], ["s"]) });
   await stale.quiet();
@@ -366,7 +367,7 @@ async function main(): Promise<void> {
   assert.equal(h.hub.currentSeq("f1"), N + 1);
   assert.equal(h.hub.canSavePlain("f1"), false);
   const a2 = await open(h.port, "a2", "a");
-  a2.send({ t: "hello", versionId: "v2" });
+  a2.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v2" });
   const welcomeA2 = await a2.take("welcome");
   assert.equal(welcomeA2.seq, N + 1);
   assert.deepEqual(
@@ -376,7 +377,7 @@ async function main(): Promise<void> {
 
   // comments reach the room
   const b2 = await open(h.port, "b2", "b");
-  b2.send({ t: "hello", versionId: "v2" });
+  b2.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v2" });
   const welcomeB2 = await b2.take("welcome");
   assert.equal((await a2.take("join")).peer.clientId, welcomeB2.you.clientId);
   const comment: Comment = {
@@ -410,11 +411,11 @@ async function main(): Promise<void> {
   await b2.take("reload");
   assert.equal(countOps(db), 0);
   assert.equal(h.hub.canSavePlain("f1"), true);
-  a2.send({ t: "hello", versionId: "v3" });
+  a2.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v3" });
   const welcomeR = await a2.take("welcome");
   assert.equal(welcomeR.seq, N + 1);
   assert.deepEqual(welcomeR.ops, []);
-  b2.send({ t: "hello", versionId: "v3" });
+  b2.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v3" });
   const welcomeB3 = await b2.take("welcome");
   assert.deepEqual(
     welcomeB3.peers.map((p) => p.userId),
@@ -441,10 +442,10 @@ async function main(): Promise<void> {
   const refusal: { why: string | null; sizes: number[] } = { why: "No room on the plan", sizes: [] };
   const h2 = await start(makeDeps(db2, head2, refusal));
   const a3 = await open(h2.port, "a3", "a");
-  a3.send({ t: "hello", versionId: "v1" });
+  a3.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   await a3.take("welcome");
   const v2 = await open(h2.port, "v2", "v");
-  v2.send({ t: "hello", versionId: "v1" });
+  v2.send({ t: "hello", proto: COLLAB_PROTOCOL, versionId: "v1" });
   await v2.take("welcome");
   await a3.take("join");
   const change = async (s: number): Promise<void> => {

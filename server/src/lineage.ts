@@ -211,7 +211,7 @@ export async function writeMerged(c: Context, opts: MergeWrite): Promise<{ row: 
   const blob = await commitBlob(received);
   let saved: { row: VersionRow; pruned: string[]; oldBase: string | null };
   try {
-    saved = tx(() => {
+    saved = getHub().reset(opts.intoFileId, (seq) => {
       assertCurrent(opts.intoFileId, opts.fromFileId, intoVersion, fromVersion);
       const from = get<{ blob: string }>("SELECT blob FROM versions WHERE id = ?", fromVersion);
       if (!from) fail(409, MOVED, "moved");
@@ -223,7 +223,7 @@ export async function writeMerged(c: Context, opts: MergeWrite): Promise<{ row: 
         size: received.size,
         sha256: received.sha256,
         label: cleanLine(opts.label, 120) || null,
-        collabSeq: getHub().currentSeq(opts.intoFileId),
+        collabSeq: seq,
       });
       run("UPDATE files SET base_blob = ? WHERE id = ?", from.blob, opts.branchId);
       opts.inTx?.(added.row.id);
@@ -233,8 +233,6 @@ export async function writeMerged(c: Context, opts: MergeWrite): Promise<{ row: 
     await releaseBlobs([blob]);
     throw e;
   }
-  // the reset follows the commit in the same run, so no live change can slip in between
-  getHub().reset(opts.intoFileId);
   await releaseBlobs([...saved.pruned, saved.oldBase]);
   return { row: saved.row };
 }
