@@ -245,6 +245,20 @@ for (const units of ["mm", "ftin"] as const) {
   check(storied.layers().find((l) => l.id === second)?.story === story, `${label}: a layer on the new story`);
   const cls = s.createClass("Walls");
   check(s.doc.classes().some((c) => c.name === "Walls") && cls > 0, `${label}: createClass`);
+  {
+    // one add with a class per shape, none given being None, as a DWG import places its layers
+    const none = s.doc.classes().find((c) => c.name === "None")!.index;
+    const line = (x: number): NewShape => ({ kind: "line", a: { x, y: 0 }, b: { x, y: 10 } });
+    const made = s.addObjects(second, [line(1), line(2), line(3)], [cls, undefined, cls]);
+    check(JSON.stringify(made.map((id) => s.doc.object(id)?.classIndex)) === JSON.stringify([cls, none, cls]), `${label}: addObjects takes a class per shape`);
+    let refused = false;
+    try {
+      s.addObjects(second, [line(4), line(5)], [cls]);
+    } catch {
+      refused = true;
+    }
+    check(refused, `${label}: addObjects refuses a class list of the wrong length`);
+  }
   const other = units === "mm" ? "Feet & Inches" : "Millimeters";
   s.setUnits(other);
   check(unitsName(s.doc.toBytes().subarray(0, 2676)) === other, `${label}: setUnits to ${other}`);

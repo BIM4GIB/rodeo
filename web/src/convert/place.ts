@@ -225,33 +225,26 @@ export function placeDxf(s: EditSession, layerId: string, drawing: DxfDrawing): 
     const leftOut = (p: DxfPlacement): void => {
       skipped[p.type] = (skipped[p.type] ?? 0) + 1;
     };
-    const one = (p: DxfPlacement, shape: NewShape, cls: number | undefined, attrs: Partial<Attributes>): void => {
+    type Item = { p: DxfPlacement; shape: NewShape; cls: number | undefined; attrs: Partial<Attributes> };
+    // each add rebuilds the document, so the objects go in as one add, each with its class and
+    // attributes, in the file's order; when the document refuses an add, its two halves go in
+    // apart, down to the one object it cannot hold, which is left out
+    const place = (items: readonly Item[]): void => {
+      if (items.length === 0) return;
       try {
-        const id = s.addObject(layerId, shape, cls, attrs);
-        if (p.text) {
-          // turning or justifying text moves its origin, so it goes back on the anchor after
-          s.setTextStyle([id], p.text);
-          s.setGeometry(id, shape);
-        }
-        count++;
-      } catch {
-        leftOut(p);
-      }
-    };
-    // each add rebuilds the document, so a run of objects in one class goes in as one add; a run
-    // holding one the document cannot hold goes in one by one to leave out just that one
-    let run: { cls: number | undefined; items: { p: DxfPlacement; shape: NewShape; attrs: Partial<Attributes> }[] } | null = null;
-    const flush = (): void => {
-      if (!run) return;
-      const { cls, items } = run;
-      run = null;
-      try {
-        s.addObjects(layerId, items.map((it) => it.shape), cls, items.map((it) => it.attrs));
+        s.addObjects(layerId, items.map((it) => it.shape), items.map((it) => it.cls), items.map((it) => it.attrs));
         count += items.length;
       } catch {
-        for (const it of items) one(it.p, it.shape, cls, it.attrs);
+        if (items.length === 1) {
+          leftOut(items[0].p);
+          return;
+        }
+        const half = items.length >> 1;
+        place(items.slice(0, half));
+        place(items.slice(half));
       }
     };
+    const items: Item[] = [];
     for (const p of placements) {
       let cls: number | undefined;
       let attrs: Partial<Attributes>;
@@ -262,18 +255,16 @@ export function placeDxf(s: EditSession, layerId: string, drawing: DxfDrawing): 
         leftOut(p);
         continue;
       }
-      // a fill with holes becomes one polygon per outer ring, with each hole joined into its ring
-      const shapes: NewShape[] = p.rings ? fillShapes(p.rings).map((f) => ({ kind: "polygon", points: f.points, closed: true })) : [p.shape];
-      if (p.text) {
-        flush();
-        for (const shape of shapes) one(p, shape, cls, attrs);
+      // a text is made turned and justified about its anchor
+      if (p.shape.kind === "text" && p.text) {
+        items.push({ p, shape: { ...p.shape, hAlign: p.text.hAlign, vAlign: p.text.vAlign, angle: p.text.angle }, cls, attrs });
         continue;
       }
-      if (run && run.cls !== cls) flush();
-      run ??= { cls, items: [] };
-      for (const shape of shapes) run.items.push({ p, shape, attrs });
+      // a fill with holes becomes one polygon per outer ring, with each hole joined into its ring
+      const shapes: NewShape[] = p.rings ? fillShapes(p.rings).map((f) => ({ kind: "polygon", points: f.points, closed: true })) : [p.shape];
+      for (const shape of shapes) items.push({ p, shape, cls, attrs });
     }
-    flush();
+    place(items);
     // the 3D surfaces (3DFACE, polyface and polygon meshes, MESH) are meshes, one per entity, filled in
     // their colour; one add per class, as the objects go, and a surface the document cannot hold is left out
     const attrsByColor = new Map<number, Partial<Attributes>>();

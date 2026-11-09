@@ -4,7 +4,7 @@
 // a circle and a turned, scaled insert of it, an invisible line and a paper space line) and read
 // back. Files of releases before R13 and files that are not DWG fail with a message saying what to
 // do. The parts of the DXF walker that DWG files lean on are checked through parseDxf: invisible
-// entities, arc dimensions, tables, multileaders, external references, and splines kept only as fit points against the control points
+// entities, arcs so shallow they are drawn as their chord, arc dimensions, tables, multileaders, external references, and splines kept only as fit points against the control points
 // AutoCAD worked out for them; and the 3D faces, polyface and polygon meshes, MESH objects and inserts
 // turned in 3D. With DWG_SAMPLES set to a folder of public DWG files (LibreDWG's test-data and
 // ACadSharp's samples, which are never committed), every file is read, and each one with a .dxf of
@@ -535,6 +535,18 @@ const lineOf = (s: DxfShape | undefined): [Pt, Pt] | null => (s?.kind === "line"
 {
   const d = parseDxf(dxf(...entities(0, "LINE", 8, 0, 10, 0, 20, 0, 11, 1, 21, 0, 0, "LINE", 8, 0, 60, 1, 10, 0, 20, 0, 11, 2, 21, 0), 0, "EOF"));
   check(d.entities.length === 1 && Object.keys(d.skipped).length === 0, "an invisible entity (group 60) is not drawn, nor counted as left out");
+}
+{
+  // an arc of 1.4 m round a centre 20 km away: it is its chord, or its circle would size the view
+  const r = 20_000_000;
+  const d = parseDxf(
+    dxf(...entities(0, "ARC", 8, 0, 10, 0, 20, 0, 40, r, 50, 256.5, 51, 256.504, 0, "ARC", 8, 0, 10, 0, 20, 0, 40, 1000, 50, 0, 51, 0.5, 0, "ARC", 8, 0, 10, 0, 20, 0, 40, 1000, 50, 10, 51, 9.99), 0, "EOF"),
+  );
+  const [flat, small, almostFull] = d.entities.map((e) => e.shape);
+  const l = lineOf(flat);
+  const end = (deg: number): Pt => ({ x: r * Math.cos(deg * (Math.PI / 180)), y: r * Math.sin(deg * (Math.PI / 180)) });
+  check(l !== null && nearPt(l[0], end(256.5), 1e-3) && nearPt(l[1], end(256.504), 1e-3), "an arc that bulges a ten-thousandth of its chord or less is drawn as its chord");
+  check(small?.kind === "arc" && almostFull?.kind === "arc" && almostFull.sweepAngle > 359, "a half-degree arc and an arc short of a full turn stay arcs");
 }
 {
   const d = parseDxf(dxf(...blocks(...unitLine("*D1")), ...entities(0, "ARC_DIMENSION", 8, 0, 2, "*D1", 12, 5, 22, 5), 0, "EOF"));

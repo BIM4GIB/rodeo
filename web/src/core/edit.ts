@@ -1046,7 +1046,8 @@ export class Session implements EditSession {
       this.doc.datas = after;
       this.doc.rebuild();
       this.batching.kinds.add(kind);
-      this.batching.ids.push(...ids);
+      // one at a time: an import's ids can be too many arguments for a spread
+      for (const id of ids) this.batching.ids.push(id);
       return;
     }
     if (this.record(this.doc.datas, after, kind, ids)) {
@@ -4033,10 +4034,25 @@ export class Session implements EditSession {
     return t ? readAttrs(t.recs[0]) : null;
   }
 
-  addObjects(layerId: string, shapes: readonly NewShape[], classIndex?: number, attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[]): string[] {
+  addObjects(
+    layerId: string,
+    shapes: readonly NewShape[],
+    classIndex?: number | readonly (number | undefined)[],
+    attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[],
+  ): string[] {
     const layer = this.container(layerId);
-    const cls = classIndex ?? this.noneClass();
-    if (!this.doc.classRecs.has(cls)) throw new Error(`no class #${cls}: classes are numbered as doc.classes() lists them ("None" is #${this.noneClass()})`);
+    // one class for all, or one per shape; none given is None
+    const perShape = Array.isArray(classIndex);
+    const given: readonly (number | undefined)[] = perShape ? classIndex : [classIndex as number | undefined];
+    if (perShape && given.length !== shapes.length) throw new Error(`${given.length} classes for ${shapes.length} shapes`);
+    const classes = new Map<number | undefined, number>();
+    for (const c of given) {
+      if (classes.has(c)) continue;
+      const cls = c ?? this.noneClass();
+      if (!this.doc.classRecs.has(cls)) throw new Error(`no class #${cls}: classes are numbered as doc.classes() lists them ("None" is #${this.noneClass()})`);
+      classes.set(c, cls);
+    }
+    const classAt = (i: number): number => classes.get(perShape ? given[i] : given[0])!;
     if (shapes.length === 0) return [];
     for (const shape of shapes) {
       if (!Object.hasOwn(TYPE_OF_KIND, shape?.kind)) {
@@ -4053,7 +4069,7 @@ export class Session implements EditSession {
       // a light's height is above the layer (2D shapes have none)
       liftRecord(d, TYPE_OF_KIND[shape.kind], elevation);
       setU16(d, 0x1a, 0);
-      setU32(d, 0x20, cls);
+      setU32(d, 0x20, classAt(i));
       // one set of attributes for all, or one per shape
       const a = Array.isArray(attrs) ? (attrs as readonly (Partial<Attributes> | undefined)[])[i] : (attrs as Partial<Attributes> | undefined);
       if (a) writeAttrs(d, a);
@@ -6288,7 +6304,12 @@ export class Session implements EditSession {
         moved.push(root);
         for (let j = k.index + 1; j <= subtreeEnd(k); j++) moved.push(p.cur(j));
         out.push(k.guid);
-        if (g.parent) added.set(g.parent, [...(added.get(g.parent) ?? []), root]);
+        // added to, not copied: a group from an import can hold hundreds of thousands
+        if (g.parent) {
+          const list = added.get(g.parent);
+          if (list) list.push(root);
+          else added.set(g.parent, [root]);
+        }
       });
       p.remove(g.index, subtreeEnd(g));
       p.insert(g.index, moved);

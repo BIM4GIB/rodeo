@@ -1801,8 +1801,13 @@ export interface EditSession {
   addObject(layerId: string, shape: NewShape, classIndex?: number, attrs?: Partial<Attributes>): string;
   /** the attributes a new object of `kind` copies from the template, before addObject's `attrs`; null when the template has none */
   templateAttributes(kind: NewShape["kind"]): Attributes | null;
-  /** Adds several shapes at once, in order, as addObject would one by one; returns their ids. `attrs` is for all, or per shape. */
-  addObjects(layerId: string, shapes: readonly NewShape[], classIndex?: number, attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[]): string[];
+  /** Adds several shapes at once, in order, as addObject would one by one; returns their ids. `classIndex` and `attrs` are each for all, or per shape. */
+  addObjects(
+    layerId: string,
+    shapes: readonly NewShape[],
+    classIndex?: number | readonly (number | undefined)[],
+    attrs?: Partial<Attributes> | readonly (Partial<Attributes> | undefined)[],
+  ): string[];
   /** whether the file has an object of this kind to copy settings from, which addObject needs */
   canAdd(kind: NewShape["kind"]): boolean;
   /** Deletes the objects; a door, window or symbol set in a wall is refused (Rodeo can't close its opening yet). */
