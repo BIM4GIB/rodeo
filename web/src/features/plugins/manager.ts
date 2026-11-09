@@ -1,4 +1,4 @@
-// Plug-ins > Plug-in Manager…: the installed plug-ins, each with its on/off switch,
+// Tools > Plug-ins > Plug-in Manager…: the installed plug-ins, each with its on/off switch,
 // its menu items or load error, and Run, Edit, Export and Delete; plus New Plug-in,
 // Import… (a .js file, shown with its header and a warning before it installs) and Help.
 

@@ -4,7 +4,7 @@ Rodeo is a free, open-source drawing and 3D modelling app that runs in the brows
 
 **Use it at [rodeo.build](https://rodeo.build).** No account is needed, and the files you open stay on your computer unless you save them to the cloud.
 
-**Status: v0.2, early.** It reads VW 2018+ files (checked on Vectorworks 2022 and on the 2023, 2024, 2025 and 2026 releases of a public demo project), draws 2D geometry, sheets and a textured 3D model, and edits layers, classes and 2D objects. Files it writes re-read cleanly in both implementations, but **have not yet been opened in Vectorworks**. Keep originals and check edited copies in Vectorworks or the free Vectorworks Viewer before relying on them.
+**Status: v0.2, early.** It reads VW 2018+ files (checked on Vectorworks 2022 and on the 2023, 2024, 2025 and 2026 releases of a public demo project) and the 2D of VW 2013 files (checked on one file), draws 2D geometry, sheets and a textured 3D model, and edits layers, classes and 2D objects. Files it writes re-read cleanly in both implementations, but **have not yet been opened in Vectorworks**. Keep originals and check edited copies in Vectorworks or the free Vectorworks Viewer before relying on them.
 
 ## Using Rodeo
 
@@ -12,7 +12,7 @@ The **[user guide](docs/guide/README.md)** covers the app menu by menu and tool 
 
 | Area | Pages |
 |---|---|
-| Getting around | [Files](docs/guide/files.md) · [Workspace](docs/guide/workspace.md) · [Layers and classes](docs/guide/layers-classes.md) · [Import and export](docs/guide/import-export.md) |
+| Getting around | [Files](docs/guide/files.md) · [Workspace](docs/guide/workspace.md) · [Layers and classes](docs/guide/layers-classes.md) · [Import and export](docs/guide/import-export.md) · [Branches](docs/guide/branches.md) |
 | Drawing and editing | [Drawing and attributes](docs/guide/drawing.md) · [Dimensions](docs/guide/dimensions.md) · [Selecting and editing](docs/guide/editing.md) · [Symbols and plug-in objects](docs/guide/symbols-plugins.md) |
 | 3D | [3D view and rendering](docs/guide/3d-view-rendering.md) · [3D modelling](docs/guide/3d-modeling.md) |
 | Documents | [Sheets, viewports and worksheets](docs/guide/sheets.md) |
@@ -20,6 +20,10 @@ The **[user guide](docs/guide/README.md)** covers the app menu by menu and tool 
 | Automating | [Scripts](docs/guide/scripting.md) |
 
 [PARITY.md](PARITY.md) lists every Vectorworks feature and whether Rodeo has it yet.
+
+**Convert files** without opening them at [rodeo.build/convert](https://rodeo.build/convert), in your browser, or on the command line with `npx @rodeo.build/cli convert model.rvt model.ifc` ([cli/README.md](cli/README.md)).
+
+**Agents of your own**: Claude (web, desktop and phone), ChatGPT, Claude Code, Cursor and other MCP agents sign in and drive your open drawing (Window › Connect an Agent…), or work on files on your computer with `npx -y @rodeo.build/cli mcp`.
 
 ## Running it yourself
 
@@ -44,6 +48,8 @@ Accounts, cloud drawings, sharing and live collaboration come from the optional 
 | `web/src/features/` | self-contained features (agents, collaboration, plug-ins, search, stage, ...) |
 | `web/src/platform/` | the editor's side of the server's API |
 | `web/scripts/vwx.ts` | a Node command line |
+| `web/src/convert/` | the converter: any format read into a drawing and written out without the editor (the converter page, the `rodeo` command and MCP use it) |
+| `cli/` | the npm package `@rodeo.build/cli`, the `rodeo` command |
 | `web/vendor/` | generated third-party builds (rvt-rs) |
 | `server/` | accounts, cloud drawings, collaboration, billing; `server/scripts/` holds its tests |
 | `cloudrender/` | the GPU worker behind Render Image's cloud option (Modal) |

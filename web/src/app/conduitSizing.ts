@@ -1,4 +1,4 @@
-// AEC > Electrical > Conduit Sizing Calc…, Vectorworks' Conduit Sizing Calculator: the conduit a set
+// AEC > MEP > Conduit Sizing Calc…, Vectorworks' Conduit Sizing Calculator: the conduit a set
 // of wires needs. The wires' areas are shared between the conduits, the fill allowed gives the
 // area each conduit must have inside, and from that come its actual diameter and the smallest
 // trade size of the chosen kind that holds it. Vectorworks' wire specifications database
@@ -106,7 +106,7 @@ interface Added {
 /** Remembered between openings, as Vectorworks keeps a calculator's last values. */
 const last = { wire: "thhn", size: "1", count: "1", other: "", conduit: "emt", conduits: "1", added: [] as Added[] };
 
-/** AEC > Electrical > Conduit Sizing Calc…: the conduit a set of wires needs. */
+/** AEC > MEP > Conduit Sizing Calc…: the conduit a set of wires needs. */
 export async function conduitSizingDialog(): Promise<void> {
   const input = (label: string, value: string): HTMLInputElement =>
     h("input", { cls: "menu-dialog-input", value, attrs: { type: "text", inputmode: "decimal", "aria-label": label } });

@@ -1,0 +1,225 @@
+/* The Render palette's Materials tab (materialsTab.ts): the model's materials as a list, and each one's
+   page. Solid surfaces, colours from tokens.css so both themes work; no glass or blur. */
+
+.rs-materials-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+/* the list's toolbar: the search box on its own line, Pick and Match library materials under it */
+.rs-materials-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.rs-materials-search {
+  flex: 1 1 100%;
+  min-width: 0;
+  height: 26px;
+}
+
+.rs-materials-pick {
+  flex: none;
+}
+
+/* Pick looks pressed while it waits for a click on the model, hovered or not (.btn's hover would win otherwise) */
+.btn.rs-materials-pick[aria-pressed="true"],
+.btn.rs-materials-pick[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--select);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.rs-materials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -4px;
+}
+
+/* one material: its picture, name and muted line, and a chevron to its page */
+.rs-material-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.rs-material-row:hover {
+  background: var(--fill-hover);
+}
+
+.rs-material-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.rs-material-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rs-material-name,
+.rs-material-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-material-name {
+  font-size: 12px;
+}
+
+.rs-material-meta {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.rs-material-chevron {
+  color: var(--text-3);
+}
+
+/* a picture: 28 px in a row, a library thumb or a texture's preview or a colour, rounded */
+.rs-material-art {
+  flex: none;
+  display: block;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--fill-strong);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.rs-material-art > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* the page: back to the list, the material's picture and name, its groups, Reset */
+.rs-materials-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.rs-materials-back {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 6px 12px 0;
+  padding: 3px 8px 3px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: default;
+}
+
+.rs-materials-back:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.rs-materials-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rs-materials-back .rs-icon {
+  transform: rotate(180deg);
+}
+
+.rs-materials-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 12px;
+}
+
+.rs-materials-hero .rs-material-art {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+}
+
+.rs-materials-hero-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rs-materials-hero-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rs-materials-hero-meta {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* the library line: a thumb, the name (or None), and the two buttons */
+.rs-materials-lib {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0 4px;
+}
+
+.rs-materials-lib-art {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+}
+
+.rs-materials-lib-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.rs-materials-lib-name.is-none {
+  color: var(--text-3);
+}
+
+.rs-materials-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 10px;
+}
+
+/* a double-click on a label puts the preset's value back: it should not select the words too */
+.rs-materials .rs-row > .rs-label {
+  user-select: none;
+}

@@ -57,6 +57,32 @@
   --topbar-h: 48px;
 }
 
+/* Chinese, Japanese and Korean (i18n.ts sets <html lang>): the system's faces for the characters Spline Sans lacks */
+:root:lang(zh) {
+  --font: "Spline Sans", "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Segoe UI", system-ui, sans-serif;
+}
+:root:lang(zh-TW) {
+  --font: "Spline Sans", "Inter", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC", "Noto Sans TC", "Segoe UI", system-ui, sans-serif;
+}
+:root:lang(ja) {
+  --font: "Spline Sans", "Inter", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans CJK JP", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
+}
+:root:lang(ko) {
+  --font: "Spline Sans", "Inter", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "Segoe UI", system-ui, sans-serif;
+}
+
+/* while a language other than English loads (index.html, i18n.ts) the page waits unseen, and shows after 3 s whatever happens */
+html.i18n-pending body {
+  visibility: hidden;
+  animation: i18n-reveal 0s 3s forwards;
+}
+
+@keyframes i18n-reveal {
+  to {
+    visibility: visible;
+  }
+}
+
 :root[data-theme="light"] {
   color-scheme: light;
   --chrome: #f6f6f6;

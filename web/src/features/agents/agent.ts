@@ -3,15 +3,19 @@
 // tool starts subagents on the worker model, each with its own brief and the same tools, at the
 // same time; their reports come back as delegate's result. Everything that happens is told to the
 // panel as events, as it happens, so the user watches the text stream in and the tools work.
+// A run works in one drawing (RunTarget), whichever tab is in front: runs in several drawings go on
+// at once, and a call that needs the window waits until its drawing is in front.
 
-import type { AppContext } from "../../app/ext.ts";
+import { behindRefusal, type AppContext, type DrawingRef } from "../../app/ext.ts";
+import { store } from "../../app/state.ts";
 import { errorMessage } from "../../app/toast.ts";
+import { freeWindow, useWindow } from "./busy.ts";
 import { Handles, PLANNER_PICTURES, prunePictures, WORKER_PICTURES, type PictureRule } from "./history.ts";
 import { complete, ModelError, type ChatMessage, type ContentPart, type ToolCall, type Usage } from "./llm.ts";
 import type { Picture } from "./look.ts";
 import { plannerPrompt, workerPrompt } from "./prompt.ts";
 import type { AgentSettings } from "./settings.ts";
-import { toolsFor, type OutFile, type SubTask, type Tool, type ToolContext, type ToolOutput } from "./tools.ts";
+import { toolsFor, type Need, type OutFile, type SubTask, type Tool, type ToolContext, type ToolOutput } from "./tools.ts";
 
 /** Each event names the subagent it comes from (`sub`), or none for the planner. */
 export type AgentEvent =
@@ -22,6 +26,9 @@ export type AgentEvent =
   | { readonly kind: "writing"; readonly sub?: string; readonly index: number; readonly name: string; readonly delta: string }
   | { readonly kind: "tool"; readonly sub?: string; readonly id: string; readonly name: string; readonly label: string; readonly args: Record<string, unknown> }
   | { readonly kind: "progress"; readonly sub?: string; readonly id: string; readonly text: string }
+  /** a call waiting for its drawing to come to the front (`why`), and going on once it has */
+  | { readonly kind: "wait"; readonly sub?: string; readonly id: string; readonly why: string }
+  | { readonly kind: "resume"; readonly sub?: string; readonly id: string }
   | {
       readonly kind: "result";
       readonly sub?: string;
@@ -37,12 +44,46 @@ export type AgentEvent =
 
 export interface RunOptions {
   readonly app: AppContext;
+  /** the drawing it works in */
+  readonly target: RunTarget;
   readonly settings: AgentSettings;
   /** the conversation so far, ending with the user's new message */
   readonly history: readonly ChatMessage[];
   readonly attachments: ReadonlyMap<string, File>;
   readonly signal: AbortSignal;
   onEvent(e: AgentEvent): void;
+}
+
+/**
+ * The drawing a conversation's runs work in: the one in front when it began (or, begun with none
+ * open, the first one in front when a tool needs one), and one a run opens after that.
+ */
+export class RunTarget {
+  constructor(
+    private d: DrawingRef | null,
+    private readonly app: AppContext,
+    private readonly moved: (d: DrawingRef) => void,
+  ) {}
+
+  get current(): DrawingRef | null {
+    return this.d;
+  }
+
+  drawing(): DrawingRef {
+    if (!this.d) {
+      const front = this.app.frontDrawing();
+      if (front) this.follow(front);
+    }
+    if (!this.d) throw new Error("No drawing is open. Ask the user to open one (or import a file they attach).");
+    if (!this.d.isOpen()) throw new Error("The drawing this conversation works in has been closed.");
+    return this.d;
+  }
+
+  follow(d: DrawingRef): void {
+    if (d === this.d) return;
+    this.d = d;
+    this.moved(d);
+  }
 }
 
 const WORKER_STEPS = 40;
@@ -71,7 +112,7 @@ export interface RunEnd {
 
 /** Runs the planner on the conversation. Never throws: a stop or an error still keeps what was done. */
 export async function runAgent(opts: RunOptions): Promise<RunEnd> {
-  const { settings, app } = opts;
+  const { settings } = opts;
   const messages: ChatMessage[] = [...opts.history];
   const start = messages.length;
   const delegate = async (callId: string, tasks: readonly SubTask[]): Promise<string> => {
@@ -85,7 +126,7 @@ export async function runAgent(opts: RunOptions): Promise<RunEnd> {
       model: settings.planner,
       system: plannerPrompt(),
       messages,
-      tools: toolsFor(true, app),
+      tools: toolsFor(true),
       pictures: PLANNER_PICTURES,
       delegate,
     });
@@ -108,7 +149,7 @@ async function runWorker(opts: RunOptions, sub: string, parent: string, task: Su
       model,
       system: workerPrompt(),
       messages,
-      tools: toolsFor(false, opts.app),
+      tools: toolsFor(false),
       maxSteps: WORKER_STEPS,
       pictures: WORKER_PICTURES,
       sub,
@@ -195,20 +236,68 @@ async function runTool(opts: RunOptions, l: Loop, byName: ReadonlyMap<string, To
   else {
     const ctx: ToolContext = {
       app: opts.app,
+      drawing: () => opts.target.drawing(),
+      follow: (d) => opts.target.follow(d),
       signal: opts.signal,
       attachments: opts.attachments,
       progress: (text) => onEvent({ kind: "progress", sub: l.sub, id: call.id, text }),
       delegate: l.delegate ? (tasks) => l.delegate!(call.id, tasks) : undefined,
     };
+    const need = needOf(tool, args);
     try {
+      if (need) await untilFree(opts, l, call.id, need);
+      // the drawing in front stays in front while the call works in the window (busy.ts)
+      if (need === "window") useWindow(call.id, label, opts.target.drawing());
       out = await tool.run(args, ctx);
     } catch (err) {
       if (opts.signal.aborted) out = { text: "Stopped by the user.", error: true };
       else out = { text: `Error: ${errorMessage(err)}`, error: true };
+    } finally {
+      freeWindow(call.id);
     }
+    // a tool Stop cuts short can still return (a killed script's worker answers), so it says it stopped
+    if (opts.signal.aborted) out = { text: "Stopped by the user.", error: true };
   }
   onEvent({ kind: "result", sub: l.sub, id: call.id, ok: !out.error, text: out.text, images: out.images ?? [], files: out.files ?? [] });
   return out;
+}
+
+function needOf(tool: Tool, args: Record<string, unknown>): Need | undefined {
+  const n = tool.needs;
+  if (typeof n !== "function") return n;
+  try {
+    return n(args);
+  } catch {
+    return "window";
+  }
+}
+
+/**
+ * Waits until the run's drawing can take a call that needs `need`: one needing the window waits
+ * for its drawing to be in front, an edit only where its drawing can't be changed from behind.
+ */
+async function untilFree(opts: RunOptions, l: Loop, id: string, need: Need): Promise<void> {
+  const d = opts.target.drawing();
+  const why = (): string | null => {
+    if (d.isShown()) return null;
+    return need === "window" ? "it works in the window" : behindRefusal(d);
+  };
+  const first = why();
+  if (!first) return;
+  opts.onEvent({ kind: "wait", sub: l.sub, id, why: first });
+  await new Promise<void>((resolve, reject) => {
+    const check = (): void => {
+      if (opts.signal.aborted) reject(new DOMException("Stopped", "AbortError"));
+      else if (!d.isOpen()) reject(new Error("the drawing was closed"));
+      else if (why()) return;
+      else resolve();
+      off();
+      opts.signal.removeEventListener("abort", check);
+    };
+    const off = store.on("session", check);
+    opts.signal.addEventListener("abort", check);
+  });
+  opts.onEvent({ kind: "resume", sub: l.sub, id });
 }
 
 function safeLabel(tool: Tool, args: Record<string, unknown>): string {

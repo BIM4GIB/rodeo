@@ -1,0 +1,262 @@
+/* The admin page's Gallery (moderation) and Funding and sponsor tabs. The cards are admin.css's
+   solid panels; the previews are drawn the way the editor draws the funding bar and the start
+   hub's sponsor card. Colours come from the tokens only, and the layout holds at 375 px. */
+
+/* ---- gallery moderation ------------------------------------------------------------ */
+
+.adm-mod-list {
+  display: grid;
+  gap: 12px;
+}
+
+.adm-mod-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.adm-mod-top {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.adm-mod-cover {
+  display: block;
+  width: 112px;
+  aspect-ratio: 1200 / 630;
+  border-radius: var(--radius);
+  background: var(--fill-strong);
+  object-fit: cover;
+}
+
+.adm-mod-plain {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.adm-mod-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.adm-mod-title {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.adm-mod-title a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.adm-mod-title a:hover {
+  text-decoration: underline;
+}
+
+.adm-mod-line {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.adm-mod-reason {
+  margin: 2px 0 0;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.adm-mod-reports {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-mod-report {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.adm-mod-note {
+  margin: 0;
+  color: var(--text-soft);
+  overflow-wrap: anywhere;
+}
+
+.adm-mod-meta {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.adm-mod-hide {
+  display: grid;
+  gap: 8px;
+}
+
+.adm-mod-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.adm-mod-notice {
+  margin: 0 0 4px;
+  color: var(--good);
+  overflow-wrap: anywhere;
+}
+
+/* ---- funding and sponsor ----------------------------------------------------------- */
+
+.adm-fund-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.adm-fund {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.adm-fund .adm-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.adm-fund-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.adm-fund-field .adm-input {
+  width: 100%;
+}
+
+.adm-fund-field textarea.adm-input {
+  resize: vertical;
+}
+
+.adm-fund-card .adm-input:disabled {
+  opacity: 0.5;
+}
+
+.adm-fund-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.adm-fund-preview {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.adm-fund-preview > .adm-muted {
+  font-size: 12px;
+}
+
+.adm-fund-title {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.adm-fund-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--fill-strong);
+}
+
+.adm-fund-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.adm-fund-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.adm-fund-ad {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.adm-fund-ad-img {
+  flex: none;
+  width: 72px;
+  height: 48px;
+  border-radius: 6px;
+  background: var(--fill);
+  object-fit: contain;
+}
+
+.adm-fund-ad-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.adm-fund-ad-text span {
+  color: var(--text-2);
+}
+
+.adm-fund-ad > .adm-btn {
+  flex: none;
+}
+
+.adm-fund-save {
+  display: grid;
+  gap: 6px;
+}
+
+/* ---- narrow screens ---------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .adm-mod-top {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .adm-mod-cover {
+    width: 96px;
+  }
+
+  .adm-fund {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -8,7 +8,8 @@
 // ../samples/sample.vwx at /__sample.vwx.
 
 import { byId, h } from "./dom.ts";
-import type { RecentFile, ShowRecent } from "./ext.ts";
+import { registerWelcome, type RecentFile, type ShowRecent } from "./ext.ts";
+import { language, languagePicker } from "./i18n.ts";
 import { isLoading, onLoading } from "./loading.ts";
 import { type RecentEntry, onRecentChange, recentList } from "./recent.ts";
 import { store } from "./state.ts";
@@ -23,6 +24,8 @@ export interface WelcomeActions {
   /** reopens a drawing from the recent list, read through its handle */
   openRecent(entry: RecentEntry): void;
 }
+
+registerWelcome(languagePicker, "foot");
 
 /** How many recent drawings the hub lists. */
 const RECENT_SHOWN = 5;
@@ -135,7 +138,7 @@ function recentRow(file: RecentFile): HTMLElement {
     "button",
     { cls: "hub-file", attrs: { type: "button", title: file.name } },
     h("span", { cls: "hub-file-icon", html: file.icon }),
-    h("span", { cls: "hub-file-name", text: file.name }),
+    h("span", { cls: "hub-file-name", text: file.name, attrs: { translate: "no" } }),
     h("span", { cls: "hub-file-time", text: timeAgo(file.at) }),
   );
   button.addEventListener("click", () => file.open());
@@ -154,7 +157,7 @@ function timeAgo(ms: number, now = Date.now()): string {
   }
   const then = new Date(ms);
   const sameYear = then.getFullYear() === new Date(now).getFullYear();
-  return then.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  return then.toLocaleDateString(language().code === "en" ? "en-GB" : language().code, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 async function loadSample(actions: WelcomeActions): Promise<void> {

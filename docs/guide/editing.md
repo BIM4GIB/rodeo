@@ -84,6 +84,8 @@ For a polygon or polyline, Object Info steps through the vertices (◀ ▶). The
 - add or delete one
 - open or close the outline (a polyline's hidden edges are drawn again once it is edited)
 
+An extrude or a multiple extrude shows its footprint, X, Y, Width and Depth from its lower left corner, and its Bottom. X, Y, Width, Depth and Bottom can be typed. Height is shown but can't be typed yet. Several objects selected move by the Offset X and Offset Y typed, with the **Move** button.
+
 ### Reshape tool
 
 The **Reshape** tool (<kbd>⇧V</kbd>, under Selection) reshapes the selected lines, polygons and polylines:
@@ -102,7 +104,7 @@ Each change is one undo step.
 
 ## Cut, copy and paste
 
-You can cut, copy, paste and paste in place, also between files, through the system clipboard.
+You can cut, copy, paste and paste in place, also between files, through the system clipboard. Paste and Paste in Place are greyed out until something has been copied, in this window or another open in this browser.
 
 Walls, slabs, plug-in objects and lights cut, copy and paste within their drawing: onto another design layer as high above it as they were, not onto sheets. Plug-in objects and lights also go into symbols.
 
@@ -459,7 +461,7 @@ The set is kept while the drawing is open. The Attributes palette's title bar me
 
 ### Guides
 
-**Guides › Make Guide** puts the selected objects in the class Guides (made when the drawing has none). **Show Guides** and **Hide Guides** set its visibility, **Select Guides** selects the guides on the active layer, and **Delete All Guides** deletes every one.
+**Modify › Guides › Make Guide** puts the selected objects in the class Guides (made when the drawing has none). **Show Guides** is a ticked toggle for the class's visibility, **Select Guides** selects the guides on the active layer, and **Delete All Guides** deletes every one.
 
 ## Images
 

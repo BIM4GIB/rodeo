@@ -188,7 +188,7 @@ async function paletteFor(p?: ScriptPalette): Promise<ScriptPalette | null> {
   if (p) return p;
   if (palettes.length === 0) return newPalette();
   if (palettes.length === 1) return palettes[0];
-  const select = h("select", { cls: "select", attrs: { "aria-label": "Script palette" } }, ...palettes.map((x, i) => h("option", { text: x.name, attrs: { value: String(i) } })));
+  const select = h("select", { cls: "select", attrs: { "aria-label": "Script palette" } }, ...palettes.map((x, i) => h("option", { text: x.name, attrs: { translate: "no", value: String(i) } })));
   const i = await showDialog<number>({
     title: "Select Script Palette",
     okLabel: "Select",

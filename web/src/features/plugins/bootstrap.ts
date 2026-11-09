@@ -25,6 +25,8 @@ var __ovPending = new Map();
 var __ovSeq = 0;
 var __ovMenus = new Map();
 var __ovMenuSeq = 0;
+var __ovEngines = new Map();
+var __ovEngineSeq = 0;
 var __ovSelfUrl = self.location.href;
 var __ovOffset = __OV_OFFSET__;
 
@@ -190,10 +192,49 @@ self.openvwx = Object.freeze({
       __ovPost({ type: "menu", id: id, label: label });
     },
   }),
+  render: Object.freeze({
+    engine: function (spec, handler) {
+      if (!spec || typeof spec !== "object" || typeof spec.name !== "string" || spec.name === "" || typeof handler !== "function") {
+        throw new TypeError("openvwx.render.engine(spec, handler) takes { name, takes, options } and a function");
+      }
+      var id = "e" + (++__ovEngineSeq);
+      __ovEngines.set(id, handler);
+      // plain data only crosses to the host: functions and the like are left out
+      __ovPost({ type: "engine", id: id, spec: JSON.parse(JSON.stringify(spec)) });
+    },
+  }),
   fetch: function (url, init) {
     return __ovCall("fetch", [String(url), __ovInit(init)]);
   },
 });
+
+// What a render engine's handler returned, as pictures: { bytes, type, note } or a list of them.
+function __ovPictures(out) {
+  var list = Array.isArray(out) ? out : [out];
+  return list.map(function (p) {
+    if (!p || typeof p !== "object") throw new TypeError("A render engine returns { bytes, type } (or a list of them)");
+    var bytes = p.bytes instanceof ArrayBuffer ? new Uint8Array(p.bytes) : p.bytes;
+    if (!(bytes instanceof Uint8Array)) throw new TypeError("A render engine's picture needs bytes: a Uint8Array or an ArrayBuffer");
+    return { bytes: bytes, type: p.type === undefined ? "image/png" : String(p.type), note: p.note === undefined ? undefined : String(p.note) };
+  });
+}
+
+function __ovRender(id, engine, job) {
+  var fn = __ovEngines.get(engine);
+  Promise.resolve()
+    .then(function () {
+      if (!fn) throw new Error("That render engine is no longer installed.");
+      return fn(job);
+    })
+    .then(
+      function (out) {
+        __ovPost({ type: "rendered", id: id, ok: true, value: __ovPictures(out) });
+      },
+      function (err) {
+        __ovPost({ type: "rendered", id: id, ok: false, error: __ovErr(err) });
+      },
+    );
+}
 
 // Before any plug-in code runs: the network and storage entry points throw.
 __OV_STUBS__.forEach(function (name) {
@@ -285,6 +326,8 @@ self.onmessage = function (event) {
     __ovStart(m.id);
   } else if (m.type === "invoke") {
     __ovInvoke(m.id, m.menu);
+  } else if (m.type === "render") {
+    __ovRender(m.id, m.engine, m.job);
   } else if (m.type === "eval") {
     __ovEval(m.id, String(m.code));
   }

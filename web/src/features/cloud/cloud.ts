@@ -186,9 +186,10 @@ export async function cloudCall<T>(label: string, action: string, run: () => Pro
 /**
  * Opens a cloud drawing at its head version. Resolves true when it is open (not when the open was
  * refused, as when unsaved changes are kept). Its head is remembered only then, so a refused open
- * cannot make a later save skip the check against a newer version.
+ * cannot make a later save skip the check against a newer version. With `replace` it takes the place
+ * of the drawing in front rather than a tab of its own.
  */
-export async function openCloudFile(fileId: string): Promise<boolean> {
+export async function openCloudFile(fileId: string, options?: { readonly replace?: boolean }): Promise<boolean> {
   const ctx = appContext();
   if (!ctx) return false;
   const fetched = await cloudCall("Fetching the drawing…", "Open", async () => {
@@ -198,7 +199,7 @@ export async function openCloudFile(fileId: string): Promise<boolean> {
   if (!fetched) return false;
   const { file, content } = fetched;
   const source = sourceOf(file, content.versionId, content.collabSeq);
-  await ctx.openDocument(content.bytes, file.name, { source });
+  await ctx.openDocument(content.bytes, file.name, { source, replace: options?.replace });
   if (documentSource() !== source) return false;
   heads.set(file.id, content.versionId);
   lastSaves.set(file.id, { size: content.bytes.length, at: Date.now() });

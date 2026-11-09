@@ -3,24 +3,61 @@
 // the replay and check.ts.
 
 import type { ChangeEvent, ChangeKind, SpliceOp } from "../../core/index.ts";
+import { changedRuns } from "../../core/splice.ts";
 
-/** One change to a drawing's record list: records [start, start + del) are replaced by `add`. */
-export interface HistoryOp {
-  /** when it was made, ms since the epoch */
-  readonly t: number;
+/** Records [start, start + del) of a record list replaced by `add`. */
+export interface HistoryRun {
   readonly start: number;
   readonly del: number;
   /** immutable record bytes, shared with the document: never copied while recording */
   readonly add: readonly Uint8Array[];
+}
+
+/** One change to a drawing's record list: records [start, start + del) are replaced by `add`, then each of `more` in turn. */
+export interface HistoryOp extends HistoryRun {
+  /** when it was made, ms since the epoch */
+  readonly t: number;
   readonly kind: ChangeKind;
   readonly ids: readonly string[];
   /** header bytes the change set too (document settings such as units) */
   readonly header?: { readonly at: number; readonly bytes: Uint8Array };
+  /**
+   * the change's further runs, each at the positions the runs before it left. The core reports a
+   * change as one splice from its first changed record to its last, so a class added near the top
+   * of the file and an object at its end span the whole drawing; the history keeps only the runs
+   * that changed.
+   */
+  readonly more?: readonly HistoryRun[];
 }
+
+/** splices spanning at least this many records are cut down to the runs that changed */
+const RUNS_FROM = 1024;
 
 export function historyOp(op: SpliceOp, t: number): HistoryOp {
   const header = op.header && { at: op.header.at, bytes: op.header.bytes };
-  return { t, start: op.start, del: op.del, add: op.add, kind: op.kind, ids: op.ids, header };
+  const runs = op.removed && op.del + op.add.length >= RUNS_FROM ? changedRuns(op.start, op.removed, op.add) : null;
+  if (!runs?.length) return { t, start: op.start, del: op.del, add: op.add, kind: op.kind, ids: op.ids, header };
+  const [first, ...more] = runs;
+  return { t, ...first, kind: op.kind, ids: op.ids, header, ...(more.length ? { more } : {}) };
+}
+
+/** Each of the op's runs, in the order they apply. */
+export function runsOf(op: HistoryOp): readonly HistoryRun[] {
+  return op.more ? [op, ...op.more] : [op];
+}
+
+/** Applies the op to a record list in place. No spread: a run can span most of a drawing. */
+export function applyOp(list: Uint8Array[], op: HistoryOp): void {
+  for (const r of runsOf(op)) {
+    if (r.add.length < 4096) {
+      list.splice(r.start, r.del, ...r.add);
+      continue;
+    }
+    const tail = list.slice(r.start + r.del);
+    list.length = r.start;
+    for (const d of r.add) list.push(d);
+    for (const d of tail) list.push(d);
+  }
 }
 
 /**
@@ -41,7 +78,7 @@ export function changesOf(ops: readonly HistoryOp[], from: number, to: number): 
 /** Storage an op takes, roughly: its record bytes and a fixed overhead. */
 export function opBytes(op: HistoryOp): number {
   let n = 64 + (op.header?.bytes.length ?? 0);
-  for (const a of op.add) n += a.length;
+  for (const r of runsOf(op)) for (const a of r.add) n += a.length;
   return n;
 }
 

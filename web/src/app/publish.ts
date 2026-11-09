@@ -270,7 +270,7 @@ export async function publishDialog(doc: VwxDocument, fileName: string, base: st
   const fillSets = (chosen = ""): void => {
     setSelect.replaceChildren(
       h("option", { text: sets.length ? "Choose a set…" : "No saved sets", value: "" }),
-      ...sets.map((s) => h("option", { text: s.name, value: s.name })),
+      ...sets.map((s) => h("option", { attrs: { translate: "no" }, text: s.name, value: s.name })),
     );
     setSelect.value = chosen;
     setSelect.disabled = sets.length === 0;

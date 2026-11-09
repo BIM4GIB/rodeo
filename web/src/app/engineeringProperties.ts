@@ -352,7 +352,7 @@ export async function engineeringPropertiesDialog(): Promise<void> {
   if (r.place) placeTextAtClick("Engineering Properties", text);
 }
 
-/** AEC > Machine Design > Centroid…: where the selected closed 2D object's centroid lies, and a locus placed there when asked. */
+/** Tools > Machine Design > Centroid…: where the selected closed 2D object's centroid lies, and a locus placed there when asked. */
 export async function centroidDialog(): Promise<void> {
   const shape = selectedShape();
   const sec = shape && sectionOf(shape);

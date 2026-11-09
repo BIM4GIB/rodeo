@@ -25,7 +25,7 @@ export function critTopButton(): HTMLElement {
     const open = crit.openCount();
     count.textContent = String(open);
     count.hidden = open === 0;
-    btn.title = crit.active ? "Leave crit mode" : "Crit mode: pin comments and redlines for review";
+    btn.title = crit.active ? "Leave crit mode" : "Crit mode: mark up and comment on the drawing for a review";
     count.setAttribute("aria-label", `${open} open`);
   };
   crit.subscribe(sync);

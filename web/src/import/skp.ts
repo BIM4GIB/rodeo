@@ -12,7 +12,9 @@
 // it holds and an instance's tag is its class (a face's own tag isn't read). A face with holes is
 // cut into triangles, others stay whole. Components nested deeper than a symbol can be drawn are
 // placed as groups instead. Shown edges no face uses are lines, joined end to end; guide lines are
-// lines and guide points points, tagged Guides. An image is a group holding its one textured face,
+// lines and guide points points, tagged Guides. Faces past MAX_FACES refuse the file; lines and
+// guide points have a cap of their own, the same, past which the rest are left out and counted (a
+// detailed model's loose edges once outnumbered its faces). An image is a group holding its one textured face,
 // lifted a millimetre off its plane so it shows over a face it is glued to (SketchUp draws it so).
 // Hidden faces and instances are left out as SketchUp leaves them out of view, and counted; things
 // on a hidden tag come in, and the file names the tag hidden. Texts (openskp doesn't read where
@@ -66,6 +68,8 @@ export function parseSkp(bytes: Uint8Array): MeshFile {
     if (n > 0) skipped[kind] = (skipped[kind] ?? 0) + n;
   };
   let faces = 0;
+  // lines and guide points, held to a cap of their own
+  let loose = 0;
 
   const geometryOf = (d: Definition): Geometry => {
     let g = geometry.get(d);
@@ -148,13 +152,13 @@ export function parseSkp(bytes: Uint8Array): MeshFile {
     if (++faces > MAX_FACES) throw tooMany();
     p.faces.push(corners);
   };
-  // a line or point counts as a face against the cap
-  const addLine = (n: MeshTreeNode, line: MeshLine): void => {
-    if (++faces > MAX_FACES) throw tooMany();
+  // a line or point past its cap is left out and counted, where a face past its cap refuses the file
+  const addLine = (n: MeshTreeNode, line: MeshLine, skip: typeof count): void => {
+    if (++loose > MAX_FACES) return skip(line.tag === GUIDES ? "guide line" : "line");
     (n.lines ??= []).push(line);
   };
-  const addPoint = (n: MeshTreeNode, at: number[]): void => {
-    if (++faces > MAX_FACES) throw tooMany();
+  const addPoint = (n: MeshTreeNode, at: number[], skip: typeof count): void => {
+    if (++loose > MAX_FACES) return skip("guide point");
     (n.points ??= []).push({ at, tag: GUIDES });
   };
 
@@ -257,12 +261,12 @@ export function parseSkp(bytes: Uint8Array): MeshFile {
       }
     }
     // a loop of edges is no face, so it isn't closed (a closed 3D polygon shows filled): it runs back to its start
-    for (const line of g.lines) addLine(n, { points: placed(line, m, false), closed: false, ...(tag ? { tag } : {}) });
+    for (const line of g.lines) addLine(n, { points: placed(line, m, false), closed: false, ...(tag ? { tag } : {}) }, skip);
     for (const c of d.constructionLines) {
-      if (c.start && c.end) addLine(n, { points: placed([...c.start, ...c.end], m, false), closed: false, tag: GUIDES });
+      if (c.start && c.end) addLine(n, { points: placed([...c.start, ...c.end], m, false), closed: false, tag: GUIDES }, skip);
       else skip("endless guide line");
     }
-    for (const c of d.constructionPoints) addPoint(n, placed(c.position, m, false));
+    for (const c of d.constructionPoints) addPoint(n, placed(c.position, m, false), skip);
     skip("text", d.texts.length);
     skip("dimension", d.dimensions.length);
     skip("section plane", d.sectionPlanes.length);

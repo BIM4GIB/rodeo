@@ -51,7 +51,7 @@ export function levelsEditor<K>(units: string | undefined, layers: readonly { ke
       "select",
       { cls: "sl-layer", attrs: { "aria-label": "Design layer at the level" } },
       h("option", { value: "", text: "None" }),
-      ...layers.map((l, i) => h("option", { value: String(i), text: l.name })),
+      ...layers.map((l, i) => h("option", { attrs: { translate: "no" }, value: String(i), text: l.name })),
     );
     const at = level.layer === null ? -1 : layers.findIndex((l) => l.key === level.layer);
     layer.value = at < 0 ? "" : String(at);

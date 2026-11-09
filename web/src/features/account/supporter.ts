@@ -95,7 +95,7 @@ export function perksOf(cfg: ServerConfig): string[] {
     sup.versions === 0 ? "Every version of each drawing kept" : `${sup.versions} versions of each drawing kept`,
     sup.files === 0 ? "No limit on the number of drawings" : `Up to ${sup.files} drawings`,
   ];
-  if (sup.shareLinks) perks.push("Public share links and embeds");
+  if (sup.shareLinks && !free.shareLinks) perks.push("Public share links and embeds");
   perks.push("No ads on the start screen", "A Rodeo Plus badge");
   return perks;
 }

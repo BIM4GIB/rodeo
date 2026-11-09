@@ -24,7 +24,12 @@ export interface RevitDrawing {
 
 /** What the worker is sent and answers. */
 export type RevitRequest = { bytes: Uint8Array; name: string };
-export type RevitReply = { type: "progress"; step: string } | { type: "done"; drawing: RevitDrawing } | { type: "error"; message: string };
+export type RevitReply =
+  | { type: "progress"; step: string }
+  | { type: "done"; drawing: RevitDrawing }
+  /** after "done": the drawing again with `count` more elements drawn in full, or null when none were */
+  | { type: "detail"; drawing: RevitDrawing | null; count: number }
+  | { type: "error"; message: string };
 
 /** The drawing of the Revit model `read` from the file `fileName`; `progress` hears each step. */
 export function revitDrawing(read: RvtRead, fileName: string, progress?: (step: string) => void): RevitDrawing {

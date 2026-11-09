@@ -1,6 +1,6 @@
 // Draws crit mode over the 2D drawing: numbered pins, the redlines of the
 // threads on the active layer, and the drafts being made. It draws on its own
-// canvas above the drawing (so View > Dark Canvas, which inverts the drawing's
+// canvas above the drawing (so View > Appearance > Dark Canvas, which inverts the drawing's
 // canvas, leaves the colours of the comments as chosen), and answers the hit
 // tests of pin clicks.
 

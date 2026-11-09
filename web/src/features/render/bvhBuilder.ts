@@ -35,7 +35,9 @@ export class BvhBuilder implements BVHWorker {
         // the arrays come back from the worker, which had them
         giveBack(geometry.attributes.position, data.position);
         if (geometry.index && data.serialized.index) giveBack(geometry.index, data.serialized.index);
-        const bvh = MeshBVH.deserialize(data.serialized, geometry, { setIndex: false });
+        // a geometry without an index takes the one the worker made, in the BVH's order: its leaves
+        // count triangles in that order, so without it a large mesh's leaves hold the wrong triangles
+        const bvh = MeshBVH.deserialize(data.serialized, geometry);
         if (options.setBoundingBox !== false) geometry.boundingBox = bvh.getBoundingBox(new THREE.Box3());
         onProgress?.(1);
         resolve(bvh);

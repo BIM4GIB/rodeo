@@ -16,12 +16,23 @@
   display: block;
   width: 100%;
   height: 100%;
-  cursor: grab;
+  cursor: default;
   outline: none;
   touch-action: none;
 }
 
-.view3d-canvas:active {
+/* a tool waiting for a click on a face (Push/Pull, Extract, a working plane…) */
+.view3d-canvas.picking {
+  cursor: crosshair;
+}
+
+/* Flyover, Translate View, Walkthrough: dragging is the tool */
+.view3d-canvas.viewing {
+  cursor: grab;
+}
+
+/* a drag moving the view (set once it moves, so a click that picks keeps the arrow) */
+.view3d-canvas.moving {
   cursor: grabbing;
 }
 

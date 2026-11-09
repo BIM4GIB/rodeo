@@ -145,7 +145,7 @@ export function runScriptFile(name: string, text: string): void {
   void run();
 }
 
-/** Plug-ins > Run Script…: opens the window, or brings it forward. */
+/** Tools > Plug-ins > Run Script…: opens the window, or brings it forward. */
 export function openRunScript(): void {
   if (!panel) build();
   if (panel) panel.hidden = false;

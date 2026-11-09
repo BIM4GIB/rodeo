@@ -80,6 +80,8 @@ export interface Announcement {
   readonly url: string | null;
   /** ISO date it was posted; the list shows the newest first */
   readonly date: string;
+  /** also shown once as a bar across the top of the editor, until this date (ISO); absent or null: only in What's new */
+  readonly bannerUntil?: string | null;
 }
 
 export type FeedbackKind = "bug" | "idea" | "other";
@@ -216,6 +218,10 @@ export interface ServerConfig {
   readonly credit?: AiCreditTerms | null;
   /** cloud renders (null: not set up on this server) */
   readonly render?: RenderTerms | null;
+  /** voice commands' speech to text on the server (null or missing: none) */
+  readonly voice?: VoiceTerms | null;
+  /** AI renders: an image model paints pictures of the model (null or missing: none) */
+  readonly image?: ImageTerms | null;
   /** the largest drawing or render job the server takes, in bytes */
   readonly maxUploadBytes?: number;
 }
@@ -228,6 +234,60 @@ export interface RenderTerms {
   readonly plusPerMinute: number | null;
   /** the longest a job may run, minutes */
   readonly maxMinutes: number;
+}
+/** Voice commands' speech to text on the server, for browsers with none of their own. */
+export interface VoiceTerms {
+  /** POST /api/voice/transcribe turns recordings into text here */
+  readonly transcribe: boolean;
+  /** who turns the speech into text, for the privacy text ("Google, through OpenRouter"); null without it */
+  readonly by: string | null;
+}
+/** POST /api/voice/transcribe: a recording as 16 kHz mono 16-bit WAV in base64, its language (BCP 47, or "") and the drawing's names. */
+export interface VoiceTranscribeRequest {
+  readonly audio: string;
+  readonly lang: string;
+  readonly hints: readonly string[];
+}
+/** What a request was charged and the credit left, in the credit's currency (null: free, or not known yet). */
+export interface VoiceCharge {
+  readonly charged: number | null;
+  readonly balance: number | null;
+}
+/** Its answer: the words heard ("" for none). */
+export interface VoiceTranscript extends VoiceCharge {
+  readonly text: string;
+}
+
+/** AI renders: an image model paints a picture of the model, rendered in the editor, as a finished render. */
+export interface ImageTerms {
+  /** who paints the pictures, for the privacy text ("Google, through OpenRouter") */
+  readonly by: string;
+  /** about what a picture takes from the credit, in its currency, and for Rodeo Plus (null: free) */
+  readonly perPicture: number | null;
+  readonly plusPerPicture: number | null;
+  /** pictures one account may ask for in an hour */
+  readonly perHour: number;
+}
+/** How far the model may go from the picture: its materials and light only, the surroundings too, or a free reading of it. */
+export type AiStrength = "subtle" | "balanced" | "creative";
+/** The aspect ratios the image models paint at ("16:9"); a picture is painted at the nearest. */
+export const AI_ASPECTS = ["21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"] as const;
+export type AiAspect = (typeof AI_ASPECTS)[number];
+/** POST /api/ai/image: the picture (base64 PNG or JPEG), what it is to become, how far it may go, and its aspect. */
+export interface AiImageRequest {
+  readonly image: string;
+  readonly mime: "image/png" | "image/jpeg";
+  /** the style and the person's own words, at most 1000 characters */
+  readonly prompt: string;
+  readonly strength: AiStrength;
+  readonly aspect: AiAspect;
+  /** for the 3D view's AI mode: the quicker model paints it */
+  readonly live: boolean;
+}
+/** Its answer: the painted picture, base64, and its type. */
+export interface AiImage extends VoiceCharge {
+  readonly image: string;
+  readonly mime: string;
 }
 
 /** POST /api/render/jobs: what the job is, in its X-Render-Job header (JSON); the body is the gzipped pack. */
@@ -414,11 +474,24 @@ export interface ApiError {
 // rewrites a change made against an older seq past the ones since (core/splice.ts),
 // or refuses it when they touch the same records. Records travel as base64.
 
-/** One change to the record list (core SpliceOp, records base64). */
-export interface WireOp {
+/**
+ * The version of the change messages. A client says it in hello; the server turns away one
+ * older than its own (closing with 4003 "outdated"), whose copy would come apart from everyone's.
+ * 2: a change can have several runs (WireOp.more).
+ */
+export const COLLAB_PROTOCOL = 2;
+
+/** `del` records from `start` replaced by `add` (records base64). */
+export interface WireRun {
   readonly start: number;
   readonly del: number;
   readonly add: readonly string[];
+}
+
+/** One change to the record list (core SpliceOp, records base64): its first run, then each of `more` in turn. */
+export interface WireOp extends WireRun {
+  /** further runs in order (core/splice.ts inOrder), each at the positions the ones before it left */
+  readonly more?: readonly WireRun[];
   readonly kind: "objects" | "layers" | "classes" | "all";
   readonly ids: readonly string[];
   /**
@@ -467,7 +540,7 @@ export const MAX_CHECKOUT_LAYERS = 1000;
 
 export type ClientMessage =
   /** first message: the version the client loaded (from GET /api/files/:id/content, header X-Version-Id) */
-  | { readonly t: "hello"; readonly versionId: string }
+  | { readonly t: "hello"; readonly versionId: string; readonly proto: number }
   | { readonly t: "op"; readonly id: number; readonly base: number; readonly op: WireOp }
   | { readonly t: "presence"; readonly p: Presence }
   /** the client saved a version holding every change up to seq (PUT content with X-Collab-Seq) */
@@ -515,7 +588,7 @@ export type ServerMessage =
 // ---- the admin page (server/src/admin.ts, web/src/admin) ----
 
 /** How a visit to the editor began: the editor itself, a share link, an invite, an embed, or the installed app. */
-export type VisitEntry = "editor" | "share" | "invite" | "embed" | "app";
+export type VisitEntry = "editor" | "share" | "invite" | "embed" | "app" | "convert";
 
 /** A label and how many: a row of a breakdown (referrers, countries...). */
 export interface Tally {
@@ -585,7 +658,7 @@ export interface AdminOverview {
     /** the check after a file comes in, by answer: "asked", "failed", "ok", "report", "closed" */
     readonly checks: readonly Tally[];
   };
-  /** what waits in the editor's admin windows */
+  /** what waits on the admin page's Feedback and Errors tabs */
   readonly inbox: { readonly feedback: number; readonly errors: number };
 }
 
@@ -660,6 +733,199 @@ export interface AdminLedgerRow {
 export interface AdminSettings {
   /** credit each new account starts with (0: none) */
   readonly welcomeCredit: number;
+}
+
+/** Someone in the editor now (heard from in the last 3 minutes): one visitor-day row of the visits table. */
+export interface AdminLiveVisitor {
+  /** the day's visitor hash, cut short: stable between polls the same day, for keeping a dot in place */
+  readonly key: string;
+  /** the account, when signed in */
+  readonly member: { readonly id: string; readonly name: string; readonly email: string } | null;
+  /** two-letter country, city and region (Cloudflare's), when known */
+  readonly country: string | null;
+  readonly city: string | null;
+  readonly region: string | null;
+  /** roughly where (Cloudflare's, rounded to 0.1°); null when unknown, and the globe uses the country's middle */
+  readonly lat: number | null;
+  readonly lon: number | null;
+  readonly device: string;
+  readonly browser: string;
+  readonly os: string;
+  readonly entry: VisitEntry;
+  readonly referrer: string | null;
+  /** came today at, last heard from at (ISO) */
+  readonly firstAt: string;
+  readonly lastAt: string;
+  /** drawings opened today */
+  readonly opens: number;
+}
+
+/** GET /api/admin/live: who is in the editor now. The admin page asks every 10 s on its Live tab. */
+export interface AdminLive {
+  /** the server's time (ISO) */
+  readonly at: string;
+  /** newest first, at most 300; admins left out */
+  readonly visitors: readonly AdminLiveVisitor[];
+  /** people in the editor once a minute, oldest first, the last 60 minutes the server has been up (it forgets on restart) */
+  readonly recent: readonly { readonly at: string; readonly guests: number; readonly members: number }[];
+  /** today (UTC) so far */
+  readonly today: { readonly visitors: number; readonly members: number; readonly signups: number; readonly opens: number };
+  /** drawings open in a live session (cloud drawings), the people in them, and how many have two or more */
+  readonly sessions: { readonly drawings: number; readonly people: number; readonly together: number };
+}
+
+/** A place visitors came from in the period: a city where Cloudflare named one, else the country alone. */
+export interface AdminPlace {
+  readonly country: string;
+  readonly city: string | null;
+  readonly region: string | null;
+  /** the city's rough position, or null (the globe uses the country's middle) */
+  readonly lat: number | null;
+  readonly lon: number | null;
+  readonly visits: number;
+  /** different accounts */
+  readonly members: number;
+}
+
+/** A country's row in GET /api/admin/geo. */
+export interface AdminCountry {
+  /** two letters */
+  readonly code: string;
+  readonly visits: number;
+  readonly members: number;
+  /** accounts made in the period whose visit that day came from here */
+  readonly signups: number;
+  readonly opens: number;
+  /** the middle visit's minutes */
+  readonly medianMinutes: number;
+}
+
+/** GET /api/admin/geo?days=N: where the period's visitors were. Admins left out. */
+export interface AdminGeo {
+  readonly days: number;
+  /** most visits first, every country */
+  readonly countries: readonly AdminCountry[];
+  /** most visits first, at most 400 */
+  readonly places: readonly AdminPlace[];
+  /** visits with a city known, and all visits: below 1, Cloudflare's location headers are off or new */
+  readonly located: number;
+  readonly total: number;
+}
+
+/** GET /api/admin/engagement?days=N: how people use the editor over time. Admins left out. */
+export interface AdminEngagement {
+  readonly days: number;
+  /** each day of the period: accounts in the editor that day, in the 7 days to it, and the 30 days to it */
+  readonly active: readonly { readonly day: string; readonly dau: number; readonly wau: number; readonly mau: number }[];
+  /** visits by the weekday (0 Sunday) and hour (UTC) they began: 7 rows of 24 */
+  readonly hours: readonly (readonly number[])[];
+  /** how long visits lasted, shortest first: "Under 1 min", "1–5 min", "5–15 min", "15–30 min", "30–60 min", "1–2 h", "Over 2 h" */
+  readonly lengths: readonly Tally[];
+  /** drawings opened in a visit: "None", "1", "2–3", "4–9", "10 or more" */
+  readonly opensPerVisit: readonly Tally[];
+  /** the period from visiting to paying, each step a subset of the one before as far as can be known */
+  readonly funnel: readonly { readonly label: string; readonly count: number; readonly note: string | null }[];
+  /** weekly sign-up cohorts (weeks start Monday, UTC), oldest first, at most 12: of those who joined, how many were in the editor each week after (weeks[0] = the week they joined) */
+  readonly cohorts: readonly { readonly week: string; readonly size: number; readonly weeks: readonly number[] }[];
+  /** signed-in visitors a day: accounts made in the last 7 days, and older ones */
+  readonly members: readonly { readonly day: string; readonly fresh: number; readonly returning: number }[];
+}
+
+/** GET /api/admin/revenue?days=N: what the period earned and what it cost. */
+export interface AdminRevenue {
+  readonly days: number;
+  /** the credit's currency, or null when this server has no credit (then the credit fields are 0) */
+  readonly currency: string | null;
+  readonly plus: {
+    readonly paid: number;
+    readonly given: number;
+    /** the prices as the sign-up page shows them ("£2/month") */
+    readonly monthlyLabel: string;
+    readonly yearlyLabel: string;
+  };
+  /** the agents' use in the period by model, most charged first */
+  readonly models: readonly {
+    readonly model: string;
+    readonly steps: number;
+    readonly users: number;
+    /** credit taken, in the currency */
+    readonly charged: number;
+    readonly costUsd: number;
+    readonly tokensIn: number;
+    readonly tokensOut: number;
+  }[];
+  /** cloud renders made in the period */
+  readonly renders: { readonly jobs: number; readonly finished: number; readonly failed: number; readonly gpuSeconds: number; readonly charged: number };
+  /** the accounts that used the most credit in the period, at most 10 */
+  readonly topSpenders: readonly { readonly id: string; readonly name: string; readonly email: string; readonly spent: number; readonly bought: number }[];
+  /** each day of the period: credit bought, credit taken for use, and what the providers charged for that use */
+  readonly daily: readonly { readonly day: string; readonly topups: number; readonly charged: number; readonly costUsd: number }[];
+  /** the period's credit taken and the providers' cost in the same currency (at the server's rate); null without credit */
+  readonly margin: { readonly charged: number; readonly cost: number } | null;
+}
+
+/** GET /api/admin/usage?days=N: what is in the cloud and what people make with Rodeo. */
+export interface AdminUsage {
+  readonly days: number;
+  readonly files: {
+    readonly total: number;
+    /** made in the period */
+    readonly fresh: number;
+    readonly versions: number;
+    readonly bytes: number;
+    /** branches of other drawings */
+    readonly branches: number;
+    /** with a share link */
+    readonly shared: number;
+    /** shared with other accounts as members */
+    readonly withMembers: number;
+    /** by the name's extension, most first */
+    readonly kinds: readonly Tally[];
+  };
+  /** cloud drawings made each day of the period */
+  readonly daily: readonly { readonly day: string; readonly files: number; readonly versions: number }[];
+  readonly gallery: { readonly published: number; readonly hidden: number; readonly openReports: number; readonly forks: number; readonly fresh: number };
+  /** in the period */
+  readonly comments: number;
+  readonly mergeRequests: number;
+  readonly agents: {
+    /** apps people let in with OAuth, and personal agent tokens, now */
+    readonly apps: number;
+    readonly tokens: number;
+    /** accounts that used the agents in the period */
+    readonly users: number;
+  };
+}
+
+/** One step an admin took, as the log keeps it. */
+export interface AdminLogEntry {
+  readonly id: number;
+  readonly at: string;
+  readonly admin: string;
+  /** "credit.grant", "user.suspend", "announcement.post", "gallery.hide"... */
+  readonly action: string;
+  /** what it was done to: an account's email, an announcement's title, a drawing's title */
+  readonly target: string | null;
+  readonly detail: string | null;
+}
+
+/** GET /api/admin/system: the server's health and what it is set up with. */
+export interface AdminSystem {
+  readonly version: string;
+  readonly node: string;
+  /** seconds since the server started */
+  readonly uptime: number;
+  readonly memory: { readonly rss: number; readonly heapUsed: number; readonly heapTotal: number };
+  /** bytes: the database (with its WAL), and the data disk's size and free space (null where unknown) */
+  readonly storage: { readonly database: number; readonly diskTotal: number | null; readonly diskFree: number | null };
+  /** rows in the main tables */
+  readonly tables: readonly Tally[];
+  /** what is set up, each with a word on how: [name, on, note] */
+  readonly features: readonly { readonly name: string; readonly on: boolean; readonly note: string | null }[];
+  readonly admins: readonly string[];
+  readonly publicUrl: string;
+  /** whether Cloudflare's visitor location headers reached the server in the last day (cities on the globe) */
+  readonly locationHeaders: boolean;
 }
 
 /** Ask an editor to save once this many changes are unsaved, or after this long. */

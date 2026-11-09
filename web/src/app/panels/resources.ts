@@ -383,7 +383,7 @@ export function mountResources(root: HTMLElement, setTool: (id: ToolId) => void)
         attrs: { type: "button", "aria-pressed": "false" },
       },
       thumb,
-      h("span", { cls: "res-label", text: fields.name }),
+      h("span", { cls: "res-label", text: fields.name, attrs: { translate: "no" } }),
       h("span", { cls: "res-kind-label", text: KIND_LABEL[fields.kind] }),
     );
     const entry: Entry = { ...fields, el };

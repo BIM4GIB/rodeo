@@ -1,19 +1,17 @@
 // The feedback feature: Help > Report a Bug… and Request a Feature… (report.ts), a link in the
 // start hub's footer that opens the same form, the check after a file comes in that offers to
-// report it (check.ts), and for admins Help > Feedback Inbox… (inbox.ts), Help > Error Reports…
-// (errors.ts, what the editor reported on its own) and Help > Admin Page… (the page at /admin).
-// The admin page links back to the inbox and the reports with ?admin=feedback and ?admin=errors.
-// It registers with app/ext.ts when imported; with no server to send to, none of it shows.
+// report it (check.ts), and for admins Help > Admin Panel… (the page at /admin, where the reports,
+// the error reports and every other admin tool live). Old links to the editor's inbox and error
+// windows (?admin=feedback, ?admin=errors) go to the admin page's tabs. It registers with
+// app/ext.ts when imported; with no server to send to, none of it shows.
 
 import "./feedback.css";
 import "./check.ts";
 import { h } from "../../app/dom.ts";
 import { registerMenu, registerUrlHandler, registerWelcome } from "../../app/ext.ts";
 import type { Row } from "../../app/menu.ts";
-import { currentUser, onUser, userLoaded } from "../../platform/api.ts";
+import { currentUser } from "../../platform/api.ts";
 import { config, onConfig } from "../account/config.ts";
-import { openErrorReports } from "./errors.ts";
-import { openFeedbackInbox } from "./inbox.ts";
 import { openFeedback } from "./report.ts";
 
 registerMenu("Help", () => {
@@ -22,24 +20,12 @@ registerMenu("Help", () => {
     { label: "Report a Bug…", run: () => openFeedback("bug") },
     { label: "Request a Feature…", run: () => openFeedback("idea") },
   ];
-  if (currentUser()?.admin === true) {
-    rows.push(
-      { label: "Feedback Inbox…", run: openFeedbackInbox },
-      { label: "Error Reports…", run: openErrorReports },
-      { label: "Admin Page…", run: () => void window.open("/admin", "_blank", "noopener") },
-    );
-  }
+  if (currentUser()?.admin === true) rows.push({ label: "Admin Panel…", run: () => void window.open("/admin", "_blank", "noopener") });
   return rows;
 });
 
 registerUrlHandler("admin", (value) => {
-  // whether the account is an admin's is known once /api/me has answered
-  const stop = onUser(() => {
-    if (!userLoaded()) return;
-    queueMicrotask(() => stop());
-    if (value === "feedback") openFeedbackInbox();
-    else if (value === "errors") openErrorReports();
-  });
+  location.replace(`/admin#${value === "errors" ? "errors" : "feedback"}`);
 });
 
 registerWelcome(feedbackLink, "foot");

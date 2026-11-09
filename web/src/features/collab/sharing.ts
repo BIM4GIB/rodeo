@@ -121,7 +121,7 @@ export async function projectSharingDialog(): Promise<void> {
       okLabel: "OK",
       body: [
         h("p", {
-          text: "Project Sharing works in a drawing kept in the cloud: save it with File > Save to Cloud…, invite people with File > Share…, and each editor can check layers out here, to change them alone while the others work live on the rest.",
+          text: "Project Sharing works in a drawing kept in the cloud: save it with File > Save to Cloud…, invite people with File > Share > People and Links…, and each editor can check layers out here, to change them alone while the others work live on the rest.",
         }),
       ],
       check: () => ({ value: true }),

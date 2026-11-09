@@ -9,16 +9,35 @@ const MAX_LAYER_NAME = 31; // R12 symbol-table name limit
 const MAX_TEXT = 255; // R12 limit for group 1 strings
 const ELLIPSE_SEGMENTS = 64;
 const MM_PER_INCH = 25.4;
+const NONE_CLASS = "None"; // the class new objects take; it draws on DXF layer "0"
 
-export function exportDxf(doc: VwxDocument, opts: { layerIds?: string[] } = {}): string {
+/**
+ * The drawing as DXF text. `layersFrom` "classes" puts each object on a DXF layer named for its class
+ * (the class None on "0"), so a DWG or DXF read back keeps the AutoCAD layers its classes came from;
+ * the default "layers" puts each object on the DXF layer named for its layer.
+ */
+export function exportDxf(doc: VwxDocument, opts: { layerIds?: string[]; layersFrom?: "layers" | "classes" } = {}): string {
   const allLayers = doc.layers();
   const picked = opts.layerIds ? opts.layerIds.map((id) => findLayer(allLayers, id)) : allLayers;
   const layers = [...new Map(picked.map((l): [string, LayerInfo] => [l.id, l])).values()];
+  const byClass = opts.layersFrom === "classes";
 
   // "0" is the DXF default layer and is reserved; names compare case-insensitively.
   const taken = new Set<string>(["0"]);
   const dxfNames = new Map<string, string>();
-  for (const layer of layers) dxfNames.set(layer.id, uniqueName(layer.name, taken));
+  if (!byClass) for (const layer of layers) dxfNames.set(layer.id, uniqueName(layer.name, taken));
+  // by class: the DXF layer of each class an object is in, in the order they are first used
+  const classLayers = new Map<string, { name: string; hidden: boolean }>();
+  const classLayer = (className: string): string => {
+    if (className === NONE_CLASS) return "0";
+    let found = classLayers.get(className);
+    if (!found) {
+      const hidden = doc.classes().find((c) => c.name === className)?.visibility === "hidden";
+      found = { name: uniqueName(className, taken), hidden };
+      classLayers.set(className, found);
+    }
+    return found.name;
+  };
 
   const entities = new Writer();
   const ltypes = new LineTypes(doc);
@@ -30,7 +49,7 @@ export function exportDxf(doc: VwxDocument, opts: { layerIds?: string[] } = {}):
       const shape = obj.shape;
       if (!shape || shape.kind === "image") continue;
       const ltype = ltypes.nameFor(obj.attrs?.lineStyle ?? 0, scale);
-      if (!emit(entities, shape, dxfLayer, ltype)) continue;
+      if (!emit(entities, shape, byClass ? classLayer(obj.className) : dxfLayer, ltype)) continue;
       const b = shapeBounds(shape);
       if (b) boxes.push(b);
     }
@@ -49,14 +68,17 @@ export function exportDxf(doc: VwxDocument, opts: { layerIds?: string[] } = {}):
 
   const tables = new Writer().pair(0, "SECTION").pair(2, "TABLES");
   ltypes.write(tables);
+  const tableLayers: { name: string; hidden: boolean }[] = byClass
+    ? [...classLayers.values()]
+    : layers.map((layer) => ({ name: dxfNames.get(layer.id) ?? "0", hidden: layer.visibility === "hidden" }));
   tables
-    .pair(0, "TABLE").pair(2, "LAYER").pair(70, String(layers.length + 1))
+    .pair(0, "TABLE").pair(2, "LAYER").pair(70, String(tableLayers.length + 1))
     .pair(0, "LAYER").pair(2, "0").pair(70, "0").pair(62, "7").pair(6, "CONTINUOUS");
-  for (const layer of layers) {
+  for (const layer of tableLayers) {
     tables
       .pair(0, "LAYER")
-      .pair(2, dxfNames.get(layer.id) ?? "0")
-      .pair(70, layer.visibility === "hidden" ? "1" : "0") // frozen
+      .pair(2, layer.name)
+      .pair(70, layer.hidden ? "1" : "0") // frozen
       .pair(62, "7")
       .pair(6, "CONTINUOUS");
   }

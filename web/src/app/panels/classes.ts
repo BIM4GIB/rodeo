@@ -38,7 +38,7 @@ export function mountClasses(root: HTMLElement): void {
     radio.addEventListener("click", (e) => e.stopPropagation());
     radio.addEventListener("change", () => setActiveClass(c.index));
 
-    const names = h("div", { cls: "names", title: "Double-click to rename" }, h("div", { cls: "name", text: c.name }));
+    const names = h("div", { cls: "names", title: "Double-click to rename" }, h("div", { cls: "name", text: c.name, attrs: { translate: "no" } }));
     const vis = visibilityButton(c.visibility, () =>
       attempt("Change visibility", (s) => s.setClassVisibility(c.index, NEXT_VISIBILITY[c.visibility])),
     );

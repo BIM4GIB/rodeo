@@ -1,4 +1,4 @@
-// What a set of 3D meshes measures as a solid, for Model > Volumetric Properties… and AEC > Machine Design >
+// What a set of 3D meshes measures as a solid, for Model > Volumetric Properties… and Tools > Machine Design >
 // 3D Properties…: the surface area, and where the faces close round a volume, the volume, centre of mass and
 // second moments. Faces are taken as the 3D view draws them, curved ones as their facets. Pure.
 

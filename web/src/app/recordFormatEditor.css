@@ -83,7 +83,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .rf-btn:hover:not(:disabled) {

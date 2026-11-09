@@ -16,6 +16,10 @@
 //                  each block decompresses to <= 1 MiB; concatenated they form
 //                  the record stream (see records.ts)
 //
+// A body that is not Snappy chunks (a Vectorworks 2013 file's narrow records, or uncompressed 2018+
+// records) is read by legacy.ts, which also gives the header a 2018+ one; a Snappy body that fails
+// to read in a year Rodeo doesn't read yet (before 2013, 2014 to 2017) says which year it was saved in.
+//
 // readContainer takes the whole file. readContainerStream reads it a slice at a time instead,
 // decodes several slices at once (in workers, when given an inflate that uses them) and cuts the
 // stream straight into records, so neither the file nor the stream is ever in memory whole: a
@@ -25,6 +29,7 @@
 
 import { concat, readAscii, setU32, setU32be, setU64, u32, u32be, u64 } from "./bytes.ts";
 import { CHECK_SPAN, ChunkTable, chunkSum, FileStream, HOLD_HEAD, HeldEntry, type HeldTable, type HoldPlan, Holder, TOKEN, expansion, heldPart } from "./held.ts";
+import { legacyHeader, legacyRecords, legacyStart, unreadableMessage } from "./legacy.ts";
 import { unitsName } from "./settings.ts";
 import { blockLength, compress, decompress, decompressInto } from "./snappy.ts";
 
@@ -117,30 +122,50 @@ function readHead(data: Uint8Array, size: number): Head {
 
 export function readContainer(data: Uint8Array): Container {
   const { body, createdWith, savedWith, build } = readHead(data, data.length);
-  const parts: Uint8Array[] = [];
-  let pos = body;
-  let chunks = 0;
-  while (pos < data.length) {
-    const where = `${chunks} at ${hex(pos)}`;
-    if (pos + 4 > data.length) throw new Error(`bad chunk ${where}: truncated size prefix`);
-    const csize = u32(data, pos);
-    const res = safeDecompress(data, pos + 4, where);
-    if (res.end !== pos + 4 + csize) throw new Error(`bad chunk ${where}: size mismatch`);
-    parts.push(res.data);
-    pos = res.end;
-    chunks++;
+  const layout = legacyStart(data.subarray(body, body + 16));
+  const records = layout ? legacyRecords(layout, data.subarray(body)) : null;
+  if (records) {
+    const { header, units } = legacyHeader(data.subarray(0, body));
+    return { header, createdWith, savedWith, build, raw: concat(records), chunkCount: 0, units };
   }
+  try {
+    const parts: Uint8Array[] = [];
+    let pos = body;
+    let chunks = 0;
+    while (pos < data.length) {
+      const where = `${chunks} at ${hex(pos)}`;
+      if (pos + 4 > data.length) throw new Error(`bad chunk ${where}: truncated size prefix`);
+      const csize = u32(data, pos);
+      const res = safeDecompress(data, pos + 4, where);
+      if (res.end !== pos + 4 + csize) throw new Error(`bad chunk ${where}: size mismatch`);
+      parts.push(res.data);
+      pos = res.end;
+      chunks++;
+    }
 
-  const header = data.slice(0, body);
-  return {
-    header,
-    createdWith,
-    savedWith,
-    build,
-    raw: concat(parts),
-    chunkCount: chunks,
-    units: findUnits(header),
-  };
+    const header = data.slice(0, body);
+    return {
+      header,
+      createdWith,
+      savedWith,
+      build,
+      raw: concat(parts),
+      chunkCount: chunks,
+      units: findUnits(header),
+    };
+  } catch (err) {
+    throw unreadable(err, savedWith);
+  }
+}
+
+/**
+ * The error for a body that reads as neither legacy records nor Snappy chunks: a file saved before
+ * 2013, or in 2014 to 2017, says which year it was saved in; any other error is passed on as it is.
+ */
+function unreadable(err: unknown, savedWith: string): unknown {
+  if (!(err instanceof Error) || err.name === "AbortError") return err;
+  const message = unreadableMessage(savedWith);
+  return message === null ? err : new Error(message);
 }
 
 /** A drawing's bytes as it opens, read a slice at a time. */
@@ -262,14 +287,30 @@ function addChunks(table: ChunkTable, chunks: Uint8Array, at: number): void {
  * in turn, is cut into records as it comes back.
  */
 export async function readContainerStream(src: ByteSource, options: StreamOptions = {}): Promise<OpenedContainer> {
+  const size = src.size;
+  let start = await src.read(0, Math.min(size, 0x10000));
+  const head = readHead(start, size);
+  if (head.body > start.length) start = await src.read(0, Math.min(size, head.body));
+  const layout = legacyStart(await src.read(head.body, Math.min(size, head.body + 16)));
+  const records = layout ? legacyRecords(layout, await src.read(head.body, size)) : null;
+  if (records) {
+    const { header, units } = legacyHeader(start.subarray(0, head.body));
+    return { header, createdWith: head.createdWith, savedWith: head.savedWith, build: head.build, records, chunkCount: 0, units, held: null };
+  }
+  try {
+    return await readChunks(src, options, start, head);
+  } catch (err) {
+    throw unreadable(err, head.savedWith);
+  }
+}
+
+/** readContainerStream for a body of Snappy chunks: `start` is the file's first bytes, `head` its header. */
+async function readChunks(src: ByteSource, options: StreamOptions, start: Uint8Array, head: Head): Promise<OpenedContainer> {
   const { signal, onProgress } = options;
   const inflate: Inflate = options.inflate ?? (async (chunks, first, at) => inflateChunks(chunks, first, at));
   const ahead = Math.max(1, options.ahead ?? 1);
   const sliceBytes = options.slice ?? SLICE;
   const size = src.size;
-  let start = await src.read(0, Math.min(size, 0x10000));
-  const head = readHead(start, size);
-  if (head.body > start.length) start = await src.read(0, Math.min(size, head.body));
   const header = start.slice(0, head.body);
   const table = options.hold ? new ChunkTable() : null;
   const stream = table ? new FileStream(src, table, inflate, options.refresh ?? null) : null;

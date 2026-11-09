@@ -53,18 +53,20 @@ export interface ToolNavigation {
   readonly objectCentre: boolean;
   /** stand the viewer this high above the active layer's plane, looking level, in perspective (Walkthrough) */
   readonly viewerHeight: number | null;
+  /** the drag is the tool (Flyover, Translate View, Walkthrough), so the view shows an open hand */
+  readonly viewing: boolean;
 }
 
 /** How tool `id` steers the 3D view, or null when it's no viewing tool (a left drag orbits then). */
 export function navigationFor(id: string): ToolNavigation | null {
-  const plain = { sensitivity: 1, objectCentre: false, viewerHeight: null };
+  const plain = { sensitivity: 1, objectCentre: false, viewerHeight: null, viewing: false };
   switch (id) {
     case "flyover":
-      return { ...plain, nav: settings.centre === "origin" ? "origin" : "orbit", sensitivity: settings.sensitivity, objectCentre: settings.centre === "objects" };
+      return { ...plain, nav: settings.centre === "origin" ? "origin" : "orbit", sensitivity: settings.sensitivity, objectCentre: settings.centre === "objects", viewing: true };
     case "translateview":
-      return { ...plain, nav: settings.translate };
+      return { ...plain, nav: settings.translate, viewing: true };
     case "walkthrough":
-      return { ...plain, nav: settings.walk, viewerHeight: settings.viewerHeight };
+      return { ...plain, nav: settings.walk, viewerHeight: settings.viewerHeight, viewing: true };
     // these pick faces in the 3D view, a drag still orbiting
     case "chamferedge":
     case "filletedge":

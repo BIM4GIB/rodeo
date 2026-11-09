@@ -139,13 +139,13 @@ import { SOURCE_TOLERANCE, type SourcePoly, sourceDataProblems } from "./sourceD
 import { intersectMeshes, MAX_CSG_TRIANGLES, subtractMeshes } from "./csg.ts";
 import { facesOf } from "./faces3d.ts";
 import { deviceLightValues, isLightingDevice, readDeviceLight } from "./lightingDevice.ts";
-import { objectTriangles, writeLight } from "./model3d.ts";
+import { isPathGroup, isProfileGroup, objectTriangles, writeLight } from "./model3d.ts";
 import { meshTriangleCount, simplifiedMesh } from "./meshSimplify.ts";
 import { OVERALL, TAKES_TEXTURE, holdsParts, isTextureDict, newTextureDict, newUvMapDict, newUvTextureDict, partLike, readTextureParts, tailValues, textureDict, writeTexturePart } from "./texmap.ts";
 import { RESOURCE_TYPES, TEXT_STYLE_TYPE, newGradient, newTextStyle, previewSize, readTextStyle, writeGradient, writeHatch, writePreview, writeTextStyle } from "./resources.ts";
 import { DROP_SHADOW, NEW_SHADOW, SHADOW_BYTES, readDropShadow, writeDropShadow } from "./shadow.ts";
 import { isStory, isStoryList, newStory, readStory, writeStory } from "./stories.ts";
-import { transformSplice, type Splice } from "./splice.ts";
+import { applyRuns, transformRuns, type Splice } from "./splice.ts";
 import { unitsPatch } from "./settings.ts";
 import { HELIODON, HELIODON_INPUTS, heliodonFields, heliodonLight, readHeliodonSun } from "./sun.ts";
 import type {
@@ -186,6 +186,7 @@ import type {
   SimplifyBy,
   SourceDataReport,
   SpliceOp,
+  SpliceRun,
   StoryLevelSpec,
   TextStyle,
   TextStyleDef,
@@ -822,6 +823,8 @@ export class Session implements EditSession {
   private named: { recs: readonly Rec[]; textures: Map<number, Rec>; formats: Map<string, Rec> } | null = null;
   /** set while batch() runs: commits apply at once and are recorded as one step at the end */
   private batching: { kinds: Set<ChangeKind>; ids: string[] } | null = null;
+  /** changes applyRemote made within remoteBatch, rebuilt and told once it ends */
+  private remoteHeld: { kinds: Set<ChangeKind>; ids: string[]; unnamed: boolean } | null = null;
   private stepListeners = new Set<(op: SpliceOp) => void>();
   private layerGuard: ((layerIds: readonly string[]) => string | null) | null = null;
   /** the plug-in objects a new one can copy, for the record list they were found in */
@@ -956,32 +959,61 @@ export class Session implements EditSession {
     return () => this.stepListeners.delete(listener);
   }
 
+  records(): readonly Uint8Array[] {
+    return this.doc.datas;
+  }
+
   private announce(op: SpliceOp): void {
     for (const l of [...this.stepListeners]) l(op);
   }
 
   applyRemote(op: SpliceOp): void {
-    this.doc.datas.splice(op.start, op.del, ...op.add);
+    const runs: SpliceRun[] = op.more ? [op, ...op.more] : [op];
+    this.doc.datas = applyRuns(this.doc.datas, runs);
     if (op.header) this.doc.patchHeader(op.header.at, op.header.bytes);
-    this.doc.rebuild();
+    const held = this.remoteHeld;
+    if (!held) this.doc.rebuild();
     // undo still turns back this session's own steps, rebased past the change; a step it touched,
     // and every step before that, can no longer be undone
-    let r: Splice = { start: op.start, del: op.del, add: op.add.length };
+    let r: Splice[] = runs.map((x) => ({ start: x.start, del: x.del, add: x.add.length }));
     for (let i = this.undoStack.length - 1; i >= 0; i--) {
       const s = this.undoStack[i];
-      const back: Splice = { start: s.start, del: s.added.length, add: s.removed.length };
-      const moved = transformSplice(back, r, false);
-      const before = transformSplice(r, back, true);
+      const back: Splice[] = [{ start: s.start, del: s.added.length, add: s.removed.length }];
+      const moved = transformRuns(back, r, false);
+      const before = transformRuns(r, back, true);
       if (!moved || !before || (op.header && s.header && headersOverlap(op.header, s.header))) {
         this.undoStack.splice(0, i + 1);
         break;
       }
-      s.start = moved.start;
+      s.start = moved[0].start;
       r = before;
     }
     this.redoStack = [];
+    if (held) {
+      held.kinds.add(op.kind);
+      if (op.kind === "objects" && op.ids.length) for (const id of op.ids) held.ids.push(id);
+      else held.unnamed = true;
+      return;
+    }
     this.reseat();
     this.emit(op.kind, op.ids, "remote");
+  }
+
+  remoteBatch<T>(fn: () => T): T {
+    if (this.remoteHeld) return fn();
+    const held = { kinds: new Set<ChangeKind>(), ids: [] as string[], unnamed: false };
+    this.remoteHeld = held;
+    try {
+      return fn();
+    } finally {
+      this.remoteHeld = null;
+      if (held.kinds.size) {
+        this.doc.rebuild();
+        this.reseat();
+        const objects = held.kinds.size === 1 && held.kinds.has("objects") && !held.unnamed;
+        this.emit(objects ? "objects" : "all", objects ? held.ids : [], "remote");
+      }
+    }
   }
 
   onChange(listener: (e: ChangeEvent) => void): () => void {
@@ -1085,6 +1117,23 @@ export class Session implements EditSession {
       this.record(before, this.doc.datas, top.kind === joined.kind ? top.kind : "all", [...top.ids, ...joined.ids]);
     }
     return out;
+  }
+
+  get undoDepth(): number {
+    return this.undoStack.length;
+  }
+
+  joinSince(depth: number): void {
+    if (this.batching || depth < 0 || this.undoStack.length - depth < 2) return;
+    const steps = this.undoStack.slice(depth);
+    if (steps.some((s) => s.header)) return;
+    // the records as they were before the first of the steps: each turned back, newest first
+    let before: Uint8Array[] = this.doc.datas;
+    for (let i = steps.length - 1; i >= 0; i--) before = spliced(before, steps[i].start, steps[i].added.length, steps[i].removed);
+    // peers and step listeners already have each step; only this session's undo changes, as in followOn
+    this.undoStack.splice(depth);
+    const kind = steps.every((s) => s.kind === steps[0].kind) ? steps[0].kind : "all";
+    this.record(before, this.doc.datas, kind, steps.flatMap((s) => s.ids));
   }
 
   // ---- document settings ---------------------------------------------------------
@@ -2292,10 +2341,12 @@ export class Session implements EditSession {
     const p = this.plan();
     const placed = (b: BBox): BBox | null => bboxOfPoints([{ x: b.x0, y: b.y0 }, { x: b.x1, y: b.y0 }, { x: b.x1, y: b.y1 }, { x: b.x0, y: b.y1 }].map((q) => applyAffine(m, q)));
     let box: BBox | null = null;
-    // its old drawing: the objects in its list, after its aux records
+    // its old drawing: the objects in its list, after its aux records, but for the path and profile
+    // groups Vectorworks draws it from, which stay
     let kept = 0;
     for (const c of r.children.slice(auxCount(r))) {
       if (c.type === 0) continue;
+      if (isPathGroup(c) || isProfileGroup(c)) continue;
       if (kept++ >= keep) {
         p.remove(c.index, subtreeEnd(c));
         continue;
@@ -5099,7 +5150,7 @@ export class Session implements EditSession {
     if (!rec) throw new Error(`no record format #${format}`);
     const fmt = readFormat(rec.data);
     if (fmt.parametric) throw new Error(`"${name}" holds a plug-in's parameters, which go with the plug-in`);
-    if (fmt.fields.some((f) => !f.kind)) throw new Error(`"${name}" has a field openvwx can't read`);
+    if (fmt.fields.some((f) => !f.kind)) throw new Error(`"${name}" has a field Rodeo can't read`);
     const own = rec.children.find((c) => c.type === RECORD);
     const defaults = own ? readValues(own.data, fmt) : null;
     if (!own || !defaults) throw new Error(`the record format "${name}" has no default values`);
@@ -8097,7 +8148,7 @@ function cameraRecordThrough(d: Uint8Array, fmt: FormatDef, m: Affine): Uint8Arr
  * the parent links must describe a pre-order tree.
  */
 function readClipboard(data: ClipboardData, drawing: string): PasteItem[] {
-  if (data?.format !== CLIPBOARD_FORMAT || !Array.isArray(data.records)) throw new Error("clipboard holds no openvwx objects");
+  if (data?.format !== CLIPBOARD_FORMAT || !Array.isArray(data.records)) throw new Error("clipboard holds no Rodeo objects");
   // copied from the drawing it goes into, which numbers everything in it the same way
   const here = data.drawing === drawing;
   const items: PasteItem[] = [];

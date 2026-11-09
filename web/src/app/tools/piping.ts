@@ -1,4 +1,4 @@
-// MEP's Piping Run (pipingShapes.ts), and AEC > Electrical > Create Piping Runs for polygons and
+// MEP's Piping Run (pipingShapes.ts), and AEC > MEP > Create Piping Runs for polygons and
 // polylines already drawn. Click each corner of its path; a double-click or Enter ends it open, a
 // click on the first corner closes it. Vectorworks makes a plug-in object of it, with its figures in
 // Object Info; this draws its path and tag as plain objects, grouped and named, and reports the
@@ -244,7 +244,7 @@ function selectedPaths(): { id: string; path: RunPath }[] {
 
 export const canCreatePipingRuns = (): boolean => selectedPaths().length > 0;
 
-/** AEC > Electrical > Create Piping Runs: each selected polygon or polyline becomes a piping run in its place. */
+/** AEC > MEP > Create Piping Runs: each selected polygon or polyline becomes a piping run in its place. */
 export async function createPipingRuns(): Promise<void> {
   if (!canCreatePipingRuns() || !(await askSettings("Create Piping Runs"))) return;
   const chosen = selectedPaths();

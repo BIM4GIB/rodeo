@@ -49,7 +49,7 @@
   cursor: grabbing;
 }
 
-/* View > Dark Canvas: the plan's ink and paper swap, as in the drawing */
+/* View > Appearance > Dark Canvas: the plan's ink and paper swap, as in the drawing */
 .dark-canvas .fpane.plan .fpane-body {
   background: #0f0f0f;
 }

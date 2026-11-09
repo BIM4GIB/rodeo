@@ -12,7 +12,7 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
     title: "What a plug-in is",
     blocks: [
       ["p", "A plug-in is a JavaScript file. It runs in its own Web Worker and reaches the drawing only through the openvwx object: every call is checked against the API, and the rest of the page is out of its reach."],
-      ["p", "Write one in the editor (Plug-ins > Plug-in Manager… > New Plug-in), import a .js file, or start from the three examples, which are installed turned off."],
+      ["p", "Write one in the editor (Tools > Plug-ins > Plug-in Manager… > New Plug-in), import a .js file, or start from the three examples, which are installed turned off."],
       ["p", "This is about honesty, not security. The worker has no page, cookies or storage to touch, and plug-ins that cannot be trusted should not be installed. It is not a sandbox that holds out a determined attacker."],
     ],
   },
@@ -27,7 +27,7 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
     title: "Running",
     blocks: [
       ["p", `Run (${shortcutText("⌘↩")}) runs the code once: its top level, then each menu item it added, in order. Stop ends a run. Save (${shortcutText("⌘S")}) stores the code, and an enabled plug-in starts again with it.`],
-      ["p", "An enabled plug-in's top level runs when openvwx starts, so keep side effects in menu items. Its menu items stay in the Plug-ins menu."],
+      ["p", "An enabled plug-in's top level runs when Rodeo starts, so keep side effects in menu items. Its menu items stay in the Plug-ins menu."],
       ["code", 'openvwx.menu.add("Count by Class", async () => {\n  const layer = await openvwx.activeLayer();\n  const objects = await openvwx.doc.objects(layer);\n  await openvwx.ui.alert("Count", String(objects.length) + " objects");\n});'],
     ],
   },
@@ -74,6 +74,19 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
     ],
   },
   {
+    title: "Render engines (openvwx.render.engine)",
+    blocks: [
+      ["p", "render.engine(spec, handler) adds an engine to File > Export > Render Image… while the plug-in is turned on: a bridge to another renderer, a render farm or a service."],
+      ["code", 'openvwx.render.engine({ name: "My renderer", takes: "scene", options: [\n  { key: "samples", label: "Samples", kind: "number", initial: 128, min: 1, max: 4096 },\n] }, async (job) => {\n  const res = await openvwx.fetch("http://127.0.0.1:7416/render", { method: "POST", body: job.scene });\n  return { bytes: res.bytes, type: "image/png" };\n});'],
+      ["list", [
+        'takes "picture": job.picture is the Realistic or path-traced picture (PNG bytes); "scene": job.scene is the visible model as binary glTF (y up, metres)',
+        "every job has width, height, name, camera (eye, target in mm, z up; perspective; fov; halfHeight), sun (toward the sun, or null) and options",
+        'options are fields under the Engine: kind "choice" (choices), "text", "number" (min, max) or "check", with initial and hint',
+        "return { bytes, type, note } or a list of them; type is image/png, image/jpeg or image/webp",
+      ]],
+    ],
+  },
+  {
     title: "Web requests (openvwx.fetch)",
     blocks: [
       ["p", "fetch(url, init) sends an http or https request from the page, on the plug-in's behalf, with no cookies. The first request to each site asks Allow {plug-in} to reach {site}?; the answer is remembered for that plug-in."],
@@ -90,7 +103,7 @@ const SECTIONS: readonly { readonly title: string; readonly blocks: readonly Blo
   {
     title: "Script Console",
     blocks: [
-      ["p", "Window > Script Console… evaluates a line with the same API: a line that is an expression gives its value; anything else runs as the body of an async function. Up and down arrows walk the history. Restart forgets the variables."],
+      ["p", "Tools > Plug-ins > Script Console… evaluates a line with the same API: a line that is an expression gives its value; anything else runs as the body of an async function. Up and down arrows walk the history. Restart forgets the variables."],
     ],
   },
 ];

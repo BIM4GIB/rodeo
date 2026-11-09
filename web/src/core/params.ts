@@ -229,7 +229,7 @@ export function newFieldsProblem(specs: readonly RecordFieldSpec[]): string | nu
 export function encodeFormat(d: Uint8Array, specs: readonly RecordFieldSpec[]): Uint8Array {
   const old = readFormat(d);
   if (old.parametric) throw new Error("a plug-in's parameters can't be edited as a record format");
-  if (old.fields.some((f) => !f.kind)) throw new Error("this format has a field openvwx can't read, so it can't be edited");
+  if (old.fields.some((f) => !f.kind)) throw new Error("this format has a field Rodeo can't read, so it can't be edited");
   const kept = new Set<string>();
   const defs: Uint8Array[] = [];
   let off = 0;

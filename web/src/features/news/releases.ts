@@ -22,11 +22,409 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-09T12:03:00Z",
+    "revit-top-rails",
+    "Revit railings come in with their top rails",
+    `Railings from Revit that came in as see-through boxes because of their top rails are drawn whole.
+- Revit keeps a top rail as a profile and the path it follows rather than as faces, so Rodeo sweeps the profile along the path, mitred where it bends, and adds it to the railing.
+- A railing on a curved stair that Revit drew in full is drawn too, where Revit's box stands above it: the railing's own records say where its highest rail ends.`,
+    "furniture",
+  ),
+  release(
+    "2026-11-09T12:02:00Z",
+    "revit-curved-parts",
+    "Curved stairs and fittings from Revit drawn in full",
+    `More of a Revit model comes in as Revit draws it the moment it opens, rather than as see-through boxes: curved stairs, fittings with curved shells, and windows turned on plan.
+- Curved and spiral stair runs, their stringers and the railings that follow them are drawn from the stair's own faces.
+- Toilets, taps, a vase, a dryer and other fittings whose shells curve into fillets are drawn from the mesh Revit saved for them.
+- A window turned on plan is checked against its own lines in its own direction, so frames with deep head mouldings come in.
+- The note after opening counts boxes exactly: a stair drawn by its runs isn't counted, and parts already drawn in full aren't counted again by the slower pass that follows.`,
+    "furniture",
+  ),
+  release(
+    "2026-11-09T12:01:00Z",
+    "cad-parts",
+    "Import SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo parts",
+    `Parts from six mechanical CAD apps come in from their own files, without exporting STEP first: File > Import > Import CAD Parts…, or drop a .sldprt, .ipt, .FCStd, .f3d or .prt on the window.
+- The part comes in as a STEP model does: in millimetres, as a group named after the file and its app.
+- Each app's reader downloads only when you import its first file, and the drawing stays usable while it reads.
+- Assemblies and CATIA files aren't read yet: Rodeo says to export STEP from the app instead.`,
+    "gears",
+  ),
+  release(
+    "2026-11-09T12:00:00Z",
+    "parasolid-faces",
+    "Curved solids drawn in full in 3D",
+    `Solids with curved or free-form faces, which the 3D view showed with faces missing, are now drawn whole. Rodeo reads the Parasolid data Vectorworks saves with them.
+- The view shows them at once with the faces their edges make, and fills in the rest a moment later, a batch of solids at a time, while you keep working.
+- The file converter, on the web and the rodeo command line, waits for them, so its 3D exports include them.`,
+    "solids",
+  ),
+  release(
+    "2026-11-08T12:04:00Z",
+    "revit-detail",
+    "More of a Revit model drawn in full",
+    `A Revit model now fills in more of its parts a moment after it opens: a spiral stair's railing, a laundry appliance and a run of doors that came in as see-through boxes are drawn as Revit shows them.
+- The model opens as quickly as before. Rodeo then reads the file again in the background for the parts only a slower decode can draw, and swaps them in, keeping your view, with a note saying how many more came in.
+- If you have already changed or saved the drawing by then, it stays as it is and the note says so: open the file again to get them.`,
+    "walls",
+  ),
+  release(
+    "2026-11-08T12:03:00Z",
+    "render-studio",
+    "Render Studio: a render workspace",
+    `Rendering has its own workspace now. Press Render on the top bar: the 3D view stands alone in a realistic mode, the Render palette beside it, and a frame on the view shows exactly what the picture takes.
+- The frame follows the size you choose (4K, square, 21:9, A4 and more) and names it. Along the bottom: the sun, the time of day, the date and a shutter that renders.
+- The Render palette is in five tabs: Scene (presets such as golden hour, dusk or foggy that set the sky, sun and fog at once), Camera (shots, focal length, depth of field with a focus you click), Materials (search, or pick a material on the model), Look (one-click looks and the colour and effects), and Output (size, engine, quality, file).
+- Renders queue in a tray instead of a window that waits: keep orbiting and editing while they run, render again, and finish or cancel each one.
+- The finished pictures open in a full-window viewer: zoom and pan, step through the session's pictures, compare, restyle, copy or save.
+- Esc or Done leaves Render Studio and puts the palettes back as they were.`,
+    "camera",
+  ),
+  release(
+    "2026-11-08T12:02:00Z",
+    "dwg-solids-xrefs",
+    "DWG multileaders, xrefs and 3D solids come in",
+    `The parts of a DWG that used to be left out now come in: multileaders, the drawings it references, and its 3D solids.
+- A multileader comes in as its leader lines, landing and arrowheads, with its text or block.
+- External references (xrefs) are drawn from their own files, their layers becoming classes named like AutoCAD's, SITEPLAN|WALLS. Drop the files with the drawing, or choose them when the import asks; Import Without Them leaves them out.
+- 3D solids, regions and bodies come in as meshes in their colour, in a group of their own, and Top/Plan shows them from above. 3D faces, polyface and polygon meshes and MESH objects come in the same way.
+- DXF files get all of this too, and so does the file converter.`,
+    "solids",
+  ),
+  release(
+    "2026-11-08T12:01:00Z",
+    "step-iges-import",
+    "Import STEP and IGES models",
+    `Mechanical CAD models come in: File > Import STEP… and Import IGES…, or drop a .stp, .step, .igs or .iges on the window.
+- Each assembly comes in as a group and each part as a mesh, both named as the file names them, in the colours of their faces.
+- File > Open takes them too, into a new drawing when none is open.
+- The file converter turns STEP and IGES into OBJ, GLB and STL, and STEP into IFC.`,
+    "gears",
+  ),
+  release(
+    "2026-11-08T12:00:00Z",
+    "ai-render",
+    "AI renders, and render engines from plug-ins",
+    `An image model can now paint your 3D view and your Render Image pictures as finished renders, and plug-ins can add their own render engines, starting with Blender.
+- AI Render is a new render mode (View › Rendering, or AI in the Render palette): when the view rests, an image model paints it as a finished render and the painting fades in over the Realistic picture. Pick a style (golden hour, overcast, dusk, snow, watercolour, a white card model and more), add your own words, and say how freely it may paint. Your building, its openings and the camera stay as they are.
+- Render Image has an Engine field: choose AI, then whether it starts from the Realistic or the path-traced picture, the style and up to 4 variations. The cost shows before you render.
+- The render viewer compares a picture with the one it started from, with a line that follows the pointer, and Restyle with AI… paints any picture again in another style.
+- Plug-ins can add an engine to Render Image with openvwx.render.engine and get the picture or the model as glTF with the camera and the sun. integrations/blender in Rodeo's repository renders through Blender's Cycles or EEVEE on your computer.
+- AI pictures are paid for from your AI credit and need you signed in.`,
+    "paint",
+  ),
+  release(
+    "2026-11-07T12:01:00Z",
+    "live-path-tracing",
+    "Path tracing while you move, and a material library",
+    `Path Traced now stays path traced while you orbit and walk, and 34 scanned materials make surfaces look real.
+- While the view moves, the path tracer keeps tracing at a lower resolution and steadies the picture with what it saw before, instead of switching to the Realistic picture.
+- Where the browser has WebGPU (recent Chrome, Edge and Safari), the path tracer runs on it, denoised by Open Image Denoise, a neural denoiser that keeps edges and textures sharp. Render Image uses it too. Other browsers keep the WebGL path tracer.
+- The Render palette's Materials list has a Library field: pick wood, brick, stone, concrete, plaster, tile, metal, paving, ground, roofing or fabric, with real-size colour, bump and roughness maps, then set its scale and bump. Match library materials does every guessed material at once.
+- The Quality section picks the path tracer (Auto, WebGPU or WebGL) and what shows while the view moves.`,
+    "sphere",
+  ),
+  release(
+    "2026-11-07T12:00:00Z",
+    "cursors",
+    "The right cursor in 3D and the panels",
+    `The pointer no longer turns into a hand all over the 3D view and the panels.
+- In 3D you see the arrow until you drag; the hand closes while a drag turns or pans the view.
+- Flyover, Translate View and Walkthrough show an open hand, and Push/Pull and the other tools that pick a face show a crosshair.
+- Buttons, tabs, palette titles, the view cube and the other view panes show the arrow, as the rest of the editor does. Links still show the pointing hand.`,
+    "cursors",
+  ),
+  release(
+    "2026-11-07T09:50:00Z",
+    "revit-duct-transitions",
+    "Revit duct transitions come in",
+    `More Revit duct fittings come in as Revit drew them, instead of see-through boxes.
+- Square-to-round duct transitions are drawn with their real shape.`,
+    "walls",
+  ),
+  release(
+    "2026-11-07T09:42:00Z",
+    "clearer-views",
+    "Clearer 2D, 3D and split views",
+    `The workspace says more plainly what each view shows, why a command is greyed out, and where things are.
+- The top bar has 2D, 3D and Split. In a split, 2D and 3D take you to that pane rather than turning the one you're in into the other kind, so you no longer end up with two plans or two 3D views.
+- Each pane has a label in its corner with Show Plan Here, Show 3D Here and Close Pane. A click in the other pane acts at once, and the render mode and 3D commands work whenever a 3D view is on screen.
+- What you select shows in the 3D view too, edged and tinted in the selection colour.
+- Greyed-out menu rows say what to do first.
+- The top bar fits any window: the tools scroll and the ends stay put. Wall, Door, Window, Slab, Stair, Push/Pull, lights and cameras are in it, and a Tool sets button reaches every tool. Projection, Active Plane, Rotate Plan and Quick Preferences are under More view options.
+- Each dock's rail keeps to everyday palettes, with a ⋯ button for the rest, and palette tabs with no room go into a ⋯ menu. A narrow window no longer puts your palettes away for good.
+- Object Info names objects plainly and edits an extrude's position, size and bottom.
+- Menus lose their duplicates: Help › User Guide opens the guide, sharing is under File › Share, the theme under View › Appearance, Machine Design under Tools and AEC › Electrical is AEC › MEP. Paste is greyed till you've copied something, and ⌘I shows and hides Object Info.`,
+    "viewcube",
+  ),
+  release(
+    "2026-11-07T09:39:00Z",
+    "languages",
+    "Rodeo in 17 languages",
+    `Rodeo's interface now comes in German, Spanish, French, Italian, Portuguese (Brazil), Dutch, Polish, Turkish, Russian, Ukrainian, Japanese, Korean, Traditional and Simplified Chinese, Vietnamese and Indonesian, as well as English.
+- Rodeo starts in your browser's language when it has it. Change it any time with the globe at the end of the start screen's footer, or in Edit › Preferences › General.
+- Menus, tools, palettes, dialogs, the server's messages, What's New, and the gallery and converter pages are all translated; the odd new message may show in English until it is.
+- The agents in the Agents panel reply in the language you picked.
+- Corrections from native speakers are welcome on GitHub: CONTRIBUTING.md explains how.`,
+    "language",
+  ),
+  release(
+    "2026-11-07T07:45:00Z",
+    "revit-chairs-sinks",
+    "Revit chairs and sinks come in",
+    `More Revit furniture and fixtures come in as Revit drew them, instead of see-through boxes.
+- Curved shell chairs are drawn with their real shape.
+- Kitchen sinks are drawn with their basins and drains.`,
+    "walls",
+  ),
+  release(
+    "2026-11-07T05:00:00Z",
+    "revit-joists",
+    "Revit bar joists and more fittings come in",
+    `More Revit elements come in as Revit drew them, instead of see-through boxes.
+- Steel bar joists are drawn as their trusses.
+- Some floor finishes and wall-mounted fittings whose curved faces didn't quite close are now drawn.`,
+    "walls",
+  ),
+  release(
+    "2026-11-07T01:30:00Z",
+    "revit-baths-cooktops",
+    "Revit baths and cooktops come in",
+    `More Revit fixtures with curved, trimmed faces now come in as Revit drew them, instead of see-through boxes.
+- Bathtubs and cooktops are drawn with their real shape.
+- Curved faces with holes in them, or awkward outlines, are now meshed properly.
+- Large Revit files take a few percent longer to open.`,
+    "walls",
+  ),
+  release(
+    "2026-11-06T22:40:00Z",
+    "revit-appliances",
+    "More Revit appliances and fixtures come in",
+    `A few more Revit fixtures now come in as Revit drew them, instead of see-through boxes.
+- Appliances with flat side panels, such as ovens, are drawn whole.
+- An element with one or two faces Rodeo can't read yet is drawn from the rest, where those fill its space.
+- Wall-hung urinals in MEP models are drawn.`,
+    "walls",
+  ),
+  release(
+    "2026-11-06T22:30:00Z",
+    "vectorworks-2013",
+    "Vectorworks 2013 drawings open",
+    `Files saved by Vectorworks 2013 now open instead of failing with "bad chunk".
+- Their 2D comes in: lines, shapes, ovals, text, symbols, lighting and other plug-in objects as drawn, layers, sheets, viewports and classes, in the file's units.
+- 3D objects, images, worksheets and textures aren't read yet and are left out.
+- Saving writes a new file in the current Vectorworks format, so the 2013 file stays as it was.
+- A file from before 2013 says which year it was saved in, rather than "bad chunk".
+- A Revit model's note about elements drawn as boxes no longer counts its rooms, which are drawn as their outlines and names.`,
+    "plan3d",
+  ),
+  release(
+    "2026-11-06T22:10:00Z",
+    "language",
+    "Rodeo in Simplified Chinese",
+    `The interface can now be shown in Simplified Chinese (简体中文), and more languages can follow.
+- Rodeo starts in Chinese when your browser asks for it. Change it any time with the globe at the end of the start screen's footer, or in Edit › Preferences › General.
+- Menus, tools, palettes, dialogs and messages are translated; the change is immediate and keeps your drawing open.
+- Your drawing's own names and text stay as written, and saved files are the same in any language.
+- Translations are welcome on GitHub: CONTRIBUTING.md explains how.`,
+    "language",
+  ),
+  release(
+    "2026-11-06T22:00:00Z",
+    "landmark",
+    "Vectorworks Landmark files open, edit and schedule",
+    `Drawings made with Vectorworks Landmark now look as Vectorworks drew them, and their site objects can be changed and scheduled.
+- Plants, existing trees, hardscapes and landscape areas show without the extra rings and boxes Vectorworks keeps for selection, and tree canopies show round in 3D.
+- Object Info lists a plant's, tree's or area's data a group at a time, and changes are kept for Vectorworks.
+- Changing a tree's canopy or DBH, a plant's spread, a massing model's height, or reshaping a hardscape draws it again, with its areas and Plant Record kept up.
+- Tools › Reports makes a Plant Schedule, an Existing Tree Schedule and Landscape Quantities.`,
+    "site",
+  ),
+  release(
+    "2026-11-06T20:45:00Z",
+    "cloud-save-progress",
+    "Cloud saves show their progress at once",
+    `Saving a large drawing to the cloud shows how far it has got from the start.
+- The bar moves as the drawing goes up. On a slow connection it used to sit empty for the first 8 MB, which could be twenty seconds or more
+- The saving card now covers the divider between view panes, the View and Mode bars and the view cube, which used to show through it`,
+    "cloud",
+  ),
+  release(
+    "2026-11-06T20:30:00Z",
+    "revit-lights-hoods",
+    "Revit pendant lights and range hoods come in",
+    `More Revit fixtures now come in as Revit drew them, instead of see-through boxes.
+- Pendant lights are drawn as their canopy, rod and shade.
+- Range hoods and similar fittings whose families hide some parts in 3D come in without those parts.
+- Curved faces whose edges meet a neighbour's within a few hundredths of an inch now join up rather than staying boxes.`,
+    "walls",
+  ),
+  release(
+    "2026-11-06T16:00:00Z",
+    "revit-railings-curves",
+    "Revit railings, basins and appliances come in",
+    `More of a Revit model now comes in as Revit drew it, instead of see-through boxes.
+- Railings are drawn from Revit's geometry; one that isn't read whole stays a box rather than coming in short.
+- Basins and appliances with curved fronts and edges come in, such as rounded lavatories, washers, fridges and microwaves.
+- RPC people and cars, which Revit keeps only as photos, are drawn as a plain figure or car body at their size, as RPC trees already were.
+- A stair's own outline is no longer reported as left out: its flights and landings draw it.`,
+    "walls",
+  ),
+  release(
+    "2026-11-06T14:00:00Z",
+    "revit-older-files",
+    "Older Revit files and stairs come in",
+    `Revit projects from Revit 2015 to 2022 now bring in the geometry Revit saved too, so their roofs, floors, columns, footings and furniture are no longer see-through boxes.
+- Stairs in Revit 2022 files are drawn as Revit drew them: on a stair collection, 23 of 29 stairs now come in, where before every one was a box.
+- Family instances turned off the model's axes, such as solar panels, come in as drawn.
+- Floors and ceilings drawn from their sketch are solid instead of see-through.
+- Railings and some curved fittings, such as basins and appliances, are still boxes.`,
+    "walls",
+  ),
+  release(
+    "2026-11-06T12:00:00Z",
+    "revit-saved-geometry",
+    "Much more of a Revit model comes in",
+    `Revit projects saved in Revit 2023 to 2027 now bring in the geometry Revit saved for roofs, stairs, furniture, curtain wall mullions and panels, columns, footings and light fittings, where before most of these were see-through boxes.
+- On Autodesk's sample house, the elements drawn as boxes fall from about 380 to about 60, and on a large tower model from 3,765 to 1,518.
+- RPC trees, which Revit keeps only as photos, are drawn as a simple trunk and crown at their size instead of a big see-through box.
+- Big models take a little longer to open while the extra geometry is read.
+- Stairs in files from Revit 2022 and earlier are still boxes.`,
+    "walls",
+  ),
+  release(
+    "2026-11-05T12:50:00Z",
+    "sketchup-many-edges",
+    "Detailed SketchUp models come in",
+    `SketchUp models with many loose edges now open instead of being turned away.
+- Loose edges and guide points no longer count against the face limit, so a detailed model under 250,000 faces comes in whole.
+- If a model has more than 250,000 loose edges and guide points, the extra ones are left out and counted in the import message, and the rest of the model still comes in.`,
+    "furniture",
+  ),
+  release(
+    "2026-11-05T12:45:00Z",
+    "editing-together",
+    "Editing together without undone changes",
+    `People and agents editing one cloud drawing at once keep their changes.
+- An agent's step that adds a class and draws no longer clashes with edits elsewhere in the drawing, and on a big drawing it goes out in kilobytes instead of hundreds of megabytes.
+- Two people or agents adding classes, symbols or names at the same moment both keep theirs; a class both add under one name becomes one class.
+- Only two changes to the same thing at once still clash, and the later one is undone with a message.`,
+    "cursors",
+  ),
+  release(
+    "2026-11-05T12:40:00Z",
+    "tabs-agents",
+    "Tabs, with an agent in each",
+    `Work on several drawings at once: each opens in a tab, and each tab has an agent of its own.
+- The tab strip now shows as soon as a drawing is open; its + starts a new drawing or opens one.
+- Start an agent in one drawing, switch tabs and start another: both keep working.
+- Each tab shows what its agent is doing: at work, waiting for you to bring the tab to the front, or finished.
+- The Agents panel names the drawing its chat works in, and the agents at work in your other tabs.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:32:00Z",
+    "agent-big-drawings",
+    "Smoother agent sessions on big drawings",
+    `Rodeo stays responsive while an agent works in a large drawing.
+- The timelapse keeps only what each edit changed, so an agent's step no longer freezes the editor for a second or more while it is recorded, and its history takes kilobytes instead of hundreds of megabytes.
+- Replaying the timelapse of a large drawing no longer fails.
+- The agents keep their models light: ivy, leaves and stone get textures instead of hundreds of thousands of triangles, so what they build stays quick to edit.`,
+    "speed",
+  ),
+  release(
+    "2026-11-05T12:31:00Z",
+    "shaded-textures",
+    "Textures show in Shaded",
+    `The 3D view's Shaded mode now draws textures from the start, as renders do.
+- Turn them off in View > Rendering > Shaded Options… if a drawing has too many.
+- Shaded Options are now remembered in your browser, for every drawing.`,
+    "sphere",
+  ),
+  release(
+    "2026-11-05T12:30:00Z",
+    "agent-sign-in",
+    "Connect Claude and ChatGPT by signing in",
+    `Add Rodeo to Claude, Claude Code, Cursor or ChatGPT with its address and sign in: no token to copy.
+- In Claude: Settings › Connectors › Add custom connector with https://rodeo.build/mcp. It works in claude.ai and the desktop and phone apps.
+- In Claude Code: claude mcp add --transport http rodeo https://rodeo.build/mcp, then /mcp to sign in.
+- Rodeo shows which app is asking and where it sends you before you press Allow.
+- Window › Connect an Agent… lists the apps you connected and when each was last used, and Remove ends one at once.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:25:00Z",
+    "branches",
+    "Branches, compare and merge",
+    `Try ideas on a branch of a cloud drawing, see exactly what changed, and merge it back.
+- File › Branches › New Branch… starts a branch instantly; the chip beside the drawing's name switches between Main and its branches.
+- Compare… shows the drawing against Main, a branch, a saved version or a file: added in green, changed in amber, removed as red ghosts, with an onion-skin slider and a list of every change.
+- Merge requests with a description, discussion and approvals; Merge… combines the drawings object by object and asks only about objects changed on both sides.
+- Blame colours every object by who last changed it.`,
+    "cloud",
+  ),
+  release(
+    "2026-11-05T12:24:00Z",
+    "voice-commands",
+    "Voice commands",
+    `Hold Space, say what to do, and click to point while you speak: Rodeo's agent does it.
+- "Move this door here", "make that wall 200 thicker", "what's on this layer?": the agent gets your words, the selection and the pins you dropped, and its changes undo in one step.
+- Works in Chrome, Edge and Safari, and in Firefox and Brave, where Rodeo's server turns your speech into text.
+- Needs you signed in, and uses AI credit as the Agents panel does. Tools › Voice Commands… sets the key, the language and the agent's model; touch screens get a microphone button.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:23:00Z",
+    "connect-an-agent",
+    "Connect your own agent",
+    `Claude Code, Claude Desktop, Cursor and other AI agents can work in your open drawing while you watch.
+- Window › Connect an Agent… makes a token and shows the line to paste into your agent.
+- The agent reads, looks at, edits, builds, renders and exports with the Agents panel's tools, on its own AI account: no Rodeo credit.
+- A pill in the top bar says what it is doing, with Stop and Resume, and keeps the files it made.
+- npx -y @rodeo.build/cli mcp runs Rodeo for agents on files on your computer, no browser needed.`,
+    "agent",
+  ),
+  release(
+    "2026-11-05T12:22:00Z",
+    "converter",
+    "Convert files without opening them",
+    `Rodeo converts CAD and 3D files: in your browser at rodeo.build/convert, or with one command.
+- Drop Revit, DWG, DXF, SketchUp, IFC, Rhino, Archicad, Vectorworks and other files on rodeo.build/convert and download IFC, PDF, DXF, glTF, OBJ, STL, SketchUp, STEP and more. Nothing is uploaded.
+- A preview shows what came in, in 3D or in plan, with its units, layers, objects and size.
+- Open in Rodeo takes a converted file into the editor. File › Convert Files… opens the converter.
+- npx @rodeo.build/cli convert model.rvt model.ifc converts on your own computer, a folder at a time with --to and --out.`,
+    "announce",
+  ),
+  release(
+    "2026-11-05T12:21:00Z",
+    "gallery",
+    "The Rodeo Gallery",
+    `Publish a cloud drawing to the public gallery, and fork anyone's into your own drawings in one click.
+- File › Publish to Gallery… puts a snapshot of the saved version in the gallery, with a title, tags, a cover and a licence (CC BY 4.0 unless you choose another).
+- rodeo.build/gallery lists them by trending, newest or most forked, with search and tags; each has a viewer, Download and Fork.
+- A fork keeps its credit: the top bar shows what it was forked from, and published forks show in the original's remix tree.
+- Unpublish at any time; Report sends a drawing to Rodeo's admins.`,
+    "announce",
+  ),
+  release(
+    "2026-11-05T12:20:00Z",
+    "embed-anywhere",
+    "Embed drawings anywhere",
+    `Share links are free for everyone, show a picture of the drawing wherever they are pasted, and drawings embed in any page.
+- Pasted into Slack, Discord, iMessage, X or LinkedIn, a share link shows the drawing's name and a picture of it.
+- Share… makes a still and a turning picture for each link, and gives the link, the embed code, a web component and Markdown.
+- Embeds start in 2D or 3D, on a layer or sheet or from a view you choose, can turn slowly, and work on phones.
+- Notion, Medium and Ghost can embed a link through oEmbed, and pages can steer an embed with messages.
+- Shared drawings that allow downloads have Edit a Copy, and ?url= opens a public file from GitHub and similar sites.`,
+    "cloud",
+  ),
+  release(
     "2026-11-04T12:20:00Z",
     "worker-save-integrity",
     "Safer opening and saving",
-    `A drawing-worker failure now stops an affected open or save instead of silently returning empty drawing data.
-- A failed save keeps your previous file intact. Retry opening or saving to continue without workers.`,
+    `Opening or saving now stops safely if it cannot finish.
+- A failed save keeps your previous file intact. Try opening or saving again.`,
     "announce",
   ),
   release(

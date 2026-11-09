@@ -4,13 +4,13 @@
 // past 128), black, negative, NaN, an exact power of two and a value too bright to hold go through
 // encodeHdr and back through a reader written here to the Radiance format's own rules (the run-length
 // coding, and (m + ½) / 256 · 2^(e − 128) a channel); each channel must come back within half an RGBE
-// step of its pixel's brightest channel. three.js's RGBELoader must read the files too (it decodes
+// step of its pixel's brightest channel. three.js's HDRLoader must read the files too (it decodes
 // m / 255 · 2^(e − 128), so within two steps). With a path, the first picture is also written there,
 // for another reader (Blender) to check.
 
 import { writeFileSync } from "node:fs";
 import * as THREE from "three";
-import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
+import { HDRLoader } from "three/examples/jsm/loaders/HDRLoader.js";
 import { encodeHdr } from "./hdr.ts";
 
 let failures = 0;
@@ -107,7 +107,7 @@ function readHdr(bytes: Uint8Array): { width: number; height: number; data: Floa
 
 /** What three.js reads of a .hdr file. */
 function readThree(bytes: ArrayBuffer): { width: number; height: number; data: Float32Array } {
-  const loader = new RGBELoader();
+  const loader = new HDRLoader();
   loader.setDataType(THREE.FloatType);
   return loader.parse(bytes) as { width: number; height: number; data: Float32Array };
 }

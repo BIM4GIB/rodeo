@@ -318,7 +318,7 @@ async function runBatch(jobs: readonly BatchJob[]): Promise<void> {
         failed.push(`${job.name} (its cameras are gone)`);
         continue;
       }
-      const plan: Plan = { ...job, shots, where: "local", prefs: job.prefs };
+      const plan: Plan = { ...job, shots, where: "local", via: null, prefs: job.prefs };
       const results: RenderResult[] = [];
       const jobBox = { ...box, label: (text: string) => box.label(`Job ${i + 1} of ${jobs.length}: ${job.name} · ${text}`) };
       try {

@@ -1,15 +1,18 @@
 // Checks the timelapse's replay against the editor: opens a drawing, records its changes with
-// the same hooks the recorder uses (onStep) while making ten edits, then rebuilds the drawing from
-// the opening bytes and the recorded history. The replayed bytes must equal the edited drawing's
-// bytes after every edit it is checked at (the midpoint and the end), when seeking back, and when
-// the history is applied with EditSession.applyRemote as collaboration does. It also checks that a
-// saved drawing reopens to the bytes it was saved as, which continuing a history relies on.
+// the same hooks the recorder uses (onStep) while making a dozen edits (one of them a class and an
+// object in it, as an agent's script makes), then rebuilds the drawing from the opening bytes and
+// the recorded history. The replayed bytes must equal the edited drawing's bytes after every edit
+// it is checked at (the midpoint and the end), when seeking back, and when the history is applied
+// with EditSession.applyRemote as collaboration does. A step spanning most of the drawing must be
+// kept as the runs it changed, and random changes far apart must rebuild from their runs. It also
+// checks that a saved drawing reopens to the bytes it was saved as, which continuing a history
+// relies on.
 //
 // Run: cd web && npx tsx src/features/timelapse/check.ts ../samples/sample.vwx
 
 import { readFileSync } from "node:fs";
 import { openVwx, type EditSession, type NewShape, type Pt } from "../../core/index.ts";
-import { historyOp, sha256Hex, type HistoryOp } from "./history.ts";
+import { applyOp, historyOp, runsOf, sha256Hex, type HistoryOp } from "./history.ts";
 import { Replayer } from "./replay.ts";
 
 const path = process.argv[2] ?? "../samples/sample.vwx";
@@ -56,6 +59,10 @@ const edits: (() => void)[] = [
   () => session.moveObjects([ids[3], ids[4]], 5, 5),
   () => session.undo(),
   () => session.addObject(layer, line(3000, 2000)),
+  // as an agent's script does: a class near the top of the file and an object in it at its end, one step
+  () => session.batch(() => session.addObject(layer, rect(-4000, 0), session.createClass("Timelapse check"))),
+  () => session.undo(),
+  () => session.redo(),
 ];
 
 // after each edit: the history length and the drawing's bytes
@@ -65,7 +72,7 @@ for (const edit of edits) {
   snaps.push({ ops: ops.length, bytes: session.doc.toBytes() });
 }
 unlisten();
-expect("ten edits recorded as ops", ops.length >= 8 && ops.length <= 10, `${ops.length} ops`);
+expect("the edits recorded as ops", ops.length >= 11 && ops.length <= edits.length, `${ops.length} ops`);
 
 // replay from the opening bytes
 const replay = new Replayer(start, ops, "check.vwx");
@@ -85,8 +92,58 @@ expect("replay at 0 equals the opening bytes", same(replay.doc.toBytes(), start)
 
 // the collaboration path: applyRemote per op must give the same drawing
 const remote = openVwx(start, "check.vwx");
-for (const op of ops) remote.applyRemote({ start: op.start, del: op.del, add: [...op.add], kind: op.kind, ids: [...op.ids] });
+for (const op of ops) for (const r of runsOf(op)) remote.applyRemote({ start: r.start, del: r.del, add: [...r.add], kind: op.kind, ids: [...op.ids] });
 expect("applyRemote of every op equals the replay", same(remote.doc.toBytes(), end.bytes));
+
+// a step spanning the drawing keeps only the runs it changed, and they rebuild the same records
+const wide = ops.filter((op) => op.more);
+const kept = (op: HistoryOp): number => runsOf(op).reduce((n, r) => n + r.add.length, 0);
+if (wide.length) expect("a step spanning the drawing is kept as its changed runs", wide.every((op) => kept(op) < 50), wide.map((op) => `${runsOf(op).length} runs of ${kept(op)} records`).join(", "));
+else console.log("(no step here spans a thousand records, the drawing being small: the random changes below check the runs)");
+let seed = 7;
+const rnd = (n: number): number => {
+  seed = (seed * 16807) % 2147483647;
+  return seed % n;
+};
+const record = (): Uint8Array => new Uint8Array([rnd(256)]);
+let runsOk = true;
+let compact = true;
+for (let trial = 0; trial < 200; trial++) {
+  const before = Array.from({ length: 2000 + rnd(3000) }, record);
+  const after = before.slice();
+  // a few changes far apart: inserts, deletes and replacements, some longer than the runs look ahead
+  const fresh = new Set<Uint8Array>();
+  const put = (n: number): Uint8Array[] => {
+    const list = Array.from({ length: n }, record);
+    for (const d of list) fresh.add(d);
+    return list;
+  };
+  for (let c = 1 + rnd(5); c > 0; c--) {
+    const at = rnd(after.length);
+    const what = rnd(5);
+    if (what === 0) after.splice(at, 0, ...put(1 + rnd(4)));
+    else if (what === 1) after.splice(at, 1 + rnd(4));
+    else if (what === 2) after.splice(at, 1, ...put(1));
+    else if (what === 3) after.splice(at, 0, ...put(70 + rnd(200)));
+    else after.splice(at, 70 + rnd(200));
+  }
+  let s = 0;
+  while (s < before.length && s < after.length && before[s] === after[s]) s++;
+  let eb = before.length;
+  let ea = after.length;
+  while (eb > s && ea > s && before[eb - 1] === after[ea - 1]) {
+    eb--;
+    ea--;
+  }
+  const op = historyOp({ start: s, del: eb - s, add: after.slice(s, ea), removed: before.slice(s, eb), kind: "objects", ids: [] }, 0);
+  const list = before.slice();
+  applyOp(list, op);
+  if (list.length !== after.length || list.some((d, i) => d !== after[i])) runsOk = false;
+  // only the new records still there are kept, once the step is big enough to be cut down
+  if (ea - s + eb - s >= 1024 && kept(op) > after.filter((d) => fresh.has(d)).length) compact = false;
+}
+expect("changed runs rebuild the same records (200 random changes)", runsOk);
+expect("a change far apart keeps only the records it changed", compact);
 
 // a saved drawing reopens to the bytes it was saved as, and its hash is stable
 const saved = end.bytes;

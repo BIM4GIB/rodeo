@@ -45,6 +45,7 @@ interface StoredOp {
   readonly ids: string[];
   readonly size: number;
   readonly header?: HistoryOp["header"];
+  readonly more?: HistoryOp["more"];
 }
 
 const ENDS_KEPT = 20;
@@ -192,7 +193,7 @@ export async function writeOps(id: string, from: number, ops: readonly HistoryOp
     const size = opBytes(op);
     bytes += size;
     const row: StoredOp = { hid: id, seq: from + i, t: op.t, start: op.start, del: op.del, add: [...op.add], kind: op.kind, ids: [...op.ids], size, header: op.header };
-    rows.put(row);
+    rows.put(op.more ? { ...row, more: op.more.map((r) => ({ start: r.start, del: r.del, add: [...r.add] })) } : row);
   });
   meta.ops = Math.max(meta.ops, from + ops.length);
   meta.bytes += bytes;
@@ -218,7 +219,7 @@ export async function readHistory(id: string, upTo = Infinity): Promise<{ start:
   const rows = (await request(tx.objectStore("ops").getAll(range(id, 0)))) as StoredOp[];
   const ops = rows
     .filter((r) => r.seq < upTo)
-    .map((r): HistoryOp => ({ t: r.t, start: r.start, del: r.del, add: r.add, kind: r.kind, ids: r.ids, header: r.header }));
+    .map((r): HistoryOp => ({ t: r.t, start: r.start, del: r.del, add: r.add, kind: r.kind, ids: r.ids, header: r.header, ...(r.more ? { more: r.more } : {}) }));
   return { start: start.bytes, ops, meta };
 }
 

@@ -1,0 +1,232 @@
+/* Render's queue (queue.ts): the tray of renders at the window's bottom right, a solid panel above the
+   drawing and below the menus and dialogs (their z-index is 30 and up). Colours come from tokens.css,
+   so both themes follow. */
+
+.rs-queue {
+  position: fixed;
+  z-index: 20;
+  right: 16px;
+  bottom: 16px;
+  width: 320px;
+  /* a few cards show; more scroll in the list */
+  max-height: 46vh;
+  max-height: 46dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--chrome-border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+
+.rs-queue[hidden] {
+  display: none;
+}
+
+.rs-queue-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.rs-queue.is-folded .rs-queue-head {
+  border-bottom: 0;
+}
+
+.rs-queue-title {
+  font-weight: 600;
+}
+
+.rs-queue-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--fill-strong);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rs-queue-spacer {
+  flex: 1 1 auto;
+}
+
+.rs-queue-fold .rs-icon {
+  transition: transform 0.15s ease;
+}
+
+.rs-queue.is-folded .rs-queue-fold .rs-icon {
+  transform: rotate(180deg);
+}
+
+.rs-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rs-queue-list[hidden] {
+  display: none;
+}
+
+/* ---- a card ----------------------------------------------------------------- */
+
+/* the picture on the left, the words and buttons beside it: a card stays short, so the tray keeps
+   clear of most of the frame */
+.rs-queue-card {
+  flex: none;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--fill);
+}
+
+.rs-queue-card[data-status="waiting"] {
+  opacity: 0.8;
+}
+
+.rs-queue-card[data-status="failed"] .rs-queue-art {
+  opacity: 0.5;
+}
+
+.rs-queue-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background: var(--fill-strong);
+  color: var(--text-3);
+}
+
+.rs-queue-art[hidden] {
+  display: none;
+}
+
+.rs-queue-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 104px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--fill-strong);
+}
+
+.rs-queue-thumb[hidden] {
+  display: none;
+}
+
+.rs-queue-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.rs-queue-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.rs-queue-meta {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-queue-bar {
+  position: relative;
+  height: 3px;
+  margin: 3px 0 1px;
+  border-radius: 2px;
+  background: var(--fill-strong);
+  overflow: hidden;
+}
+
+.rs-queue-bar[hidden] {
+  display: none;
+}
+
+.rs-queue-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 0.25s linear;
+}
+
+.rs-queue-bar.is-indeterminate > span {
+  width: 30%;
+  transition: none;
+  animation: rs-queue-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes rs-queue-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+.rs-queue-line {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.rs-queue-card[data-status="failed"] .rs-queue-line {
+  color: var(--danger);
+}
+
+.rs-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.rs-queue-actions:empty {
+  display: none;
+}
+
+.rs-queue-actions .rs-queue-dismiss {
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rs-queue-bar.is-indeterminate > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}

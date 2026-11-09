@@ -5,6 +5,7 @@
 
 import { store } from "../../../app/state.ts";
 import { errorMessage, toast } from "../../../app/toast.ts";
+import { need } from "../../../app/menuReasons.ts";
 import { addStageRows } from "../registry.ts";
 import { createRoom } from "./eventRoom.ts";
 import { createScreen } from "./eventScreen.ts";
@@ -16,8 +17,8 @@ const open = (): boolean => store.session !== null;
 const run = (job: () => Promise<void>) => (): void => void job().catch((err: unknown) => toast(errorMessage(err)));
 
 addStageRows("Event", () => [
-  { label: "Create Room…", enabled: () => open() && canCreateStage(), run: run(createRoom) },
-  { label: "Create Stage…", enabled: () => open() && canCreateStage(), run: run(createStage) },
+  { label: "Create Room…", why: need.closed, enabled: () => open() && canCreateStage(), run: run(createRoom) },
+  { label: "Create Stage…", why: need.closed, enabled: () => open() && canCreateStage(), run: run(createStage) },
   { label: "Create Stair…", enabled: open, run: run(createStair) },
   { label: "Create Lectern…", enabled: open, run: run(createLectern) },
   { label: "Create Screen…", enabled: open, run: run(createScreen) },

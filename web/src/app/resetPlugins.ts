@@ -65,8 +65,9 @@ export async function resetAllPluginsDialog(): Promise<void> {
     if (!drivers.has(name)) drivers.set(name, pluginDriver(name));
     return drivers.get(name);
   };
-  const drawable = all.filter((o) => driverOf(o.name));
-  const other = all.filter((o) => !driverOf(o.name));
+  const resets = (o: PluginObject): boolean => (driverOf(o.name)?.resets ?? true) && driverOf(o.name) !== undefined;
+  const drawable = all.filter(resets);
+  const other = all.filter((o) => !resets(o));
   const otherNote = other.length
     ? ` ${plural(other.length, "object")} of plug-ins Rodeo can't draw (Vectorworks' own, or ones not installed here) will stay as they were last drawn: ${byPlugin(other)}.`
     : "";

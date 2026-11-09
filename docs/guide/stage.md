@@ -234,7 +234,7 @@ Generating again replaces the worksheets made before. One undo takes the whole l
 
 ### Spotlight Numbering
 
-**Spotlight Numbering**, in **Stage › Lighting** and **Stage › ConnectCAD**, numbers lighting devices, or any plug-in object or record, in one or more fields at once: unit numbers, channels, DMX addresses by footprint into the next universe, with prefixes, letters, steps and limits.
+**Spotlight Numbering**, in **Stage › Lighting**, numbers lighting devices, or any plug-in object or record, in one or more fields at once: unit numbers, channels, DMX addresses by footprint into the next universe, with prefixes, letters, steps and limits.
 
 Selected objects are numbered left to right, top to bottom or zigzag; with none selected, click them one by one.
 

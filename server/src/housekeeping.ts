@@ -1,7 +1,8 @@
 // Periodic clean-up: expired sessions, sign-in links and invites; voice notes never attached
 // to a comment; cloud renders past keeping; uploads left unused; error reports and earlier
 // builds' assets past keeping; visits past keeping; feedback attachments that stopped arriving or
-// are past keeping; and the in-memory rate-limit windows.
+// are past keeping; OAuth codes, tokens and connections past keeping, and app registrations never
+// used; and the in-memory rate-limit windows.
 
 import { pruneRateLimits } from "./auth.ts";
 import { releaseBlobs } from "./blobs.ts";
@@ -9,6 +10,7 @@ import { all, run } from "./db.ts";
 import { sweepFeedback } from "./feedback.ts";
 import { sweepRenders } from "./render.ts";
 import { pruneReports } from "./reports.ts";
+import { pruneOAuth } from "./oauth/index.ts";
 import { pruneAssets } from "./static.ts";
 import { sweepUploads } from "./uploads.ts";
 import { pruneVisits } from "./visits.ts";
@@ -30,6 +32,7 @@ async function sweep(): Promise<void> {
   await sweepFeedback();
   pruneReports();
   pruneVisits();
+  pruneOAuth();
   await pruneAssets();
   pruneRateLimits();
 }

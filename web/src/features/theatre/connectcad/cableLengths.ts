@@ -152,7 +152,7 @@ export async function calculateCableLengths(): Promise<void> {
   const r = attempt("Calculate Cable Lengths", (session) => session.batch(() => calculate(session, chosen.all ? null : new Set(selected), chosen)));
   if (!r) return;
   const { worked, kept, marked } = r.value;
-  const many = (n: number, one: string): string => `${n} circuit${n === 1 ? "" : "s"} ${one}`;
-  const parts = [many(worked, "worked out"), kept ? many(kept, `kept ${kept === 1 ? "its" : "their"} own Cable Length`) : null, marked.length ? `${many(marked.length, "couldn't be")}, marked in the class ${MARKUP_CLASS}` : null].filter(Boolean);
+  const many = (n: number, one: string, more: string): string => `${n} ${n === 1 ? one : more}`;
+  const parts = [many(worked, "circuit worked out", "circuits worked out"), kept ? many(kept, "circuit kept its own Cable Length", "circuits kept their own Cable Length") : null, marked.length ? `${many(marked.length, "circuit couldn't be worked out", "circuits couldn't be worked out")}, marked in the class ${MARKUP_CLASS}` : null].filter(Boolean);
   toast(`Calculate Cable Lengths: ${parts.join(", ")}.`, "info");
 }

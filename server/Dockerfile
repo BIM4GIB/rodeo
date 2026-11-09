@@ -21,10 +21,15 @@ COPY server/src /app/server/src
 
 # The server imports these from the web source at run time, by relative path. The
 # package.json marks them as ES modules, as they are in the repository.
-RUN mkdir -p /app/web/src/platform /app/web/src/core \
+RUN mkdir -p /app/web/src/platform /app/web/src/core /app/web/src/convert \
+    /app/web/src/features/gallery /app/web/src/features/branches /app/web/src/features/mcp \
   && echo '{"type":"module"}' > /app/web/package.json
 COPY web/src/platform/protocol.ts /app/web/src/platform/protocol.ts
 COPY web/src/core/splice.ts /app/web/src/core/splice.ts
+COPY web/src/convert/pages.ts /app/web/src/convert/pages.ts
+COPY web/src/features/gallery/rules.ts /app/web/src/features/gallery/rules.ts
+COPY web/src/features/branches/wire.ts /app/web/src/features/branches/wire.ts
+COPY web/src/features/mcp/wire.ts web/src/features/mcp/rpc.ts /app/web/src/features/mcp/
 COPY --from=build /app/web/dist /app/web/dist
 
 ENV PORT=8080 DATA_DIR=/data WEB_DIST=/app/web/dist NODE_ENV=production

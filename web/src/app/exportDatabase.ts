@@ -63,7 +63,7 @@ export async function exportDatabaseDialog(): Promise<void> {
   const format = h(
     "select",
     { cls: "menu-dialog-input menu-dialog-select wide", attrs: { "aria-label": "Record format" } },
-    ...list.map((f) => h("option", { value: String(f.format), text: f.name })),
+    ...list.map((f) => h("option", { attrs: { translate: "no" }, value: String(f.format), text: f.name })),
   );
   const kind = h(
     "select",

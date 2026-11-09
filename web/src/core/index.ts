@@ -20,6 +20,7 @@ export {
   type Written,
 } from "./container.ts";
 export { FileStream, HeldEntry, heldTables, withHeldImages } from "./held.ts";
+export { savedYear } from "./legacy.ts";
 export { clipboardHolds, expandClipboard } from "./edit.ts";
 export { type FilletArc, filletArcs, imageBytes, polylineOutline, roundedRectPoints, TEXT_ASCENT, TEXT_LINE_HEIGHT, TEXT_STYLE_BY_CLASS, textTop } from "./geometry.ts";
 export { BY_CLASS_KEYS, drawsPen, fillPatternBits } from "./attrs.ts";

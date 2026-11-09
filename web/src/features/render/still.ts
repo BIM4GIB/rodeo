@@ -1,16 +1,20 @@
 // One still picture of a built scene, as Render Image makes it on this computer and the cloud
 // worker (cloudWorker.ts) makes it on a server's GPU: Fast draws it once with the Realistic engine,
 // Photoreal samples the path tracer in short slices, yielding on a timer between them so the page
-// stays live. No editor windows here: the caller shows progress through StillBox.
+// stays live. The path tracer is WebGPU's where the browser has it and the settings allow (it
+// spreads its work over frames itself and denoises the picture with Open Image Denoise), else
+// WebGL's, tiled. No editor windows here: the caller shows progress through StillBox.
 
 import * as THREE from "three";
 import type { Shot } from "./camera.ts";
 import { renderCamera } from "./camera.ts";
+import { webgpuAvailable } from "./gpuSupport.ts";
 import { HdrWriter } from "./hdr.ts";
 import { PathEngine } from "./pathtrace.ts";
 import { RasterEngine } from "./raster.ts";
 import type { RenderScene } from "./sceneBuilder.ts";
 import type { RenderSettings } from "./settings.ts";
+import type { TraceEngine } from "./traceEngine.ts";
 
 export type Engine = "realistic" | "pathtraced";
 /** a picture's file: PNG or JPEG finished, or Radiance HDR linear (Export HDRI) */
@@ -113,7 +117,7 @@ export async function renderStill(
     lost = true;
   };
   renderer.domElement.addEventListener("webglcontextlost", onLost);
-  let engine: RasterEngine | PathEngine | null = null;
+  let engine: RasterEngine | TraceEngine | null = null;
   try {
     const limit = renderer.capabilities.maxTextureSize;
     if (plan.width > limit || plan.height > limit) {
@@ -137,16 +141,15 @@ export async function renderStill(
       engine = raster;
       raster.renderStill(scene, camera, settings, FAST_SAMPLES, linear);
     } else {
-      const tracer = new PathEngine(renderer);
+      box.label(`${place.prefix}Building…`);
+      const tracer = await startTracer(renderer, scene, camera, settings, plan.samples, (fraction) => box.bar(fraction));
       engine = tracer;
       tracer.tiles = tilesFor(plan.width * plan.height, tiling);
-      box.label(`${place.prefix}Building…`);
-      await tracer.setScene(scene, camera, (fraction) => box.bar(fraction));
       if (job.cancelled) return null;
       const pace = { ...place, started, target: plan.samples, minutes: plan.minutes };
       samples = await samplePicture(tracer, canvas, settings, job, box, pace, tiling.ms, () => lost);
       if (job.cancelled) return null;
-      if (linear) tracer.show(settings, linear);
+      if (linear) await tracer.show(settings, linear);
     }
     if (linear) {
       box.label(`${place.prefix}Writing the HDR file…`);
@@ -176,7 +179,7 @@ export async function renderStill(
  * Resolves with the samples taken.
  */
 async function samplePicture(
-  tracer: PathEngine,
+  tracer: TraceEngine,
   canvas: HTMLCanvasElement,
   settings: RenderSettings,
   job: Job,
@@ -203,7 +206,7 @@ async function samplePicture(
     do {
       const before = tracer.samples;
       const start = performance.now();
-      tracer.accumulate(settings, null);
+      await tracer.accumulate(settings, null);
       const ms = performance.now() - start;
       // the first tile drawn also uploads the scene to the GPU, and a tile may not be drawn (the shader compiling)
       if (timed && before > 0 && tracer.samples > before) slowest = Math.max(slowest, ms);
@@ -229,13 +232,13 @@ async function samplePicture(
       }
     } while (!finished() && performance.now() < sliceEnd);
     if (finished()) {
-      tracer.show(settings, null);
+      await tracer.show(settings, null);
       return tracer.samples;
     }
     const now = performance.now();
     if (now - pictured >= PICTURE_MS) {
       pictured = now;
-      tracer.show(settings, null);
+      await tracer.show(settings, null);
       timed = false;
       box.picture(canvas);
     }
@@ -267,6 +270,36 @@ function progressLine(taken: number, pace: Pace, now: number, sampling: number):
 function aboutLeft(seconds: number): string {
   const s = Math.max(1, Math.round(seconds));
   return s < 60 ? `about ${s} s left` : `about ${Math.round(s / 60)} min left`;
+}
+
+/**
+ * The path tracer for a still, with the scene built: WebGPU's where the browser has it and the
+ * settings don't ask for WebGL, else WebGL's (also when WebGPU fails to take the scene).
+ */
+async function startTracer(
+  renderer: THREE.WebGLRenderer,
+  scene: RenderScene,
+  camera: THREE.Camera,
+  settings: RenderSettings,
+  samples: number,
+  onProgress: (fraction: number) => void,
+): Promise<TraceEngine> {
+  if (settings.quality.engine !== "webgl" && (await webgpuAvailable())) {
+    let gpu: TraceEngine | null = null;
+    try {
+      const { GpuEngine } = await import("./gpuEngine.ts");
+      const engine: TraceEngine = new GpuEngine(renderer, { stillSamples: samples });
+      gpu = engine;
+      await engine.setScene(scene, camera, onProgress);
+      return engine;
+    } catch (err) {
+      console.warn("openvwx: WebGPU could not trace the picture; WebGL traces it instead", err);
+      gpu?.dispose();
+    }
+  }
+  const tracer = new PathEngine(renderer);
+  await tracer.setScene(scene, camera, onProgress);
+  return tracer;
 }
 
 /** A WebGL renderer on a canvas of the picture's size. The buffer is kept, since the picture is read back from it. */

@@ -283,10 +283,27 @@ const CLIPBOARD_FORMAT = "openvwx-objects-1";
 let clipboard: ClipboardData | null = null;
 /** for a copy holding parts of a big drawing left in its file, what the system clipboard was given: read back there, it is this copy */
 let clipboardText = "";
+/** set in this browser once anything is copied, so a window that copied nothing itself still offers Paste (the copy comes from the system clipboard) */
+const COPIED_KEY = "openvwx.copied";
+
+/** Whether Paste has something to paste: a copy made in this window, or in another window of this browser. */
+export function canPaste(): boolean {
+  if (clipboard !== null) return true;
+  try {
+    return localStorage.getItem(COPIED_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
 
 function rememberCopy(data: ClipboardData): void {
   clipboard = data;
   clipboardText = "";
+  try {
+    localStorage.setItem(COPIED_KEY, "1");
+  } catch {
+    // storage blocked: only this window knows of its copy
+  }
   // the system clipboard carries the copy to other windows; a denied write is not an error
   try {
     if (!clipboardHolds(data)) {

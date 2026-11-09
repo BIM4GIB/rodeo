@@ -6,7 +6,7 @@ This page covers piping, ducts, electrical and communication devices, speakers, 
 
 ### Piping Run
 
-With the **Piping Run** tool (MEP tool set), click a run's corners, or turn selected polygons and polylines into runs with **AEC › Electrical › Create Piping Runs**.
+With the **Piping Run** tool (MEP tool set), click a run's corners, or turn selected polygons and polylines into runs with **AEC › MEP › Create Piping Runs…**.
 
 It works out the length, sections and couplings a run takes, and its elbows or bends, and tags it with its size and material. They're worked out once, when it's placed, and go in a Piping Run record.
 
@@ -38,11 +38,11 @@ With the **Speaker** tool (Event Design tool set), click to place a speaker, its
 
 ### Conductor Sizing Calc…
 
-**AEC › Electrical › Conductor Sizing Calc…** works out a run's wire size, voltage drop, current, length, voltage, phase factor or resistivity from the rest, for copper or aluminum wire from 18 AWG to 1000 kcmil, as the values are typed.
+**AEC › MEP › Conductor Sizing Calc…** works out a run's wire size, voltage drop, current, length, voltage, phase factor or resistivity from the rest, for copper or aluminum wire from 18 AWG to 1000 kcmil, as the values are typed.
 
 ### Conduit Sizing Calc…
 
-**AEC › Electrical › Conduit Sizing Calc…** lists the wires going in a conduit (by the NEC's Table 5, or any wire's area typed) and reports the actual size and the trade size of EMT, RMC, IMC, FMC, LFMC or PVC they need. It shares them over as many conduits as given, at the fill suggested by Table 1 or typed.
+**AEC › MEP › Conduit Sizing Calc…** lists the wires going in a conduit (by the NEC's Table 5, or any wire's area typed) and reports the actual size and the trade size of EMT, RMC, IMC, FMC, LFMC or PVC they need. It shares them over as many conduits as given, at the fill suggested by Table 1 or typed.
 
 **Limits:** Vectorworks' wire database of manufacturers and part numbers isn't here.
 

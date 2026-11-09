@@ -1,4 +1,4 @@
-// View > Theme and View > Dark Canvas, kept per browser. The theme is a
+// View > Appearance: the theme and Dark Canvas, kept per browser. The theme is a
 // data-theme attribute on <html> that styles.css reads (index.html sets it
 // before the first paint); Dark Canvas swaps the drawing's ink and paper.
 
@@ -56,7 +56,7 @@ export function installTheme(): void {
   document.documentElement.classList.toggle("dark-canvas", read(CANVAS_KEY) === "1");
 }
 
-/** View > Theme. */
+/** View > Appearance's theme rows. */
 export function themeRows(): Row[] {
-  return THEMES.map(([t, label]) => ({ label, checked: () => theme() === t, run: () => setTheme(t) }));
+  return THEMES.map(([t, label]) => ({ label, i18n: `Theme › ${label}`, checked: () => theme() === t, run: () => setTheme(t) }));
 }

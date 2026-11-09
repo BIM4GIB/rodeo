@@ -7,7 +7,22 @@
 // (MIT licence) was the cross-check where the specification is unclear.
 
 import type { Pt } from "../core/types.ts";
-import { aciColor, drawingOf, type Block, type DxfDrawing, type DxfLayer, type DxfLineType, type Entry, type Pair } from "./dxf.ts";
+import {
+  ACIS_TYPES,
+  aciColor,
+  drawingOf,
+  leaderArrows,
+  type AcisObject,
+  type Block,
+  type DxfDrawing,
+  type DxfLayer,
+  type DxfLineType,
+  type DxfTables,
+  type Entry,
+  type Pair,
+  type XrefDef,
+  type XrefSource,
+} from "./dxf.ts";
 
 /** The AutoCAD release behind each version code this reader knows. */
 const RELEASES: Readonly<Record<string, string>> = {
@@ -84,17 +99,34 @@ export function isDwg(bytes: Uint8Array): boolean {
 
 /**
  * Reads a .dwg drawing: its model space, or its paper space when model space holds nothing.
- * Throws when the bytes are not a DWG file, or one of a release it cannot read.
+ * Throws when the bytes are not a DWG file, or one of a release it cannot read. `xrefs` gives the
+ * files of its external references by upper-case name (see dwgSource); one not given is left out.
  */
-export function parseDwg(bytes: Uint8Array): DwgDrawing {
+export function parseDwg(bytes: Uint8Array, xrefs: ReadonlyMap<string, XrefSource> = new Map()): DwgDrawing {
+  const { db, header, release } = readDwg(bytes);
+  return assemble(db, header, release, xrefs);
+}
+
+/**
+ * Reads a .dwg file as a drawing of its own or as the file of an external reference: its model
+ * space, blocks, tables, units and the xrefs it defines. Throws as parseDwg does.
+ */
+export function dwgSource(bytes: Uint8Array): XrefSource {
+  const { db, header } = readDwg(bytes);
+  const parts = partsOf(db, header);
+  return { entities: parts.model, blocks: parts.blocks, tables: parts.tables, insunits: header.insunits, xrefs: parts.xrefs };
+}
+
+/** The file's header and objects read into the database that assemble and partsOf draw from. */
+function readDwg(bytes: Uint8Array): { db: Db; header: Header; release: string } {
   const code = String.fromCharCode(...bytes.subarray(0, 6));
   const f = fileOf(bytes, code);
   const sections = sectionsOf(f);
   const classes = sections.classes ? classesOf(f, sections.classes) : new Map<number, DwgClass>();
   const header = sections.header ? headerOf(f, sections.header) : { insunits: 0, ltscale: 1 };
   const map = objectMap(sections.handles);
-  const db = readObjects(f, sections.objects, map, classes);
-  return assemble(db, header, RELEASES[code] ?? `newer than 2018 (${code})`);
+  const db = readObjects(f, sections.objects, map, classes, sections.acis);
+  return { db, header, release: RELEASES[code] ?? `newer than 2018 (${code})` };
 }
 
 // ---- the file and its sections --------------------------------------------------------
@@ -114,6 +146,8 @@ interface Sections {
   readonly handles: Uint8Array;
   /** the bytes the object map's offsets count from: the whole file before R2004, the objects section after */
   readonly objects: Uint8Array;
+  /** R2013 on: the ACIS data of solids, regions and bodies by handle, from the AcDsPrototype_1b section; empty before */
+  readonly acis: Map<number, Uint8Array>;
 }
 
 function fileOf(bytes: Uint8Array, code: string): DwgFile {
@@ -141,7 +175,7 @@ function sectionsOf(f: DwgFile): Sections {
   const handles = named.get("AcDb:Handles");
   const objects = named.get("AcDb:AcDbObjects");
   if (!handles || !objects) throw new Error("the drawing has no object map, so it cannot be read");
-  return { header: named.get("AcDb:Header") ?? null, classes: named.get("AcDb:Classes") ?? null, handles, objects };
+  return { header: named.get("AcDb:Header") ?? null, classes: named.get("AcDb:Classes") ?? null, handles, objects, acis: acisOfSection(named.get("AcDb:AcDsPrototype_1b")) };
 }
 
 /** R13 to 2000: a table of section locators after the version, each a number, an offset and a size. */
@@ -157,7 +191,7 @@ function sections15(f: DwgFile): Sections {
   }
   const handles = at.get(2);
   if (!handles) throw new Error("the drawing has no object map, so it cannot be read");
-  return { header: at.get(0) ?? null, classes: at.get(1) ?? null, handles, objects: b };
+  return { header: at.get(0) ?? null, classes: at.get(1) ?? null, handles, objects: b, acis: new Map() };
 }
 
 /** R2004 and 2010 on: an encrypted header points to a map of pages, and a map of sections lists each one's pages. */
@@ -229,7 +263,7 @@ function sections18(f: DwgFile): Map<string, Uint8Array> {
   return out;
 }
 
-const WANTED = new Set(["AcDb:Header", "AcDb:Classes", "AcDb:Handles", "AcDb:AcDbObjects"]);
+const WANTED = new Set(["AcDb:Header", "AcDb:Classes", "AcDb:Handles", "AcDb:AcDbObjects", "AcDb:AcDsPrototype_1b"]);
 
 /** A system page of an R2004 file (the page map or the section map): a 20-byte header and compressed data. */
 function systemPage(b: Uint8Array, at: number): Uint8Array {
@@ -1015,6 +1049,8 @@ interface Rec {
   readonly ref: number;
   /** its line type's handle, or BY_LAYER, BY_BLOCK or CONTINUOUS */
   readonly lineType: number;
+  /** a solid, region or body's ACIS data (see Entry.data) */
+  readonly data?: Uint8Array;
 }
 
 const BY_LAYER = -1;
@@ -1036,8 +1072,14 @@ interface DwgLayer {
 interface BlockHeader {
   readonly name: string;
   readonly base: Pt;
+  /** the base point's z */
+  readonly baseZ: number;
   /** an external reference, whose objects are in another file */
   readonly xref: boolean;
+  /** an overlay: an xref that is not shown inside another xref */
+  readonly overlay: boolean;
+  /** an xref's file, as the drawing gives it; empty for other blocks */
+  readonly path: string;
 }
 
 interface Db {
@@ -1057,6 +1099,8 @@ interface Ctx {
   /** the string stream from R2007; null when the object has no strings */
   readonly t: Bits | null;
   readonly handle: number;
+  /** the bit where the object's data ends and its handles (or, from R2007, its strings) begin */
+  readonly end: number;
 }
 
 /** A TV string: in the data stream before R2007, in the string stream after. */
@@ -1064,7 +1108,7 @@ function text(c: Ctx): string {
   return c.f.v >= 1021 ? (c.t ? c.t.tu() : "") : c.m.tv();
 }
 
-function readObjects(f: DwgFile, buf: Uint8Array, map: readonly [number, number][], classes: ReadonlyMap<number, DwgClass>): Db {
+function readObjects(f: DwgFile, buf: Uint8Array, map: readonly [number, number][], classes: ReadonlyMap<number, DwgClass>, acis: ReadonlyMap<number, Uint8Array>): Db {
   const db: Db = { recs: [], blocks: new Map(), layers: new Map(), lineTypes: new Map(), unreadable: {} };
   for (const [, at] of map) {
     let name = "";
@@ -1074,6 +1118,11 @@ function readObjects(f: DwgFile, buf: Uint8Array, map: readonly [number, number]
       if (name) db.unreadable[name] = (db.unreadable[name] ?? 0) + 1;
     }
   }
+  // from R2013 a solid's ACIS data is not in the entity: it comes from the prototype section, by handle
+  db.recs.forEach((r, i) => {
+    const data = acis.get(r.handle);
+    if (data && ACIS_TYPES.has(r.type)) db.recs[i] = { ...r, data };
+  });
   return db;
 }
 
@@ -1121,7 +1170,8 @@ function readObject(
   }
   if (v <= 1014) hpos = start + r.rl();
   if (hpos < start || hpos > end) throw new Error("an object's handles are out of place");
-  const c: Ctx = { f, m: r, h: new Bits(buf, hpos, f), t: v >= 1021 ? stringStream(buf, hpos - 1, f) : null, handle };
+  const t = v >= 1021 ? stringStream(buf, hpos - 1, f) : null;
+  const c: Ctx = { f, m: r, h: new Bits(buf, hpos, f), t, handle, end: t ? t.pos : hpos };
 
   if (!entity) {
     objectHead(c);
@@ -1144,7 +1194,7 @@ function readObject(
   const body = decodeEntity(c, type, cls?.name ?? "", name);
   if (body) {
     const pairs = [...body.pairs, ...head.style];
-    db.recs.push({ handle, type: body.type, pairs, mode: head.mode, owner: head.owner, layer: head.layer, ref: body.ref ?? 0, lineType: head.lineType });
+    db.recs.push({ handle, type: body.type, pairs, mode: head.mode, owner: head.owner, layer: head.layer, ref: body.ref ?? 0, lineType: head.lineType, data: body.data });
   }
 }
 
@@ -1246,7 +1296,9 @@ function blockHeader(c: Ctx, name: string): BlockHeader {
   if (v >= 1015) m.bit(); // loaded
   if (v >= 1018 && !xref && !overlaid) m.bl(); // owned objects
   const base = m.bd3();
-  return { name, base: { x: base.x, y: base.y }, xref: xref || overlaid };
+  // the file name follows the base point; it is read only for an xref, as nothing after it is needed
+  const path = xref || overlaid ? text(c) : "";
+  return { name, base: { x: base.x, y: base.y }, baseZ: base.z, xref: xref || overlaid, overlay: overlaid, path };
 }
 
 interface Head {
@@ -1333,6 +1385,8 @@ interface Body {
   readonly type: string;
   readonly pairs: Pair[];
   readonly ref?: number;
+  /** a solid, region or body's ACIS data, when the entity holds it (before R2013) */
+  readonly data?: Uint8Array;
 }
 
 const DEG = Math.PI / 180;
@@ -1344,6 +1398,16 @@ function pair(code: number, value: number | string): Pair {
 /** Group codes 10 and 20 (or code and code + 10) for a point. */
 function at(code: number, p: { x: number; y: number }): Pair[] {
   return [pair(code, p.x), pair(code + 10, p.y)];
+}
+
+/** Group codes 10, 20 and 30 (or code, code + 10 and code + 20) for a 3D point. */
+function at3(code: number, p: { x: number; y: number; z: number }): Pair[] {
+  return [...at(code, p), pair(code + 20, p.z)];
+}
+
+/** A 3D point stored as changes to a default point, one coordinate at a time (see Bits.dd). */
+function dd3(m: Bits, def: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
+  return { x: m.dd(def.x), y: m.dd(def.y), z: m.dd(def.z) };
 }
 
 /** The extrusion as 210/220/230, left out when it is the usual +z. */
@@ -1442,6 +1506,10 @@ function decodeEntity(c: Ctx, type: number, className: string, name: string): Bo
     }
     case 36:
       return splineEntity(c);
+    case 37: // REGION
+    case 38: // 3DSOLID
+    case 39: // BODY
+      return modelerEntity(c, name);
     case 44:
       return mtextEntity(c);
     case 45: {
@@ -1459,22 +1527,111 @@ function decodeEntity(c: Ctx, type: number, className: string, name: string): Bo
       return lwPolyline(c);
     case 78:
       return hatchEntity(c);
+    case 28:
+      return faceEntity(c);
+    case 29: {
+      // a polyface mesh; its vertices and face records follow as objects of their own
+      m.bs(); // vertex count
+      m.bs(); // face count
+      return { type: "POLYLINE", pairs: [pair(70, 64)] };
+    }
+    case 30: {
+      // a polygon mesh; its vertices follow as objects of their own
+      const flags = m.bs();
+      const smooth = m.bs();
+      const mCount = m.bs();
+      const nCount = m.bs();
+      const mDensity = m.bs();
+      const nDensity = m.bs();
+      return {
+        type: "POLYLINE",
+        pairs: [pair(70, flags | 16), pair(71, mCount), pair(72, nCount), pair(73, mDensity), pair(74, nDensity), pair(75, smooth)],
+      };
+    }
+    case 12: {
+      // a polygon mesh's vertex, which belongs to its polygon mesh (flag 64)
+      const flags = m.byte();
+      return { type: "VERTEX", pairs: [pair(70, flags | 64), ...at3(10, m.bd3())] };
+    }
+    case 13: {
+      // a polyface mesh's position vertex (flags 128 and 64)
+      const flags = m.byte();
+      return { type: "VERTEX", pairs: [pair(70, flags | 192), ...at3(10, m.bd3())] };
+    }
+    case 14: {
+      // a polyface mesh's face record: its corners' numbers among the positions (71 to 74, 0 for none)
+      const corners = [m.bs(), m.bs(), m.bs(), m.bs()];
+      return { type: "VERTEX", pairs: [pair(70, 128), ...corners.map((v, k) => pair(71 + k, v))] };
+    }
     case 3: // ATTDEF
     case 4: // BLOCK
     case 5: // ENDBLK
     case 6: // SEQEND
-    case 12: // mesh and polyface vertices, which belong to skipped polylines
-    case 13:
-    case 14:
       return null;
     default:
       if (className === "LWPOLYLINE" || className === "LWPLINE") return lwPolyline(c);
       if (className === "HATCH") return hatchEntity(c);
       if (CLASS_DIMENSIONS.has(className)) return dimensionEntity(c);
+      if (className === "MESH") return meshEntity(c);
       // a table begins as an insert of the anonymous block that draws it
       if (className === "ACAD_TABLE") return { ...insertEntity(c, false), type: "ACAD_TABLE" };
+      if (className === "MULTILEADER") return multileaderEntity(c);
       return { type: name || "UNKNOWN", pairs: [] };
   }
+}
+
+/**
+ * A 3DFACE: its four corners in world coordinates (a triangle's fourth is its third) and its invisible
+ * edges (70). From R2000 the first corner is raw and each later one is a change to the one before.
+ */
+function faceEntity(c: Ctx): Body {
+  const m = c.m;
+  let corners: { x: number; y: number; z: number }[];
+  let flags = 0;
+  if (c.f.v >= 1015) {
+    const noFlags = m.bit() === 1;
+    const zIsZero = m.bit() === 1;
+    const x = m.rd();
+    const y = m.rd();
+    const z = zIsZero ? 0 : m.rd();
+    const second = dd3(m, { x, y, z });
+    const third = dd3(m, second);
+    const fourth = dd3(m, third);
+    corners = [{ x, y, z }, second, third, fourth];
+    if (!noFlags) flags = m.bs();
+  } else {
+    corners = [m.bd3(), m.bd3(), m.bd3(), m.bd3()];
+    flags = m.bs();
+  }
+  return { type: "3DFACE", pairs: [...at3(10, corners[0]), ...at3(11, corners[1]), ...at3(12, corners[2]), ...at3(13, corners[3]), pair(70, flags)] };
+}
+
+/**
+ * A MESH (AcDbSubDMesh), as a DXF one: its vertices (92, and 10 to 30) and its face list (93 items: each
+ * face's corner count, then its corners' indices from 0). Its base cage is what is read; the subdivision
+ * levels, edges and creases are not.
+ */
+function meshEntity(c: Ctx): Body {
+  const m = c.m;
+  m.bs(); // version
+  m.bit(); // blend crease
+  m.bl(); // subdivision level
+  const count = m.bl();
+  m.room(count * 6);
+  const verts: { x: number; y: number; z: number }[] = [];
+  for (let k = 0; k < count; k++) verts.push(m.bd3());
+  const size = m.bl();
+  m.room(size * 2);
+  const items: number[] = [];
+  let used = 0;
+  while (used < size) {
+    const corners = m.bl();
+    if (corners < 0 || used + corners + 1 > size) throw new Error("a MESH face runs past its face list");
+    items.push(corners);
+    for (let k = 0; k < corners; k++) items.push(m.bl());
+    used += corners + 1;
+  }
+  return { type: "MESH", pairs: [pair(92, count), ...verts.flatMap((p) => at3(10, p)), pair(93, size), ...items.map((v) => pair(90, v))] };
 }
 
 /**
@@ -1693,24 +1850,27 @@ function insertEntity(c: Ctx, array: boolean): Body {
   const ins = m.bd3();
   let sx = 1;
   let sy = 1;
+  let sz = 1;
   if (v <= 1014) {
     const s = m.bd3();
     sx = s.x;
     sy = s.y;
+    sz = s.z;
   } else {
     switch (m.bb()) {
       case 0:
         sx = m.rd();
         sy = m.dd(sx);
-        m.dd(sx);
+        sz = m.dd(sx);
         break;
       case 1:
         sy = m.dd(1);
-        m.dd(1);
+        sz = m.dd(1);
         break;
       case 2:
         sx = m.rd();
         sy = sx;
+        sz = sx;
         break;
     }
   }
@@ -1718,7 +1878,7 @@ function insertEntity(c: Ctx, array: boolean): Body {
   const n = m.bd3();
   const hasAttribs = m.bit() === 1;
   if (v >= 1018 && hasAttribs) m.bl(); // owned attributes
-  const pairs = [...at(10, ins), pair(41, sx), pair(42, sy), pair(50, rotation / DEG), ...extrusion(n)];
+  const pairs = [...at(10, ins), pair(41, sx), pair(42, sy), pair(43, sz), pair(50, rotation / DEG), ...extrusion(n)];
   if (array) pairs.push(pair(70, m.bs()), pair(71, m.bs()), pair(44, m.bd()), pair(45, m.bd()));
   return { type: "INSERT", pairs, ref: c.h.handle(c.handle) };
 }
@@ -1833,14 +1993,251 @@ function splineEntity(c: Ctx): Body {
   return { type: "SPLINE", pairs };
 }
 
+/**
+ * A MULTILEADER, read in the order ACadSharp reads it (DwgObjectReader.readMultiLeader): from R2010
+ * a version, then its context (the leaders first in the data, then the content and the block), then
+ * its own line, arrowhead, content and text settings. The groups kept are the DXF ones that
+ * import/dxf.ts draws from, with the markers: CONTEXT_DATA{ holds LEADER{ holds LEADER_LINE{. Values
+ * read only to keep the streams in step are left out. The block content is the body's `ref`.
+ */
+function multileaderEntity(c: Ctx): Body {
+  const { m, h } = c;
+  const v = c.f.v;
+  if (v >= 1024) m.bs(); // 270, the version
+  const context = leaderContext(c);
+  m.bl(); // 90, property overrides
+  const pathType = m.bs(); // 170, leader line type
+  cmcColor(c); // 91, leader line colour
+  h.handle(c.handle); // 341, leader line type
+  m.bl(); // 171, leader line weight
+  const landing = m.bit(); // 290, enable landing
+  const dogleg = m.bit(); // 291, enable dogleg
+  const landingDistance = m.bd(); // 41, dogleg length
+  const arrowhead = h.handle(c.handle); // 342, arrowhead, 0 for the default
+  const arrow = m.bd(); // 42, arrowhead size
+  const contentType = m.bs(); // 172, content type
+  h.handle(c.handle); // 343, text style
+  m.bs(); // 173, left text attachment
+  m.bs(); // 95, right text attachment
+  m.bs(); // 174, text angle
+  m.bs(); // 175, text alignment
+  cmcColor(c); // 92, text colour
+  m.bit(); // 292, text frame
+  h.handle(c.handle); // 344, block content
+  cmcColor(c); // 93, block colour
+  m.bd3(); // 10, block scale
+  m.bd(); // 43, block rotation
+  m.bs(); // 176, block connection type
+  m.bit(); // 293, annotation scale
+  if (v <= 1021) {
+    // before 2010, its arrowheads, each with a flag for the default one (345)
+    const arrows = m.bl();
+    m.room(arrows);
+    for (let k = 0; k < arrows; k++) {
+      m.bit();
+      h.handle(c.handle);
+    }
+  }
+  // its block attributes: a definition (330), its text (302), index (177) and width (44)
+  const labels = m.bl();
+  m.room(labels);
+  for (let k = 0; k < labels; k++) {
+    h.handle(c.handle);
+    text(c);
+    m.bs();
+    m.bd();
+  }
+  m.bit(); // 294, text direction negative
+  m.bs(); // 178, text align in IPE
+  m.bs(); // 179, text attachment point
+  m.bd(); // 45, scale factor
+  if (v >= 1024) {
+    m.bs(); // 271, text attachment direction
+    m.bs(); // 272, bottom text attachment
+    m.bs(); // 273, top text attachment
+  }
+  if (v >= 1027) m.bit(); // 295, extended to text
+  return {
+    type: "MULTILEADER",
+    pairs: [
+      ...context.pairs,
+      pair(170, pathType),
+      pair(290, landing),
+      pair(291, dogleg),
+      pair(41, landingDistance),
+      pair(42, arrow),
+      pair(172, contentType),
+      pair(342, arrowhead.toString(16).toUpperCase()),
+    ],
+    ref: context.ref,
+  };
+}
+
+/**
+ * A MULTILEADER's CONTEXT_DATA{: its leader roots first (each a LEADER{), then the content. Text (290)
+ * is MText, read in full; otherwise a block (296) whose record is `ref`, placed at group 15 and turned
+ * by 46. The leaders follow the context's own groups, as in the DXF layout.
+ */
+function leaderContext(c: Ctx): { pairs: Pair[]; ref: number } {
+  const { m, h } = c;
+  const v = c.f.v;
+  const roots = m.bl();
+  m.room(roots);
+  const leaders: Pair[][] = [];
+  for (let k = 0; k < roots; k++) leaders.push(leaderRoot(c));
+  const pairs: Pair[] = [pair(300, "CONTEXT_DATA{")];
+  m.bd(); // 40, overall scale
+  m.bd3(); // 10, content base point
+  pairs.push(pair(41, m.bd())); // text height
+  pairs.push(pair(140, m.bd())); // arrowhead size
+  m.bd(); // 145, landing gap
+  m.bs(); // 174, left text attachment
+  m.bs(); // 175, right text attachment
+  m.bs(); // 176, text alignment
+  m.bs(); // 177, block connection
+  const hasText = m.bit() === 1;
+  pairs.push(pair(290, hasText ? 1 : 0));
+  if (hasText) {
+    pairs.push(pair(304, text(c)));
+    m.bd3(); // 11, normal
+    h.handle(c.handle); // 340, text style
+    pairs.push(...at(12, m.bd3())); // location
+    pairs.push(...at(13, m.bd3())); // direction
+    m.bd(); // 42, rotation
+    m.bd(); // 43, boundary width
+    m.bd(); // 44, boundary height
+    m.bd(); // 45, line spacing factor
+    m.bs(); // 170, line spacing style
+    cmcColor(c); // 90, text colour
+    pairs.push(pair(171, m.bs())); // attachment point
+    m.bs(); // 172, flow direction
+    cmcColor(c); // 91, background colour
+    m.bd(); // 141, background scale
+    m.bl(); // 92, background transparency
+    m.bit(); // 291, background fill
+    m.bit(); // 292, background mask fill
+    m.bs(); // 173, column type
+    m.bit(); // 293, text height automatic
+    m.bd(); // 142, column width
+    m.bd(); // 143, column gutter
+    m.bit(); // 294, column flow reversed
+    const sizes = m.bl();
+    m.room(sizes);
+    for (let k = 0; k < sizes; k++) m.bd(); // 144, column sizes
+    m.bit(); // 295, word break
+    m.bit(); // a flag this text branch ends with
+  }
+  // a block is only read when there is no text (296 is the ELSE of the text)
+  const hasBlock = !hasText && m.bit() === 1;
+  pairs.push(pair(296, hasBlock ? 1 : 0));
+  let ref = 0;
+  if (hasBlock) {
+    ref = h.handle(c.handle); // 341, the block record
+    pairs.push(pair(341, ref.toString(16).toUpperCase()));
+    m.bd3(); // 14, normal
+    pairs.push(...at(15, m.bd3())); // location
+    pairs.push(...at(16, m.bd3())); // scale
+    pairs.push(pair(46, m.bd())); // rotation, in radians
+    cmcColor(c); // 93, block colour
+    for (let k = 0; k < 16; k++) m.bd(); // 47, the transformation matrix, which is not used
+  }
+  m.bd3(); // 110, base point
+  m.bd3(); // 111, base direction
+  m.bd3(); // 112, base vertical
+  m.bit(); // 297, normal reversed
+  for (const leader of leaders) pairs.push(...leader);
+  if (v >= 1024) {
+    const top = m.bs(); // 273, top text attachment
+    const bottom = m.bs(); // 272, bottom text attachment
+    pairs.push(pair(272, bottom), pair(273, top));
+  }
+  pairs.push(pair(301, "}"));
+  return { pairs, ref };
+}
+
+/** A LEADER{ of a MULTILEADER's context: its last point, dogleg vector and length, and its lines. */
+function leaderRoot(c: Ctx): Pair[] {
+  const { m } = c;
+  const v = c.f.v;
+  const pairs: Pair[] = [pair(302, "LEADER{")];
+  pairs.push(pair(290, m.bit())); // the last leader line point is set
+  pairs.push(pair(291, m.bit())); // the dogleg vector is set
+  pairs.push(...at(10, m.bd3())); // the last leader line point
+  pairs.push(...at(11, m.bd3())); // the dogleg vector
+  const breaks = m.bl();
+  m.room(breaks * 12);
+  for (let k = 0; k < breaks; k++) {
+    m.bd3(); // break start point
+    m.bd3(); // break end point
+  }
+  m.bl(); // 90, leader index
+  pairs.push(pair(40, m.bd())); // the dogleg's length
+  const lines = m.bl();
+  m.room(lines);
+  for (let k = 0; k < lines; k++) pairs.push(...leaderLine(c));
+  if (v >= 1024) pairs.push(pair(271, m.bs())); // text attachment direction
+  pairs.push(pair(303, "}"));
+  return pairs;
+}
+
+/**
+ * A LEADER_LINE{: its points, then from R2010 its path type (170), arrowhead size (40), arrowhead
+ * handle (341, 0 for the default) and override flags (93). The values only hold when the line sets them
+ * (1, 16 and 32), so import/dxf.ts falls back to the MULTILEADER's own.
+ */
+function leaderLine(c: Ctx): Pair[] {
+  const { m, h } = c;
+  const v = c.f.v;
+  const count = m.bl();
+  m.room(count * 6);
+  const points: { x: number; y: number }[] = [];
+  for (let k = 0; k < count; k++) points.push(m.bd3());
+  const breaks = m.bl();
+  m.room(breaks);
+  for (let k = 0; k < breaks; k++) {
+    m.bl(); // 90, segment index
+    const ends = m.bl();
+    m.room(ends * 12);
+    for (let j = 0; j < ends; j++) {
+      m.bd3(); // break start point
+      m.bd3(); // break end point
+    }
+  }
+  const pairs: Pair[] = [pair(304, "LEADER_LINE{")];
+  for (const p of points) pairs.push(...at(10, p));
+  pairs.push(pair(91, m.bl())); // leader line index
+  if (v >= 1024) {
+    const type = m.bs(); // 170, 0 invisible, 1 straight, 2 spline
+    cmcColor(c); // 92, line colour
+    h.handle(c.handle); // 340, line type
+    m.bl(); // 171, line weight
+    const size = m.bd(); // 40, arrowhead size
+    const arrow = h.handle(c.handle); // 341, arrowhead
+    const overrides = m.bl(); // 93, the properties this line sets itself
+    pairs.push(pair(170, type), pair(40, size), pair(341, arrow.toString(16).toUpperCase()), pair(93, overrides));
+  }
+  pairs.push(pair(305, "}"));
+  return pairs;
+}
+
 // ---- the drawing -------------------------------------------------------------------
+
+/** A DWG file's objects in the form drawingOf reads them. `paper` is only made into entries by `emit`, when a sheet is read. */
+interface DwgParts {
+  readonly model: Entry[];
+  readonly paper: readonly Rec[];
+  readonly emit: (list: readonly Rec[]) => Entry[];
+  readonly blocks: Map<string, Block>;
+  readonly tables: DxfTables;
+  readonly xrefs: readonly XrefDef[];
+}
 
 /**
  * Ties the entities to their layers, owners and blocks, and walks model space; paper space when
  * model space draws nothing. Polylines take their vertices, and inserts their attributes, after
- * them, as in a DXF file.
+ * them, as in a DXF file. The xref blocks are listed with their files, and not drawn here.
  */
-function assemble(db: Db, header: Header, release: string): DwgDrawing {
+function partsOf(db: Db, header: Header): DwgParts {
   const kids = new Map<number, Rec[]>();
   const model: Rec[] = [];
   const paper: Rec[] = [];
@@ -1864,14 +2261,22 @@ function assemble(db: Db, header: Header, release: string): DwgDrawing {
   const key = (handle: number): string => `*DWG${handle.toString(16).toUpperCase()}`;
   const lineTypeName = (handle: number): string | null =>
     handle === BY_BLOCK ? "BYBLOCK" : handle === CONTINUOUS ? "CONTINUOUS" : handle > 0 ? (db.lineTypes.get(handle)?.name ?? null) : null;
+  // an arrowhead block by its hex handle: its key, "_NONE" for no arrowhead, empty for the default (a null handle)
+  const arrowOf = (hex: string): string => {
+    const handle = parseInt(hex, 16);
+    const b = handle > 0 ? db.blocks.get(handle) : undefined;
+    return !b ? "" : b.name.toUpperCase() === "_NONE" ? "_NONE" : key(handle);
+  };
   const entryOf = (r: Rec): Entry => {
-    const pairs = [...r.pairs, pair(8, db.layers.get(r.layer)?.name ?? "0")];
+    // a multileader's arrowheads name their blocks, as its DXF does once read (leaderArrows)
+    const own = r.type === "MULTILEADER" ? leaderArrows(r.pairs, arrowOf) : r.pairs;
+    const pairs = [...own, pair(8, db.layers.get(r.layer)?.name ?? "0")];
     const lt = lineTypeName(r.lineType);
     if (lt !== null) pairs.push(pair(6, lt));
-    if (r.ref) pairs.push(pair(2, key(r.ref)));
-    // an insert of an external reference draws nothing here, and is counted as such
-    const xref = r.type === "INSERT" && db.blocks.get(r.ref)?.xref === true;
-    return { type: xref ? "XREF" : r.type, pairs };
+    // an external reference is named by its own block name, which the walk finds among the xrefs
+    const target = db.blocks.get(r.ref);
+    if (r.ref) pairs.push(pair(2, target?.xref ? target.name : key(r.ref)));
+    return { type: r.type, pairs, data: r.data };
   };
   const emit = (list: readonly Rec[]): Entry[] => {
     const out: Entry[] = [];
@@ -1894,9 +2299,12 @@ function assemble(db: Db, header: Header, release: string): DwgDrawing {
   };
 
   const blocks = new Map<string, Block>();
+  // an xref's objects are in its own file, so it is kept by name for the walk rather than as a block
+  const xrefs: XrefDef[] = [];
   for (const [handle, b] of db.blocks) {
+    if (b.xref) xrefs.push({ name: b.name, path: b.path, overlay: b.overlay, base: b.base });
     if (b.xref || /^\*(MODEL|PAPER)_SPACE/i.test(b.name)) continue;
-    blocks.set(key(handle), { base: b.base, entries: emit(kids.get(handle) ?? []) });
+    blocks.set(key(handle), { base: b.base, baseZ: b.baseZ, entries: emit(kids.get(handle) ?? []) });
   }
 
   const layers = new Map<string, DxfLayer>();
@@ -1904,12 +2312,17 @@ function assemble(db: Db, header: Header, release: string): DwgDrawing {
     layers.set(l.name.toUpperCase(), { color: l.color, lineType: lineTypeName(l.lineType) ?? "", weight: l.weight, shown: l.shown });
   }
   const lineTypes = new Map([...db.lineTypes.values()].map((lt): [string, DxfLineType] => [lt.name.toUpperCase(), lt]));
-  const tables = { layers, lineTypes, ltscale: header.ltscale };
-  let drawing = drawingOf(emit(model), blocks, header.insunits, tables);
+  const tables: DxfTables = { layers, lineTypes, ltscale: header.ltscale };
+  return { model: emit(model), paper, emit, blocks, tables, xrefs };
+}
+
+function assemble(db: Db, header: Header, release: string, sources: ReadonlyMap<string, XrefSource>): DwgDrawing {
+  const parts = partsOf(db, header);
+  let drawing = drawingOf(parts.model, parts.blocks, header.insunits, parts.tables, parts.xrefs, sources);
   let space: "model" | "paper" = "model";
-  const sheet = paper.filter((r) => r.type !== "VIEWPORT" && r.type !== "VERTEX" && r.type !== "ATTRIB").length;
+  const sheet = parts.paper.filter((r) => r.type !== "VIEWPORT" && r.type !== "VERTEX" && r.type !== "ATTRIB").length;
   if (drawing.entities.length === 0 && sheet > 0) {
-    drawing = drawingOf(emit(paper), blocks, header.insunits, tables);
+    drawing = drawingOf(parts.emit(parts.paper), parts.blocks, header.insunits, parts.tables, parts.xrefs, sources);
     space = "paper";
   } else if (sheet > 0) {
     drawing = { ...drawing, skipped: { ...drawing.skipped, "PAPER SPACE": sheet } };
@@ -1918,6 +2331,322 @@ function assemble(db: Db, header: Header, release: string): DwgDrawing {
   // an entity that could not be decoded is counted as skipped too
   for (const [k, n] of Object.entries(db.unreadable)) skipped[k] = (skipped[k] ?? 0) + n;
   return { ...drawing, skipped, release, space, unreadable: db.unreadable };
+}
+
+// ---- ACIS data of solids, regions and bodies ---------------------------------------
+
+/**
+ * The ACIS data of one solid, region or body, read as ACadSharp's readModelerGeometry reads it. Before
+ * R2013 the data is in the entity: a bit that is 0 when the data comes straight after the common data.
+ * Otherwise a wireframe bit comes first; when it is set the wireframe data is skipped and a second
+ * bit says whether the data follows it. From R2013 the data is in the AcDsPrototype_1b section, which
+ * readObjects attaches by handle, so the entity has nothing here.
+ */
+function modelerEntity(c: Ctx, name: string): Body {
+  if (c.f.v >= 1027) return { type: name, pairs: [] };
+  const m = c.m;
+  if (m.bit() === 0) return { type: name, pairs: [], data: acisData(c) };
+  if (m.bit() === 1) {
+    skipWireframe(m);
+    if (m.bit() === 0) return { type: name, pairs: [], data: acisData(c) };
+  }
+  return { type: name, pairs: [] };
+}
+
+/**
+ * The ACIS data after its unknown bit and version: version 1 is blocks of ciphered SAT text, each a
+ * byte count and its bytes, up to a count of 0; version 2 is the object's data from there on, SAT or
+ * SAB text, cut after its end marker (readModelerGeometryData in ACadSharp).
+ */
+function acisData(c: Ctx): Uint8Array | undefined {
+  const m = c.m;
+  m.bit();
+  const version = m.bs();
+  if (version === 1) {
+    const parts: Uint8Array[] = [];
+    for (let size = m.bl(); size > 0; size = m.bl()) {
+      m.room(size * 8);
+      const block = new Uint8Array(size);
+      for (let k = 0; k < size; k++) block[k] = unswap(m.byte());
+      parts.push(block);
+    }
+    return parts.length > 0 ? lfEnds(joined(parts)) : undefined;
+  }
+  if (version === 2) {
+    // the data stream ends where the handles begin, so the rest of it is the ACIS data up to its marker
+    const n = Math.max(0, Math.floor((c.end - m.pos) / 8));
+    const raw = new Uint8Array(n);
+    for (let k = 0; k < n; k++) raw[k] = m.byte();
+    return lfEnds(trimAtAcisEnd(raw));
+  }
+  return undefined;
+}
+
+/**
+ * SAT text as DXF gives it, its lines joined with LF and no line end after the last one: the CR of
+ * each CRLF goes, and so do trailing line ends, so one solid has the same bytes in either file. SAB
+ * is binary and is returned as it is.
+ */
+function lfEnds(b: Uint8Array): Uint8Array {
+  if (isSab(b)) return b;
+  let end = b.length;
+  while (end > 0 && b[end - 1] === 0x0a) end--;
+  let n = 0;
+  for (let i = 0; i < end; i++) if (b[i] !== 0x0d || b[i + 1] !== 0x0a) n++;
+  const out = new Uint8Array(n);
+  let k = 0;
+  for (let i = 0; i < end; i++) if (b[i] !== 0x0d || b[i + 1] !== 0x0a) out[k++] = b[i];
+  return out;
+}
+
+/** Skips the wireframe data of a modeler geometry: a point, the isolines and the silhouettes, with their wires (readWire in ACadSharp). */
+function skipWireframe(m: Bits): void {
+  if (m.bit()) m.bd3();
+  m.bl(); // the number of isolines
+  if (m.bit()) skipWires(m, m.bl());
+  const silhouettes = m.bl();
+  m.room(silhouettes);
+  for (let k = 0; k < silhouettes; k++) {
+    m.bll(); // viewport id
+    m.bd3(); // target
+    m.bd3(); // direction from the target
+    m.bd3(); // up direction
+    m.bit(); // perspective
+    if (m.bit()) skipWires(m, m.bl());
+  }
+}
+
+/** Skips `count` wires: a type, selection marker, colour and ACIS index, their points and an optional transform. */
+function skipWires(m: Bits, count: number): void {
+  m.room(count);
+  for (let k = 0; k < count; k++) {
+    m.byte(); // type
+    m.bl(); // selection marker
+    m.bs(); // colour
+    m.bl(); // ACIS index
+    const points = m.bl();
+    m.room(points);
+    for (let j = 0; j < points; j++) m.bd3();
+    if (m.bit()) {
+      // three axes and a translation, a scale, then whether it rotates, reflects and shears
+      for (let j = 0; j < 4; j++) m.bd3();
+      m.bd();
+      m.bit();
+      m.bit();
+      m.bit();
+    }
+  }
+}
+
+/** The ACIS data's end markers, which AutoCAD spells as plain text in SAT and in tagged chunks in SAB (AcisTextCodec in ACadSharp). */
+const ACIS_END: readonly Uint8Array[] = [
+  Uint8Array.from(ascii("End-of-ACIS-data")),
+  Uint8Array.from(ascii("End-of-ASM-data")),
+  Uint8Array.from([0x0e, 0x03, ...ascii("End"), 0x0e, 0x02, ...ascii("of"), 0x0e, 0x04, ...ascii("ACIS"), 0x0d, 0x04, ...ascii("data")]),
+  Uint8Array.from([0x0e, 0x03, ...ascii("End"), 0x0e, 0x02, ...ascii("of"), 0x0e, 0x03, ...ascii("ASM"), 0x0d, 0x04, ...ascii("data")]),
+];
+
+/** The bytes up to and including the first end marker of the kinds above, in that order; all of them when there is none. */
+function trimAtAcisEnd(b: Uint8Array): Uint8Array {
+  for (const marker of ACIS_END) {
+    const at = indexOfBytes(b, marker);
+    if (at >= 0) return b.slice(0, at + marker.length);
+  }
+  return b;
+}
+
+/** Where `needle` first occurs in `b`, or -1. */
+function indexOfBytes(b: Uint8Array, needle: Uint8Array): number {
+  for (let i = 0; i + needle.length <= b.length; i++) {
+    let k = 0;
+    while (k < needle.length && b[i + k] === needle[k]) k++;
+    if (k === needle.length) return i;
+  }
+  return -1;
+}
+
+/** SAT text's character swap, which is its own inverse: each byte above a space and below 0x9F becomes 0x9F minus itself. */
+function unswap(c: number): number {
+  return c > 0x20 && c < 0x9f ? 0x9f - c : c;
+}
+
+/** The bytes of ASCII text. */
+function ascii(s: string): number[] {
+  return [...s].map((ch) => ch.charCodeAt(0));
+}
+
+/** The first bytes of a SAB file: ACIS's, or ASM's (Autodesk Shape Manager, which writes the same format). */
+const SAB_MAGIC: readonly (readonly number[])[] = [ascii("ACIS BinaryFile"), ascii("ASM BinaryFile")];
+
+/** Whether the bytes are a SAB file, which starts with one of SAB_MAGIC. */
+function isSab(b: Uint8Array): boolean {
+  return SAB_MAGIC.some((m) => b.length >= m.length && m.every((v, i) => b[i] === v));
+}
+
+/** An unsigned 16-bit number at byte `p`, little-endian. */
+function u16(b: Uint8Array, p: number): number {
+  return b[p] | (b[p + 1] << 8);
+}
+
+/** The parts' bytes, one after another. */
+function joined(parts: readonly Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+/** Each R2013 segment starts with this 48-byte header (readSubItemHeader in ACadSharp). */
+const SEGMENT_HEADER = 48;
+/** The DataSize that marks a record kept in blob pages (see DwgPrototype1bReader in ACadSharp). */
+const BLOB_SIZE = 0xbb106bb1;
+/** The size in bytes of a property value by its type number; 0 for the types with no fixed size. */
+const TYPE_SIZES: readonly number[] = [0, 0, 2, 1, 2, 4, 8, 1, 2, 4, 8, 4, 8, 0, 0, 0];
+/** The schema property flag that says a property has no type. */
+const NO_TYPE = 2;
+
+/** The ACIS data of an R2013 file's AcDsPrototype_1b section, by handle, or none when it cannot be read. */
+function acisOfSection(b: Uint8Array | undefined): Map<number, Uint8Array> {
+  if (!b) return new Map();
+  try {
+    return acisOfPrototype(b);
+  } catch {
+    // the solids then come without their data, and the check reports them
+    return new Map();
+  }
+}
+
+/**
+ * The ACIS data of each solid, region and body in an R2013 file, by handle (DwgPrototype1bReader in
+ * ACadSharp). The section's file header names its segment index, its schema index and its data index.
+ * The schema index says which schemas are in which segment, and each schema's properties are named
+ * in a table after the schemas. The data index points at each record in a data segment, with the
+ * schema it follows; a record whose schema has an ASM_Data property holds that solid's ACIS data.
+ */
+function acisOfPrototype(b: Uint8Array): Map<number, Uint8Array> {
+  const out = new Map<number, Uint8Array>();
+  const segmentsAt = u32(b, 24);
+  const segmentCount = u32(b, 32);
+  const segments: number[] = [];
+  for (let i = 0; i < segmentCount; i++) segments.push(u64(b, segmentsAt + SEGMENT_HEADER + 12 * i));
+  const segment = (i: number): number => {
+    if (!(i < segments.length)) throw new Error("the ACIS section names a segment it does not have");
+    return segments[i];
+  };
+
+  // the schema index: the schemas by their segment, and the property entries by theirs
+  let p = segment(u32(b, 36)) + SEGMENT_HEADER;
+  const schemaCount = u32(b, p);
+  p += 8;
+  const schemaPointers: { index: number; segment: number }[] = [];
+  for (let i = 0; i < schemaCount; i++, p += 12) schemaPointers.push({ index: u32(b, p), segment: u32(b, p + 4) });
+  p += 8;
+  const propertyCount = u32(b, p);
+  p += 8;
+  const propertySegments: number[] = [];
+  for (let i = 0; i < propertyCount; i++, p += 12) propertySegments.push(u32(b, p));
+
+  // the schemas of each segment, and the names of the properties they have, by schema index
+  const properties = new Map<number, string[]>();
+  for (const seg of new Set(schemaPointers.map((s) => s.segment))) {
+    const start = segment(seg);
+    const own = u32(b, start + 8);
+    p = start + SEGMENT_HEADER;
+    p += 8 * propertySegments.filter((s) => s === own).length;
+    const found: { schema: number; names: number[] }[] = [];
+    for (const s of schemaPointers.filter((x) => x.segment === own)) {
+      p += 2 + 8 * u16(b, p); // the schema's index entries
+      const propCount = u16(b, p);
+      p += 2;
+      const names: number[] = [];
+      for (let k = 0; k < propCount; k++) {
+        const flags = u32(b, p);
+        names.push(u32(b, p + 4));
+        p += 8;
+        let typeSize = 0;
+        if ((flags & NO_TYPE) === 0) {
+          const type = u32(b, p);
+          p += 4;
+          if (type === 0xe) {
+            typeSize = u32(b, p);
+            p += 4;
+          } else typeSize = TYPE_SIZES[type] ?? 0;
+        }
+        if (flags === 1 || flags === 8) p += 4; // an unknown field
+        p += 2 + u16(b, p) * typeSize; // the property's values
+      }
+      found.push({ schema: s.index, names });
+    }
+    // the property names follow, at the next 16-byte boundary
+    p += (16 - (p % 16)) % 16;
+    const nameCount = u32(b, p);
+    p += 4;
+    const table: string[] = [];
+    for (let k = 0; k < nameCount; k++) {
+      const end = b.indexOf(0, p);
+      if (end < 0) throw new Error("a property name is not ended");
+      table.push(latin1(b.subarray(p, end)));
+      p = end + 1;
+    }
+    for (const f of found) properties.set(f.schema, f.names.map((n) => table[n] ?? ""));
+  }
+
+  // the data index: each record's segment, its offset within that segment's data, and its schema
+  const dataStart = segment(u32(b, 40));
+  p = dataStart + SEGMENT_HEADER + 8;
+  const entryCount = u32(b, dataStart + SEGMENT_HEADER);
+  const bySegment = new Map<number, { offset: number; schema: number }[]>();
+  for (let k = 0; k < entryCount; k++, p += 12) {
+    const seg = u32(b, p);
+    if (seg === 0) continue; // a stub entry
+    const list = bySegment.get(seg) ?? [];
+    list.push({ offset: u32(b, p + 4), schema: u32(b, p + 8) });
+    bySegment.set(seg, list);
+  }
+
+  for (const [seg, entries] of bySegment) {
+    const start = segment(seg);
+    const dataRef = start + (u32(b, start + 36) << 4);
+    for (const e of entries) {
+      if (!(properties.get(e.schema) ?? []).includes("ASM_Data")) continue;
+      // the record's header: its size, an unknown field, its handle and its offset from dataRef
+      const h = start + SEGMENT_HEADER + e.offset;
+      const handle = u64(b, h + 8);
+      const at = dataRef + u32(b, h + 16);
+      const size = u32(b, at);
+      out.set(handle, size === BLOB_SIZE ? blobOf(b, at + 4, segment) : b.slice(at + 4, at + 4 + size));
+    }
+  }
+  return out;
+}
+
+/** A record kept in blob pages: a header, then the segment and size of each page, which joined make the data. */
+function blobOf(b: Uint8Array, at: number, segment: (i: number) => number): Uint8Array {
+  const pages = u32(b, at + 8);
+  const parts: Uint8Array[] = [];
+  for (let k = 0; k < pages; k++) {
+    const start = segment(u32(b, at + 32 + 8 * k));
+    // a blob segment: its header, then the total size, the page's start and index and count, and its data
+    const size = u64(b, start + SEGMENT_HEADER + 24);
+    const from = start + SEGMENT_HEADER + 32;
+    parts.push(b.slice(from, from + size));
+  }
+  return joined(parts);
+}
+
+/**
+ * The solids, regions and bodies of a DWG file, each with its handle and, when the file holds it, its
+ * ACIS data. Every one counts, in any space or block. dwg.check.ts matches them with the DXF twin.
+ */
+export function dwgAcisObjects(bytes: Uint8Array): AcisObject[] {
+  const f = fileOf(bytes, String.fromCharCode(...bytes.subarray(0, 6)));
+  const sections = sectionsOf(f);
+  const classes = sections.classes ? classesOf(f, sections.classes) : new Map<number, DwgClass>();
+  const db = readObjects(f, sections.objects, objectMap(sections.handles), classes, sections.acis);
+  return db.recs.filter((r) => ACIS_TYPES.has(r.type)).map((r) => ({ type: r.type, handle: r.handle.toString(16).toUpperCase(), data: r.data }));
 }
 
 // ---- bytes -------------------------------------------------------------------------

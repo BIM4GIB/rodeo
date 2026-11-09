@@ -1,4 +1,4 @@
-// The spring AEC > Machine Design > Spring Calculator hands to the Compression Spring 2 tools (tools/machine.ts),
+// The spring Tools > Machine Design > Spring Calculator hands to the Compression Spring 2 tools (tools/machine.ts),
 // kept apart so the calculator needn't import the tools. A tool takes it the next time it works out its coils.
 
 import type { SpringEnds } from "./springShapes.ts";

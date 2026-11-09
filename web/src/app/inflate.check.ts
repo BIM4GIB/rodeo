@@ -115,7 +115,7 @@ if (!scenario) {
     const { documentBlob, writeToFile } = await import("./writeOut.ts");
     mode = "crash";
     if (scenario === "blob-save") {
-      await assert.rejects(documentBlob(session), /worker/i);
+      await assert.rejects(documentBlob(session), /stopped partway/i);
       const retry = openVwx(new Uint8Array(await (await documentBlob(session)).arrayBuffer()));
       assert.equal(retry.doc.objects(retry.doc.layers()[0].id).length, 20);
     } else {
@@ -136,7 +136,7 @@ if (!scenario) {
           };
         },
       } as unknown as FileSystemFileHandle;
-      await assert.rejects(writeToFile(session, handle, { follow: false }), /worker/i);
+      await assert.rejects(writeToFile(session, handle, { follow: false }), /stopped partway/i);
       assert.equal(closed, 0, "failed save must not replace the file");
       assert.equal(aborted, 1);
       same(persisted, original);

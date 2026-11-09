@@ -1,5 +1,5 @@
 // Edit > Preferences… (⌘,), laid out as Vectorworks 2026 lays out its application preferences, a list
-// of panes beside the one shown: General (the theme, a black background), Edit (whether Duplicate
+// of panes beside the one shown: General (the theme, the language, a black background), Edit (whether Duplicate
 // offsets its copies, what the mouse wheel does), Display (zoomed line thickness, whether the
 // objects outside a group being edited show), Session (tool
 // help in the Mode bar), 3D (the conversion resolution, and whether the 3D view keeps its render
@@ -24,6 +24,7 @@ import {
 } from "./prefs.ts";
 import { setSnapSettings, setZoomLineThickness, store } from "./state.ts";
 import { darkCanvas, setDarkCanvas, setTheme, theme, type Theme } from "./theme.ts";
+import { language, LANGUAGES, setLanguage } from "./i18n.ts";
 
 type Pane = "general" | "edit" | "display" | "session" | "3d" | "autosave" | "interactive" | "appearance";
 
@@ -93,6 +94,14 @@ export async function preferencesDialog(): Promise<void> {
 
   // General
   const themePick = select("Interface", THEMES, theme());
+  for (const option of themePick.options) option.setAttribute("data-i18n", `Theme › ${option.text}`);
+  const languagePick = select(
+    "Language",
+    LANGUAGES.map((l) => [l.code, l.name] as const),
+    language().code,
+  );
+  // each language's name is in itself
+  languagePick.setAttribute("translate", "no");
   const [black, blackRow] = check(darkCanvas(), "Black background");
   // Edit
   const [offset, offsetRow] = check(p.offsetDuplicates, "Offset duplicates");
@@ -160,8 +169,9 @@ export async function preferencesDialog(): Promise<void> {
       "div",
       { cls: "prefs-pane" },
       field("Interface", themePick),
+      field("Language", languagePick),
       blackRow,
-      note("The drawing on black, its colours keeping their hue (View > Dark Canvas)."),
+      note("The drawing on black, its colours keeping their hue (View > Appearance > Dark Canvas)."),
     ),
     edit: h(
       "div",
@@ -249,7 +259,7 @@ export async function preferencesDialog(): Promise<void> {
   };
   show(lastPane);
 
-  const next = await showDialog<{ prefs: Prefs; theme: Theme; black: boolean; zoomLines: boolean; snapRadius: number }>({
+  const next = await showDialog<{ prefs: Prefs; theme: Theme; language: string; black: boolean; zoomLines: boolean; snapRadius: number }>({
     title: "Preferences",
     okLabel: "OK",
     cls: "prefs-dialog",
@@ -297,6 +307,7 @@ export async function preferencesDialog(): Promise<void> {
             cursorColor: cursorAuto.checked ? "" : cursorColour.value,
           },
           theme: themePick.value as Theme,
+          language: languagePick.value,
           black: black.checked,
           zoomLines: zoomLines.checked,
           snapRadius: Number(snapSize.value) / 2,
@@ -307,6 +318,7 @@ export async function preferencesDialog(): Promise<void> {
   if (!next) return;
   setPrefs(next.prefs);
   if (next.theme !== theme()) setTheme(next.theme);
+  if (next.language !== language().code) void setLanguage(next.language);
   if (next.black !== darkCanvas()) setDarkCanvas(next.black);
   setZoomLineThickness(next.zoomLines);
   if (next.snapRadius !== store.snapSettings.radiusPx) setSnapSettings({ ...store.snapSettings, radiusPx: next.snapRadius });

@@ -1,4 +1,4 @@
-// AEC > Machine Design > Spring Calculator's sums (the dialog is in calculators.ts): a round-wire helical
+// Tools > Machine Design > Spring Calculator's sums (the dialog is in calculators.ts): a round-wire helical
 // compression spring's diameters, coils and solid height from the three a method gives, its spring rate
 // G·d⁴ / (8·D³·n) and its unit stress 8·D / (π·d³), the shear stress one unit of load makes, uncorrected as
 // Vectorworks gives it; the spring index and Wahl factor besides. The ends count the coils as the Compression

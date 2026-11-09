@@ -157,6 +157,54 @@ if (answers) openvwx.ui.toast(answers.tint + " x" + answers.count);
 `openvwx.menu.add(label, handler)` adds an item to the Plug-ins menu. The handler is
 a function in your code; it runs when the item is chosen. The label is shown as it is written.
 
+## Render engines (`openvwx.render.engine`)
+
+`openvwx.render.engine(spec, handler)` adds an engine to **File > Export > Render Image…**,
+listed after Rodeo's own while the plug-in is turned on. It is how a plug-in hands Rodeo's
+pictures, or the model itself, to another renderer (Blender, a studio's render farm, a
+service) and brings back what it made. The viewer then shows the picture beside the one it
+started from.
+
+```js
+openvwx.render.engine({
+  name: "Sepia",
+  description: "Tints the picture brown.",
+  takes: "picture",          // or "scene"
+  maxSide: 2048,             // a larger picture is drawn at this size first (optional)
+  options: [
+    { key: "amount", label: "Amount", kind: "number", initial: 60, min: 0, max: 100 },
+    { key: "mode", label: "Mode", kind: "choice", choices: [["warm", "Warm"], ["cold", "Cold"]], initial: "warm" },
+  ],
+}, async (job) => {
+  // job.picture: the Realistic or path-traced picture (PNG bytes), job.options: the fields' values
+  const res = await openvwx.fetch("https://example.com/tint", { method: "POST", body: job.picture });
+  return { bytes: res.bytes, type: "image/png", note: "Sepia " + job.options.amount };
+});
+```
+
+- `takes: "picture"` (the default): Render Image asks which built-in engine draws the picture first
+  (**Start from**), then gives it to the handler as `job.picture` (bytes) and `job.pictureType`.
+- `takes: "scene"`: the handler gets `job.scene`, the visible design layers as binary glTF (y up,
+  metres, as **Export Model** writes it), with no picture drawn first.
+- Every job also has `width`, `height` (pixels), `name` (the camera's, or "Current view"),
+  `camera` (`eye` and `target` in millimetres, z up; `perspective`; `fov`, the vertical field
+  of view in degrees; `halfHeight`, half the picture's height in millimetres when orthogonal),
+  `sun` (a unit vector toward the sun, z up, or null when it is off) and `options`.
+- `options` are fields shown under the Engine: `kind` is `"choice"` (with `choices`, pairs of
+  value and label), `"text"` (`placeholder`, `max`), `"number"` (`min`, `max`) or `"check"`;
+  `initial` is the first value and `hint` a tooltip. Render Image keeps the values for next time.
+- The handler returns `{ bytes, type, note }` or a list of them (variations): `bytes` a
+  `Uint8Array` or `ArrayBuffer`, `type` `"image/png"` (the default), `"image/jpeg"` or
+  `"image/webp"`, `note` a few words the viewer shows with it.
+- An error the handler throws is shown in Render Image as the plug-in's. Cancel stops Render
+  Image waiting; the handler's own work runs on to its end.
+- A run from the editor adds no engine (its worker stops when it ends): turn the plug-in on.
+
+Renderers on this computer are reached through `openvwx.fetch` to `http://127.0.0.1:<port>`,
+which the renderer's side must answer with CORS headers for Rodeo's address (and
+`Access-Control-Allow-Private-Network: true`). `integrations/blender` in Rodeo's repository has
+such a bridge for Blender, and the plug-in that renders through it.
+
 ## Web requests (`openvwx.fetch`)
 
 `openvwx.fetch(url, init)` sends an http or https request from the page on the

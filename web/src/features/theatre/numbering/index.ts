@@ -1,5 +1,5 @@
-// Joins the Stage menu's Lighting and ConnectCAD sections with Spotlight Numbering (numbering.ts) and its
-// tool for numbering objects by clicking them in turn (numberTool.ts).
+// Joins the Stage menu's Lighting section with Spotlight Numbering (numbering.ts) and its tool for
+// numbering objects by clicking them in turn (numberTool.ts).
 
 import { store } from "../../../app/state.ts";
 import { errorMessage, toast } from "../../../app/toast.ts";
@@ -11,5 +11,4 @@ import "./numbering.css";
 const row = { label: "Spotlight Numbering…", enabled: (): boolean => store.session !== null, run: (): void => void spotlightNumbering().catch((err: unknown) => toast(errorMessage(err))) };
 
 addStageRows("Lighting", () => [row]);
-addStageRows("ConnectCAD", () => [row]);
 addStageTools((env) => [new SpotNumberTool(env)]);

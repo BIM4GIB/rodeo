@@ -61,7 +61,7 @@ function stop(pool: readonly Worker[]): void {
 
 class WorkerFailed extends Error {
   constructor() {
-    super("A drawing worker stopped. Try opening or saving again.");
+    super("Opening or saving stopped partway. Try again.");
   }
 }
 

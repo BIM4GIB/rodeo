@@ -28,7 +28,8 @@ import {
   type FeedbackSent,
   type ReportValue,
 } from "../../web/src/platform/protocol.ts";
-import { allowed, clientIp, currentUser, isAdmin, normalizeEmail, requireUser } from "./auth.ts";
+import { logAdmin } from "./adminLog.ts";
+import { allowed, clientIp, currentUser, isAdmin, normalizeEmail, requireUser, type UserRow } from "./auth.ts";
 import { blobPath, blobSize, commitBlob, headBytes, receiveBody } from "./blobs.ts";
 import { config } from "./config.ts";
 import { all, get, run } from "./db.ts";
@@ -177,12 +178,20 @@ function notifyAdmins(
   }
 }
 
-/** An admin signed in, or a script with REPORTS_TOKEN. */
-function requireReader(c: Context): void {
+/**
+ * An admin signed in, or a script with REPORTS_TOKEN. Gives the admin's row when there is one, for
+ * the admin log; null for a script with no admin signed in.
+ */
+function requireReader(c: Context): UserRow | null {
   const auth = c.req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (token && config.reportsToken && safeEqual(token, config.reportsToken)) return;
-  if (!isAdmin(requireUser(c))) fail(403, "Only admins can read feedback", "forbidden");
+  if (token && config.reportsToken && safeEqual(token, config.reportsToken)) {
+    const user = currentUser(c);
+    return user && isAdmin(user) ? user : null;
+  }
+  const user = requireUser(c);
+  if (!isAdmin(user)) fail(403, "Only admins can read feedback", "forbidden");
+  return user;
 }
 
 /** The report's attachments still to come, for the sender holding its token. */
@@ -397,21 +406,26 @@ export function registerFeedback(app: Hono): void {
   });
 
   app.patch("/api/admin/feedback/:id", async (c) => {
-    requireReader(c);
+    const admin = requireReader(c);
     const body = await readJson(c);
     if (body.status !== "new" && body.status !== "done") fail(400, "status must be new or done");
     const id = c.req.param("id");
     run("UPDATE feedback SET status = ? WHERE id = ?", body.status, id);
     const row = get<FeedbackRow>(`${SELECT} WHERE f.id = ?`, id);
     if (!row) fail(404, "Report not found", "not_found");
+    if (admin) logAdmin(admin, "feedback.status", cleanLine(row.message, 60), row.status);
     return c.json({ feedback: feedbackOut(row) });
   });
 
   app.delete("/api/admin/feedback/:id", async (c) => {
-    requireReader(c);
+    const admin = requireReader(c);
     const id = c.req.param("id");
-    const row = get<{ screenshot_blob: string | null; file_blob: string | null }>("SELECT screenshot_blob, file_blob FROM feedback WHERE id = ?", id);
+    const row = get<{ message: string; screenshot_blob: string | null; file_blob: string | null }>(
+      "SELECT message, screenshot_blob, file_blob FROM feedback WHERE id = ?",
+      id,
+    );
     if (!row || run("DELETE FROM feedback WHERE id = ?", id) === 0) fail(404, "Report not found", "not_found");
+    if (admin) logAdmin(admin, "feedback.delete", cleanLine(row.message, 60));
     await dropPending(id);
     await removeBlobs(row.screenshot_blob, row.file_blob);
     return c.json({ ok: true });

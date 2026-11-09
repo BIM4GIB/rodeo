@@ -4,17 +4,25 @@
 // a circle and a turned, scaled insert of it, an invisible line and a paper space line) and read
 // back. Files of releases before R13 and files that are not DWG fail with a message saying what to
 // do. The parts of the DXF walker that DWG files lean on are checked through parseDxf: invisible
-// entities, arc dimensions, tables, and splines kept only as fit points against the control points
-// AutoCAD worked out for them. With DWG_SAMPLES set to a folder of public DWG files (LibreDWG's
-// test-data and ACadSharp's samples, which are never committed), every file is read, and each one
-// with a .dxf of the same name beside it must give the same objects by type, extents, text, colour,
-// line weight, line type and units, and the same hidden layers.
+// entities, arc dimensions, tables, multileaders, external references, and splines kept only as fit points against the control points
+// AutoCAD worked out for them; and the 3D faces, polyface and polygon meshes, MESH objects and inserts
+// turned in 3D. With DWG_SAMPLES set to a folder of public DWG files (LibreDWG's test-data and
+// ACadSharp's samples, which are never committed), every file is read, and each one with a .dxf of
+// the same name beside it must give the same objects by type, extents, text, colour, line weight,
+// line type and units, the same hidden layers, and the same meshes by type. A _ascii.dxf beside it
+// must give the same meshes and units; its 2D differences (known gaps, the same on the commit before
+// the 3D work) are printed as notes.
+// Solids, regions and bodies carry their ACIS data (SAT text or SAB binary) on Entry.data. Small
+// built files check each way it is held: R2000 SAT in version 1 blocks and in version 2, SAB after
+// wireframe data, ACIS-empty solids, and DXF group 1 and 3 lines and ACDSDATA. With the samples,
+// each payload's header and end are checked, and each DWG solid is matched with its DXF twin by
+// handle and type, and by length where both are SAB.
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Pt } from "../core/types.ts";
-import { aciColor, paperDashes, parseDxf, type DxfDrawing, type DxfShape } from "./dxf.ts";
-import { isDwg, parseDwg, type DwgDrawing } from "./dwg.ts";
+import { aciColor, dxfAcisObjects, dxfSource, paperDashes, parseDxf, type AcisObject, type DxfDrawing, type DxfShape } from "./dxf.ts";
+import { dwgAcisObjects, dwgSource, isDwg, parseDwg, type DwgDrawing } from "./dwg.ts";
 
 let failures = 0;
 function check(ok: boolean, what: string): void {
@@ -232,6 +240,18 @@ const block = (v: number, handle: number, name: string, base: Pt): Obj =>
     for (let k = 0; k < (v >= 1015 ? 5 : 4); k++) d.bit(0); // anonymous, attributes, xref, overlaid, loaded
     if (v >= 1018) d.bl(0);
     d.bd3(base.x, base.y);
+  });
+
+/** An xref block: flagged as one, with no owned objects, its base point and then its file's path. */
+const xrefBlock = (v: number, handle: number, name: string, base: Pt, path: string): Obj =>
+  tableObject(v, handle, BLOCK_HEADER, name, (d) => {
+    d.bit(0); // anonymous
+    d.bit(0); // has attributes
+    d.bit(1); // xref
+    d.bit(0); // not an overlay
+    d.bit(0); // loaded
+    d.bd3(base.x, base.y);
+    d.tv(path);
   });
 
 interface Place {
@@ -526,6 +546,52 @@ const lineOf = (s: DxfShape | undefined): [Pt, Pt] | null => (s?.kind === "line"
   const l = lineOf(d.entities[0]?.shape);
   check(d.entities.length === 1 && l !== null && nearPt(l[0], { x: 100, y: 100 }) && nearPt(l[1], { x: 100, y: 110 }), "a table draws its block, turned to its horizontal direction");
 }
+{
+  // Two leader lines into one connection point, its dogleg, an MText, and a second MULTILEADER whose
+  // content is the block *ML1. The arrowheads take the context's size (140, 0.6), not the MULTILEADER's (42, 0.9).
+  const tables = [0, "SECTION", 2, "TABLES", 0, "TABLE", 2, "BLOCK_RECORD", 0, "BLOCK_RECORD", 5, "2A", 2, "*ML1", 0, "ENDTAB", 0, "ENDSEC"];
+  const leaders = [
+    0, "MULTILEADER", 8, "Notes", 100, "AcDbMLeader", 170, 1, 291, 1, 42, 0.9,
+    300, "CONTEXT_DATA{", 290, 1, 304, "Hello", 12, 2.5, 22, 0.5, 13, 1, 23, 0, 41, 1, 171, 1, 140, 0.6,
+    302, "LEADER{", 290, 1, 10, 0, 20, 0, 11, 1, 21, 0, 40, 2,
+    304, "LEADER_LINE{", 10, -6, 20, 0, 10, 0, 20, 0, 305, "}",
+    304, "LEADER_LINE{", 10, 0, 20, -6, 10, 0, 20, 0, 305, "}",
+    303, "}",
+    301, "}",
+    0, "MULTILEADER", 8, "Notes", 100, "AcDbMLeader", 170, 1, 291, 1,
+    300, "CONTEXT_DATA{", 296, 1, 341, "2A", 15, 5, 25, 5, 16, 2, 26, 2, 46, Math.PI / 2, 301, "}",
+  ];
+  const d = parseDxf(
+    dxf(...tables, ...blocks(0, "BLOCK", 8, 0, 2, "*ML1", 70, 0, 10, 0, 20, 0, 0, "LINE", 8, 0, 10, 0, 20, 0, 11, 10, 21, 0, 0, "ENDBLK"), ...entities(...leaders), 0, "EOF"),
+  );
+  const ml = d.entities.filter((e) => e.type === "MULTILEADER");
+  const polys = ml.flatMap((e) => (e.shape.kind === "polyline" ? [e.shape.points] : []));
+  const fills = ml.flatMap((e) => (e.shape.kind === "fill" ? [e.shape.rings[0]] : []));
+  const ringIs = (ps: readonly Pt[] | undefined, want: Pt[]): boolean =>
+    ps !== undefined && ps.length === want.length && ps.every((p, i) => nearPt(p, want[i], 1e-9));
+  check(
+    polys.some((p) => ringIs(p, [{ x: -6, y: 0 }, { x: 0, y: 0 }])) && polys.some((p) => ringIs(p, [{ x: 0, y: -6 }, { x: 0, y: 0 }])),
+    "its two leader lines run from their vertices to the connection point",
+  );
+  check(
+    fills.some((r) => ringIs(r, [{ x: -6, y: 0 }, { x: -5.4, y: 0.1 }, { x: -5.4, y: -0.1 }])) &&
+      fills.some((r) => ringIs(r, [{ x: 0, y: -6 }, { x: -0.1, y: -5.4 }, { x: 0.1, y: -5.4 }])),
+    "each arrowhead is a filled triangle at its line's start, 0.6 long and a third as wide",
+  );
+  check(polys.some((p) => ringIs(p, [{ x: 0, y: 0 }, { x: 2, y: 0 }])), "its dogleg runs from the connection point along its vector, for its length");
+  check(ml.length === 5, "the leaders draw two lines, two arrowheads and the dogleg, and nothing more");
+  const tx = d.entities.find((e) => e.shape.kind === "text");
+  check(
+    tx?.type === "MTEXT" && tx.shape.kind === "text" && tx.shape.text === "Hello" && nearPt(tx.shape.at, { x: 2.5, y: 0.5 }) && near(tx.shape.height, 1) && near(tx.shape.rotation, 0),
+    "its MText is at its point, at its height, and turned by its direction",
+  );
+  const blockLine = lineOf(d.entities.find((e) => e.type === "LINE")?.shape);
+  check(
+    blockLine !== null && nearPt(blockLine[0], { x: 5, y: 5 }, 1e-6) && nearPt(blockLine[1], { x: 5, y: 25 }, 1e-6),
+    "its block content is placed at its point, scaled by 2 and turned a quarter: a line from 5,5 to 5,25",
+  );
+  check(!("MULTILEADER" in d.skipped), "no MULTILEADER is left out");
+}
 
 // ---- colours, weights and line types -----------------------------------------------------------
 
@@ -632,12 +698,364 @@ const polyLoop = (pts: [number, number][]): (string | number)[] => [92, 2, 72, 0
   );
 }
 
+// ---- external references (xrefs) ---------------------------------------------------------------
+
+/** The xref's file: in metres, a wall on WALLS, a CHAIR insert on WALLS (its line on layer 0), and a line on OFF, which is off. */
+const siteText = dxf(
+  0, "SECTION", 2, "HEADER", 9, "$INSUNITS", 70, 6, 0, "ENDSEC",
+  0, "SECTION", 2, "TABLES",
+  0, "TABLE", 2, "LAYER",
+  0, "LAYER", 2, "WALLS", 70, 0, 62, 1, 6, "CONTINUOUS",
+  0, "LAYER", 2, "OFF", 70, 0, 62, -3, 6, "CONTINUOUS",
+  0, "ENDTAB",
+  0, "ENDSEC",
+  ...blocks(0, "BLOCK", 8, 0, 2, "CHAIR", 70, 0, 10, 0, 20, 0, 0, "LINE", 8, 0, 10, 0, 20, 0, 11, 0, 21, 1, 0, "ENDBLK"),
+  ...entities(
+    0, "LINE", 8, "WALLS", 10, 0, 20, 0, 11, 1, 21, 0,
+    0, "INSERT", 8, "WALLS", 2, "CHAIR", 10, 3, 20, 0,
+    0, "LINE", 8, "OFF", 10, 0, 20, 5, 11, 1, 21, 5,
+  ),
+  0, "EOF",
+);
+/** The host: in millimetres, with SITE PLAN inserted twice: plain at 1000,2000, and turned a quarter and scaled 2 at 5000,0. */
+const siteHost = dxf(
+  0, "SECTION", 2, "HEADER", 9, "$INSUNITS", 70, 4, 0, "ENDSEC",
+  ...blocks(0, "BLOCK", 8, 0, 2, "SITE PLAN", 70, 4, 10, 0, 20, 0, 1, "C:\\proj\\Site Plan.dxf", 0, "ENDBLK"),
+  ...entities(
+    0, "INSERT", 8, 0, 2, "SITE PLAN", 10, 1000, 20, 2000,
+    0, "INSERT", 8, 0, 2, "SITE PLAN", 10, 5000, 20, 0, 41, 2, 42, 2, 50, 90,
+  ),
+  0, "EOF",
+);
+/** Whether a shape is the line between two points, either way round. */
+const lineBetween = (s: DxfShape, p: Pt, q: Pt): boolean =>
+  s.kind === "line" && ((nearPt(s.a, p) && nearPt(s.b, q)) || (nearPt(s.a, q) && nearPt(s.b, p)));
+{
+  const d = parseDxf(siteHost, new Map([["SITE PLAN", dxfSource(siteText)]]));
+  const xr = d.xrefs[0];
+  check(d.xrefs.length === 1 && xr?.name === "SITE PLAN" && xr.path === "C:\\proj\\Site Plan.dxf" && !xr.overlay && xr.found, "a DXF xref names its file, and is found when the file is given");
+  const on = (layer: string) => d.entities.filter((e) => e.layer === layer).map((e) => e.shape);
+  const walls = on("SITE PLAN|WALLS");
+  check(
+    walls.length === 4 && walls.some((s) => lineBetween(s, { x: 1000, y: 2000 }, { x: 2000, y: 2000 })) && walls.some((s) => lineBetween(s, { x: 4000, y: 2000 }, { x: 4000, y: 3000 })),
+    "the xref's wall and its CHAIR (layer 0 inheriting WALLS) are placed at the insert, in millimetres, on SITE PLAN|WALLS",
+  );
+  check(
+    walls.some((s) => lineBetween(s, { x: 5000, y: 0 }, { x: 5000, y: 2000 })) && walls.some((s) => lineBetween(s, { x: 5000, y: 6000 }, { x: 3000, y: 6000 })),
+    "the turned insert is turned a quarter and scaled 2 (times the metres to millimetres), its chair too",
+  );
+  check(on("SITE PLAN|OFF").length === 2 && d.hiddenLayers.has("SITE PLAN|OFF") && !d.hiddenLayers.has("SITE PLAN|WALLS"), "a layer that is off in the xref stays hidden, under its xref name");
+  check(d.entities.length === 6 && Object.keys(d.skipped).length === 0 && walls[0]?.kind === "line", "every object of both inserts is drawn, none counted as skipped");
+  const colour = d.entities.find((e) => e.layer === "SITE PLAN|WALLS")?.style.color;
+  check(colour === 0xff0000, "the xref's layer colour (red) is the one its objects draw in");
+}
+{
+  const d = parseDxf(siteHost);
+  check(d.xrefs.length === 1 && d.xrefs[0].found === false && d.entities.length === 0 && d.skipped.XREF === 2, "an xref not given is listed as not found, and each insert of it is counted as XREF");
+}
+{
+  // the xref inserts itself and an overlay of its own; neither is drawn inside it. The overlay drawn at the top is.
+  const selfText = dxf(
+    0, "SECTION", 2, "HEADER", 9, "$INSUNITS", 70, 4, 0, "ENDSEC",
+    ...blocks(
+      0, "BLOCK", 8, 0, 2, "SITE PLAN", 70, 4, 10, 0, 20, 0, 1, "C:\\proj\\Site Plan.dxf", 0, "ENDBLK",
+      0, "BLOCK", 8, 0, 2, "PAL", 70, 8, 10, 0, 20, 0, 1, "PAL.dxf", 0, "ENDBLK",
+    ),
+    ...entities(0, "LINE", 8, "WALLS", 10, 0, 20, 0, 11, 1, 21, 0, 0, "INSERT", 8, 0, 2, "SITE PLAN", 10, 0, 20, 0, 0, "INSERT", 8, 0, 2, "PAL", 10, 0, 20, 0),
+    0, "EOF",
+  );
+  const palText = dxf(
+    0, "SECTION", 2, "HEADER", 9, "$INSUNITS", 70, 4, 0, "ENDSEC",
+    ...entities(0, "LINE", 8, "LOOSE", 10, 0, 20, 0, 11, 9, 21, 0),
+    0, "EOF",
+  );
+  const host = dxf(
+    0, "SECTION", 2, "HEADER", 9, "$INSUNITS", 70, 4, 0, "ENDSEC",
+    ...blocks(
+      0, "BLOCK", 8, 0, 2, "SITE PLAN", 70, 4, 10, 0, 20, 0, 1, "SITE PLAN.dxf", 0, "ENDBLK",
+      0, "BLOCK", 8, 0, 2, "PAL", 70, 8, 10, 0, 20, 0, 1, "PAL.dxf", 0, "ENDBLK",
+    ),
+    ...entities(0, "INSERT", 8, 0, 2, "SITE PLAN", 10, 0, 20, 0, 0, "INSERT", 8, 0, 2, "PAL", 10, 0, 20, 0),
+    0, "EOF",
+  );
+  const d = parseDxf(host, new Map([["SITE PLAN", dxfSource(selfText)], ["PAL", dxfSource(palText)]]));
+  const layers = d.entities.map((e) => e.layer).sort().join();
+  check(layers === "PAL|LOOSE,SITE PLAN|WALLS" && d.skipped.XREF === 2, "an xref inside itself, and an overlay inside an xref, are not drawn (and counted as XREF); a top-level overlay is");
+}
+{
+  // a DWG file as an xref: its model space in the host's units, its layers under the xref's name
+  const host = dxf(
+    0, "SECTION", 2, "HEADER", 9, "$INSUNITS", 70, 4, 0, "ENDSEC",
+    ...blocks(0, "BLOCK", 8, 0, 2, "DRAW", 70, 4, 10, 0, 20, 0, 1, "DRAW.dwg", 0, "ENDBLK"),
+    ...entities(0, "INSERT", 8, 0, 2, "DRAW", 10, 0, 20, 0),
+    0, "EOF",
+  );
+  const d = parseDxf(host, new Map([["DRAW", dwgSource(r2000(objects(1015)))]]));
+  const kinds = d.entities.map((e) => `${e.type}:${e.layer}`).sort().join();
+  check(kinds === "CIRCLE:DRAW|Walls,LINE:DRAW|Walls,TEXT:DRAW|Notes" && d.hiddenLayers.has("DRAW|NOTES"), `a DWG file serves as an xref: its objects under its layers (${kinds})`);
+}
+{
+  // a DWG host with an xref block (flag 4, a path) inserted at 100,50, found when its file is given
+  for (const [label, bytes] of [
+    ["R2000", r2000([layer(1015, 0x10, "Walls"), xrefBlock(1015, 0x50, "SITE PLAN", { x: 0, y: 0 }, "C:\\proj\\Site Plan.dxf"), insert(1015, 0x51, { mode: 2, layer: 0x10 }, 0x50, { x: 100, y: 50 }, 1, 0)])],
+    ["R2004", r2004([layer(1018, 0x10, "Walls"), xrefBlock(1018, 0x50, "SITE PLAN", { x: 0, y: 0 }, "C:\\proj\\Site Plan.dxf"), insert(1018, 0x51, { mode: 2, layer: 0x10 }, 0x50, { x: 100, y: 50 }, 1, 0)])],
+  ] as const) {
+    const bare = parseDwg(bytes);
+    const xr = bare.xrefs[0];
+    check(
+      bare.xrefs.length === 1 && xr?.name === "SITE PLAN" && xr.path === "C:\\proj\\Site Plan.dxf" && xr.found === false && bare.skipped.XREF === 1 && bare.entities.length === 0,
+      `${label}: an xref block is listed with its path, and an insert of it not given is counted as XREF`,
+    );
+    const given = parseDwg(bytes, new Map([["SITE PLAN", dxfSource(siteText)]]));
+    const wall = given.entities.find((e) => e.layer === "SITE PLAN|WALLS" && e.shape.kind === "line");
+    check(
+      given.xrefs[0]?.found === true && given.entities.length === 3 && lineBetween(wall?.shape ?? { kind: "point", at: { x: 0, y: 0 } }, { x: 100, y: 50 }, { x: 101, y: 50 }),
+      `${label}: given its file, the xref's objects are drawn at the insert (3 objects)`,
+    );
+  }
+}
+
+// ---- 3D faces, meshes and inserts turned in 3D ------------------------------------------------
+
+/** The faces of a drawing's meshes of one type, each a flat x, y, z list. */
+const facesOf = (d: DxfDrawing, type: string): number[][] => d.meshes.filter((m) => m.type === type).flatMap((m) => m.faces.map((f) => [...f]));
+/** Whether two flat x, y, z lists hold the same numbers, to a millionth. */
+const sameFlat = (a: readonly number[] | undefined, b: readonly number[]): boolean => !!a && a.length === b.length && a.every((v, i) => near(v, b[i], 1e-6));
+/** A polyface mesh's entities: its positions (flags 192), then its faces (flag 128) with their corner numbers. */
+const polyface = (positions: [number, number, number][], faces: number[][]): (string | number)[] => [
+  0, "POLYLINE", 8, 0, 66, 1, 10, 0, 20, 0, 30, 0, 70, 64, 71, positions.length, 72, faces.length,
+  ...positions.flatMap(([x, y, z]) => [0, "VERTEX", 8, 0, 10, x, 20, y, 30, z, 70, 192]),
+  ...faces.flatMap((f) => [0, "VERTEX", 8, 0, 10, 0, 20, 0, 30, 0, 70, 128, 71, f[0] ?? 0, 72, f[1] ?? 0, 73, f[2] ?? 0, 74, f[3] ?? 0]),
+  0, "SEQEND",
+];
+{
+  // a 3DFACE is a face of its four corners in world coordinates, not an outline
+  const d = parseDxf(dxf(...entities(0, "3DFACE", 8, 0, 10, 0, 20, 0, 30, 1, 11, 4, 21, 0, 31, 1, 12, 4, 22, 3, 32, 1, 13, 0, 23, 3, 33, 1), 0, "EOF"));
+  check(d.entities.length === 0 && sameFlat(facesOf(d, "3DFACE")[0], [0, 0, 1, 4, 0, 1, 4, 3, 1, 0, 3, 1]), "a 3DFACE is a face of its four corners in world coordinates");
+}
+{
+  const d = parseDxf(dxf(...entities(0, "3DFACE", 8, 0, 10, 0, 20, 0, 30, 0, 11, 2, 21, 0, 31, 0, 12, 0, 22, 2, 32, 0, 13, 0, 23, 2, 33, 0), 0, "EOF"));
+  check(sameFlat(facesOf(d, "3DFACE")[0], [0, 0, 0, 2, 0, 0, 0, 2, 0]), "a 3DFACE whose fourth corner is its third is a triangle");
+}
+{
+  const cube: [number, number, number][] = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]];
+  const quads = [[1, 4, 3, 2], [5, 6, 7, 8], [1, 2, 6, 5], [2, 3, 7, 6], [3, 4, 8, 7], [4, 1, 5, 8]];
+  const d = parseDxf(dxf(...entities(...polyface(cube, quads)), 0, "EOF"));
+  const f = facesOf(d, "POLYLINE");
+  check(d.meshes.length === 1 && f.length === 6 && f.every((q) => q.length === 12 && q.every((v) => v === 0 || v === 1)), "a polyface cube: six quads over its eight positions");
+}
+{
+  // a polyface's face with a hidden edge (a negative number) and one with a 0 for its fourth corner
+  const d = parseDxf(dxf(...entities(...polyface([[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0], [1, 1, 2]], [[1, 2, 5, 0], [-2, 3, 5, 0]])), 0, "EOF"));
+  const f = facesOf(d, "POLYLINE");
+  check(f.length === 2 && sameFlat(f[0], [0, 0, 0, 2, 0, 0, 1, 1, 2]) && sameFlat(f[1], [2, 0, 0, 2, 2, 0, 1, 1, 2]), "a polyface's corners are its positions by number; a negative number is a hidden edge, 0 none");
+}
+{
+  // a 3 by 4 polygon mesh closed in N (flag 32): two rows of quads, the last column joined back to the first
+  const at = (m: number, n: number): [number, number, number] => [n, 2 * m, 0];
+  const verts: (string | number)[] = [];
+  for (let m = 0; m < 3; m++) for (let n = 0; n < 4; n++) verts.push(0, "VERTEX", 8, 0, 10, at(m, n)[0], 20, at(m, n)[1], 30, 0, 70, 64);
+  const d = parseDxf(dxf(...entities(0, "POLYLINE", 8, 0, 66, 1, 10, 0, 20, 0, 30, 0, 70, 48, 71, 3, 72, 4, ...verts, 0, "SEQEND"), 0, "EOF"));
+  const f = facesOf(d, "POLYLINE");
+  check(
+    f.length === 8 && sameFlat(f[0], [...at(0, 0), ...at(1, 0), ...at(1, 1), ...at(0, 1)]) && sameFlat(f[3], [...at(0, 3), ...at(1, 3), ...at(1, 0), ...at(0, 0)]),
+    "a polygon mesh's vertices run in M then N, and a mesh closed in N joins its last column to its first",
+  );
+}
+{
+  // a smoothed 2 by 2 mesh: its frame control points (flag 16) are not drawn, its fitted vertices make the one face
+  const d = parseDxf(
+    dxf(
+      ...entities(
+        0, "POLYLINE", 8, 0, 66, 1, 10, 0, 20, 0, 30, 0, 70, 16, 71, 2, 72, 2, 73, 2, 74, 2, 75, 6,
+        0, "VERTEX", 8, 0, 10, 0, 20, 0, 30, 5, 70, 80, 0, "VERTEX", 8, 0, 10, 4, 20, 0, 30, 5, 70, 80,
+        0, "VERTEX", 8, 0, 10, 0, 20, 4, 30, 5, 70, 80, 0, "VERTEX", 8, 0, 10, 4, 20, 4, 30, 5, 70, 80,
+        0, "VERTEX", 8, 0, 10, 0, 20, 0, 30, 0, 70, 72, 0, "VERTEX", 8, 0, 10, 2, 20, 0, 30, 0, 70, 72,
+        0, "VERTEX", 8, 0, 10, 0, 20, 2, 30, 0, 70, 72, 0, "VERTEX", 8, 0, 10, 2, 20, 2, 30, 0, 70, 72,
+        0, "SEQEND",
+      ),
+      0,
+      "EOF",
+    ),
+  );
+  check(sameFlat(facesOf(d, "POLYLINE")[0], [0, 0, 0, 0, 2, 0, 2, 2, 0, 2, 0, 0]) && facesOf(d, "POLYLINE").length === 1, "a smoothed polygon mesh is drawn from its fitted vertices, not its frame");
+}
+{
+  // a MESH: a quad and a triangle over five vertices; its face list gives each face's count and indices
+  const d = parseDxf(
+    dxf(
+      ...entities(
+        0, "MESH", 8, 0, 100, "AcDbSubDMesh", 71, 2, 72, 0, 91, 0, 92, 5,
+        10, 0, 20, 0, 30, 0, 10, 2, 20, 0, 30, 0, 10, 2, 20, 2, 30, 0, 10, 0, 20, 2, 30, 0, 10, 1, 20, 1, 30, 3,
+        93, 9, 90, 4, 90, 0, 90, 1, 90, 2, 90, 3, 90, 3, 90, 0, 90, 1, 90, 4, 94, 0,
+      ),
+      0,
+      "EOF",
+    ),
+  );
+  const f = facesOf(d, "MESH");
+  check(f.length === 2 && sameFlat(f[0], [0, 0, 0, 2, 0, 0, 2, 2, 0, 0, 2, 0]) && sameFlat(f[1], [0, 0, 0, 2, 0, 0, 1, 1, 3]), "a MESH's faces are its corner counts and indices over its vertices");
+}
+{
+  // a 3DFACE in a block, in an insert elevated, turned 90 degrees and scaled 2, 3 and 4 (41 to 43), its base at z 1
+  const block = [0, "BLOCK", 8, 0, 2, "BF", 70, 0, 10, 1, 20, 0, 30, 1, 0, "3DFACE", 8, 0, 10, 2, 20, 0, 30, 2, 11, 3, 21, 0, 31, 2, 12, 3, 22, 1, 32, 2, 13, 2, 23, 1, 33, 2, 0, "ENDBLK"];
+  const ins = [0, "INSERT", 8, 0, 2, "BF", 10, 100, 20, 200, 30, 300, 41, 2, 42, 3, 43, 4, 50, 90];
+  const d = parseDxf(dxf(...blocks(...block), ...entities(...ins), 0, "EOF"));
+  check(sameFlat(facesOf(d, "3DFACE")[0], [100, 202, 304, 100, 204, 304, 97, 204, 304, 97, 202, 304]), "a 3DFACE in an insert is moved by its base point, scale, turn and elevation, z included");
+}
+{
+  // a triangle in an insert whose extrusion is (0, -1, 0): the block's x runs along world x and its y along world z
+  const block = [0, "BLOCK", 8, 0, 2, "TILT", 70, 0, 10, 0, 20, 0, 30, 0, 0, "3DFACE", 8, 0, 10, 0, 20, 0, 30, 0, 11, 1, 21, 0, 31, 0, 12, 0, 22, 1, 32, 0, 13, 0, 23, 1, 33, 0, 0, "ENDBLK"];
+  const ins = [0, "INSERT", 8, 0, 2, "TILT", 10, 5, 20, 6, 30, 7, 210, 0, 220, -1, 230, 0];
+  const d = parseDxf(dxf(...blocks(...block), ...entities(...ins), 0, "EOF"));
+  check(sameFlat(facesOf(d, "3DFACE")[0], [5, -7, 6, 6, -7, 6, 5, -7, 7]), "an insert's 3D frame turns by its extrusion: x along world x, y along world z for (0, -1, 0)");
+}
+{
+  // 3DFACEs one after another on a layer in a colour are one mesh; another layer or colour starts the next
+  const face = (layer: string, color: number, x: number): (string | number)[] => [0, "3DFACE", 8, layer, 62, color, 10, x, 20, 0, 30, 0, 11, x + 1, 21, 0, 31, 0, 12, x, 22, 1, 32, 0, 13, x, 23, 1, 33, 0];
+  const d = parseDxf(dxf(...entities(...face("GROUND", 3, 0), ...face("GROUND", 3, 1), ...face("GROUND", 3, 2), ...face("ROOF", 3, 3), ...face("ROOF", 1, 4)), 0, "EOF"));
+  const runs = d.meshes.map((m) => `${m.layer}:${m.faces.length}`).join(" ");
+  check(runs === "GROUND:3 ROOF:1 ROOF:1", `a run of 3DFACEs on a layer in a colour is one mesh (${runs})`);
+}
+
+// ---- ACIS data of solids, regions and bodies ------------------------------------------------
+
+// the object type codes DWG gives these (dwg.ts's table): REGION 37, 3DSOLID 38, BODY 39
+const REGION = 37;
+const SOLID = 38;
+const BODY = 39;
+
+/** SAT text as the files hold it: each printable character swapped for 0x9F minus itself. */
+const swapped = (s: string): string =>
+  [...s].map((ch) => (ch.charCodeAt(0) > 0x20 && ch.charCodeAt(0) < 0x9f ? String.fromCharCode(0x9f - ch.charCodeAt(0)) : ch)).join("");
+
+/** Whether two byte runs are the same, `a` being what the reader gave (or nothing). */
+const sameBytes = (a: Uint8Array | undefined, b: Uint8Array): boolean =>
+  a !== undefined && a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** From R2000, after the ACIS-data bit: an unknown bit, version 2, and the raw bytes to the end of the object. */
+const rawAcis = (d: BitWriter, bytes: Uint8Array): void => {
+  d.bit(0);
+  d.bs(2);
+  for (const b of bytes) d.rc(b);
+};
+
+/** The same start, then version 1: blocks of swapped text, each its byte count and its bytes, then a count of 0. */
+const blockAcis = (d: BitWriter, blocks: Uint8Array[]): void => {
+  d.bit(0);
+  d.bs(1);
+  for (const block of blocks) {
+    d.bl(block.length);
+    for (const b of block) d.rc(b > 0x20 && b < 0x9f ? 0x9f - b : b);
+  }
+  d.bl(0);
+};
+
+/** Wireframe data with no point, no isolines and no silhouettes. */
+const bareWireframe = (d: BitWriter): void => {
+  d.bit(0); // no point
+  d.bl(0); // isolines
+  d.bit(0); // no isoline data
+  d.bl(0); // silhouettes
+};
+
+/** A SAB file: its header, bytes that look like line ends, its end marker, then two line-end bytes after it. */
+const sabBytes = concat(
+  ascii("ACIS BinaryFile"),
+  Uint8Array.of(0x0d, 0x0a, 0x00, 0x0a),
+  Uint8Array.of(0x0e, 0x03, ...ascii("End"), 0x0e, 0x02, ...ascii("of"), 0x0e, 0x04, ...ascii("ACIS"), 0x0d, 0x04, ...ascii("data")),
+  Uint8Array.of(0x0d, 0x0a),
+);
+
+{
+  const v = 1015;
+  const p: Place = { mode: 2, layer: 0x10 };
+  const bytes = r2000([
+    layer(v, 0x10, "Walls"),
+    // version 2: raw SAT to the end of the object, its line ends folded and the last one dropped
+    entity(v, 0x60, SOLID, p, (d) => {
+      d.bit(0); // ACIS data follows
+      rawAcis(d, ascii("400 0 1 0\r\nbody\r\n#\r\n"));
+    }),
+    // version 1: two blocks of swapped text, joined, swapped back and folded the same way
+    entity(v, 0x61, REGION, p, (d) => {
+      d.bit(0);
+      blockAcis(d, [ascii("400 0 1 0\r\nbody $-1 $1\r\n"), ascii("End-of-ACIS-data\r\n")]);
+    }),
+    // wireframe data first, then a SAB, kept as it is
+    entity(v, 0x62, BODY, p, (d) => {
+      d.bit(1); // ACIS data is not empty
+      d.bit(1); // wireframe data follows
+      bareWireframe(d);
+      d.bit(0); // ACIS data follows
+      rawAcis(d, sabBytes);
+    }),
+    // ACIS empty: no data at all
+    entity(v, 0x63, SOLID, p, (d) => {
+      d.bit(1);
+      d.bit(0);
+    }),
+    // version 2 SAT that goes on after its end marker: what follows the marker is cut
+    entity(v, 0x64, SOLID, p, (d) => {
+      d.bit(0);
+      rawAcis(d, ascii("400 0 1 0\r\nEnd-of-ACIS-data\r\nJUNK\r\n"));
+    }),
+  ]);
+  const got = dwgAcisObjects(bytes);
+  const by = new Map(got.map((o): [string, AcisObject] => [o.handle, o]));
+  const dataOf = (h: string): Uint8Array | undefined => by.get(h)?.data;
+  check(got.length === 5 && by.size === 5, `R2000 solids: five, by handle (${got.map((o) => o.handle).join(",")})`);
+  check(Object.keys(parseDwg(bytes).unreadable).length === 0, "the solids decode with nothing unreadable");
+  check(sameBytes(dataOf("60"), ascii("400 0 1 0\nbody\n#")), "a version 2 SAT ends at its last line, CRLF line ends folded and the last one dropped");
+  check(
+    by.get("61")?.type === "REGION" && sameBytes(dataOf("61"), ascii("400 0 1 0\nbody $-1 $1\nEnd-of-ACIS-data")),
+    "version 1 blocks are swapped back, joined and folded",
+  );
+  check(
+    by.get("62")?.type === "BODY" && sameBytes(dataOf("62"), sabBytes.subarray(0, sabBytes.length - 2)),
+    "a SAB after wireframe data is kept byte for byte, cut after its end marker",
+  );
+  check(by.get("63")?.type === "3DSOLID" && dataOf("63") === undefined, "an ACIS-empty solid has no data");
+  check(sameBytes(dataOf("64"), ascii("400 0 1 0\nEnd-of-ACIS-data")), "a version 2 SAT is cut at its end marker, what follows it dropped");
+}
+
+// DXF: SAT text in group 1 and 3 lines, swapped (its first character is not a digit), and plain text
+{
+  const source = dxf(
+    ...entities(
+      0, "3DSOLID", 5, "1A", 8, 0,
+      1, swapped("400 0 1 0"), 1, swapped("Asm 1 2"), 3, swapped(" 3"), 1, swapped("End-of-ACIS-data"),
+      0, "3DSOLID", 5, "1D", 8, 0,
+    ),
+    0, "SECTION", 2, "ACDSDATA",
+    0, "ACDSRECORD", 2, "ASM_Data", 320, "1D", 94, 4, 310, "414243", 310, "44",
+    0, "ACDSRECORD", 2, "Other", 320, "1D", 310, "FF",
+    0, "ENDSEC",
+    ...blocks(0, "BLOCK", 8, 0, 2, "R", 70, 0, 10, 0, 20, 0, 0, "REGION", 5, "1C", 8, 0, 1, "400 0 1 0", 1, "body", 0, "ENDBLK"),
+    0, "EOF",
+  );
+  const solids = dxfAcisObjects(source);
+  const by = new Map(solids.map((o): [string, AcisObject] => [o.handle, o]));
+  check(solids.map((o) => o.handle).join() === "1A,1D,1C", `DXF solids, ENTITIES then BLOCKS (${solids.map((o) => o.handle).join(",")})`);
+  check(sameBytes(by.get("1A")?.data, ascii("400 0 1 0\nAsm 1 2 3\nEnd-of-ACIS-data")), "group 1 and 3 SAT lines, swapped, are joined and deciphered");
+  check(sameBytes(by.get("1D")?.data, ascii("ABCD")), "the ACDSDATA hex of the ASM_Data column is the solid's data");
+  check(sameBytes(by.get("1C")?.data, ascii("400 0 1 0\nbody")), "plain SAT text (its first character a digit) is kept as it is");
+  check(parseDxf(source).entities.length === 0, "solids are not drawn as shapes");
+  check(dxfAcisObjects(dxf(...entities(0, "LINE", 8, 0, 10, 0, 20, 0, 11, 1, 21, 0), 0, "EOF")).length === 0, "a drawing with no solids has no ACIS data");
+}
+
 // ---- public sample files, when there are some ---------------------------------------------------
 
 const samples = process.env.DWG_SAMPLES;
 if (samples) {
   /** Pairs whose DWG and DXF are not one save of one drawing, so they differ for reasons of their own. */
   const DIFFERENT_SAVES = new Set(["BLOCKPOLARPARAMETER.dwg"]);
+  /**
+   * R14 drawings whose DXF twin keeps their three MULTILEADERs as one ACAD_PROXY_ENTITY, so the twin
+   * has no MULTILEADER and one MText fewer than the DWG, and cannot say what they draw. Keyed by path
+   * from the samples folder, as basenames repeat.
+   */
+  const PROXY_MULTILEADER_TWINS = new Set(["libredwg/test/test-data/example_r14.dwg", "libredwg/test/test-data/r14/Leader.dwg"]);
   const files: string[] = [];
   const walk = (dir: string): void => {
     for (const n of readdirSync(dir)) {
@@ -687,6 +1105,77 @@ if (samples) {
     return out;
   };
   const hiddenOf = (d: DxfDrawing): string => [...d.hiddenLayers].sort().join("|");
+  /** The 3D meshes by type: how many, how many faces, and the box their corners fill (x0, y0, z0, x1, y1, z1). */
+  const meshesOf = (d: DxfDrawing): Record<string, { meshes: number; faces: number; box: number[] }> => {
+    const out: Record<string, { meshes: number; faces: number; box: number[] }> = {};
+    for (const m of d.meshes) {
+      const s = (out[m.type] ??= { meshes: 0, faces: 0, box: [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity] });
+      s.meshes++;
+      for (const f of m.faces) {
+        s.faces++;
+        for (let i = 0; i < f.length; i += 3) {
+          for (let k = 0; k < 3; k++) {
+            s.box[k] = Math.min(s.box[k], f[i + k]);
+            s.box[k + 3] = Math.max(s.box[k + 3], f[i + k]);
+          }
+        }
+      }
+    }
+    return out;
+  };
+  let acisFiles = 0;
+  let acisTwinFiles = 0;
+  const acisByRelease = new Map<string, { files: number; solids: number; payloads: number; kinds: Set<string> }>();
+  /** The end of a SAB file: its tagged End-of-ACIS-data, or End-of-ASM-data, marker. */
+  const SAB_ENDS = ["End\u000e\u0002of\u000e\u0004ACIS\u000d\u0004data", "End\u000e\u0002of\u000e\u0003ASM\u000d\u0004data"];
+  /** An ACIS payload's kind (SAT, or SAB from ACIS or from ASM), how it ends, and whether that is as it should be. */
+  const acisShape = (data: Uint8Array): { kind: string; end: string; ok: boolean } => {
+    const head = String.fromCharCode(...data.subarray(0, 16));
+    const tail = String.fromCharCode(...data.subarray(Math.max(0, data.length - 48))).trimEnd();
+    if (head.startsWith("ACIS BinaryFile") || head.startsWith("ASM BinaryFile")) {
+      const ended = SAB_ENDS.some((e) => tail.includes(e));
+      return { kind: head.startsWith("ACIS") ? "SAB-ACIS" : "SAB-ASM", end: ended ? "endSAB" : "noEnd", ok: ended };
+    }
+    if (/^\d+ \d+ \d+ \d+/.test(String.fromCharCode(...data.subarray(0, 40)))) {
+      const end = tail.endsWith("End-of-ACIS-data") ? "endMarker" : tail.endsWith("#") ? "endHash" : "endOther";
+      return { kind: "SAT", end, ok: end !== "endOther" };
+    }
+    return { kind: "other", end: "", ok: false };
+  };
+  /** A DXF file's text, as the app reads one: UTF-8, else Windows-1252. */
+  const dxfText = (p: string): string => {
+    const raw = readFileSync(p);
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(raw);
+    } catch {
+      return new TextDecoder("windows-1252").decode(raw);
+    }
+  };
+  /** A DWG file's solids against its DXF twin's: the same handles and types, the DXF payloads with a header, and where both are SAB, the same length. */
+  const acisTwin = (name: string, dwg: AcisObject[], dxf: AcisObject[]): void => {
+    if (dwg.length + dxf.length === 0) return;
+    acisTwinFiles++;
+    const keyOf = (list: AcisObject[]): string => list.map((o) => `${o.handle} ${o.type}`).sort().join(", ");
+    const a = keyOf(dwg);
+    const b = keyOf(dxf);
+    check(a === b, `${name}: the DXF twin holds the same solids by handle and type (${a || "none"} vs ${b || "none"})`);
+    const byHandle = new Map<string, AcisObject>();
+    for (const o of dxf) byHandle.set(o.handle, o);
+    for (const o of dwg) {
+      const x = byHandle.get(o.handle);
+      check(Boolean(o.data) === Boolean(x?.data), `${name} ${o.handle}: both files hold its ACIS data or neither does`);
+      if (!o.data || !x?.data) continue;
+      const p = acisShape(o.data);
+      const q = acisShape(x.data);
+      check(q.kind !== "other", `${name} ${o.handle}: the DXF payload has a SAT or SAB header (${q.kind})`);
+      if (p.kind.startsWith("SAB") && q.kind.startsWith("SAB")) {
+        check(o.data.length === x.data.length, `${name} ${o.handle}: the SAB is as long as the DXF's (${o.data.length} vs ${x.data.length})`);
+        let differ = 0;
+        for (let i = 128; i < Math.min(o.data.length, x.data.length); i++) if (o.data[i] !== x.data[i]) differ++;
+        console.log(`info ${name} ${o.handle}: ${p.kind} against DXF ${q.kind}, ${differ} bytes differ after the first 128`);
+      } else console.log(`info ${name} ${o.handle}: ${p.kind} against DXF ${q.kind}, not comparable byte for byte`);
+    }
+  };
   for (const path of files) {
     const name = path.slice(samples.length + 1);
     const bytes = new Uint8Array(readFileSync(path));
@@ -702,43 +1191,95 @@ if (samples) {
     read++;
     releases.add(d.release);
     if (Object.keys(d.unreadable).length > 0) check(false, `${name}: objects it could not decode ${JSON.stringify(d.unreadable)}`);
-    const twin = path.replace(/\.dwg$/i, ".dxf");
-    if (!existsSync(twin) || DIFFERENT_SAVES.has(path.split("/").pop() ?? "")) continue;
-    // as the app reads a DXF file: UTF-8, else Windows-1252
-    const raw = readFileSync(twin);
-    let source: string;
+    let solids: AcisObject[] = [];
     try {
-      source = new TextDecoder("utf-8", { fatal: true }).decode(raw);
-    } catch {
-      source = new TextDecoder("windows-1252").decode(raw);
+      solids = dwgAcisObjects(bytes);
+    } catch (e) {
+      check(false, `${name}: its solids' ACIS data reads (${(e as Error).message})`);
     }
-    const x = parseDxf(source);
-    twins++;
-    const a = countsOf(d);
-    const b = countsOf(x);
-    const differences: string[] = [];
-    if (!sameCounts(a, b)) differences.push(`objects ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
-    else {
-      for (const type of Object.keys(a)) {
-        const p = boxOf(d, type);
-        const q = boxOf(x, type);
-        const tol = 1e-6 * Math.max(1, ...q.map(Math.abs));
-        if (p.some((v, i) => Math.abs(v - q[i]) > tol)) differences.push(`${type} extents ${p} vs ${q}`);
-      }
-      if (textsOf(d) !== textsOf(x)) differences.push("text");
-      const sa = stylesOf(d);
-      const sb = stylesOf(x);
-      if (!sameCounts(sa, sb)) {
-        const keys = [...new Set([...Object.keys(sa), ...Object.keys(sb)])].filter((k) => sa[k] !== sb[k]).sort();
-        differences.push(`styles ${keys.slice(0, 6).map((k) => `${k}: ${sa[k] ?? 0} vs ${sb[k] ?? 0}`).join(", ")}`);
-      }
-      if (hiddenOf(d) !== hiddenOf(x)) differences.push(`hidden layers ${hiddenOf(d)} vs ${hiddenOf(x)}`);
+    if (solids.length > 0) {
+      acisFiles++;
+      const shapes = solids.flatMap((o) => (o.data ? [acisShape(o.data)] : []));
+      check(shapes.length === solids.length, `${name}: all ${solids.length} solids, regions and bodies have their ACIS data (${shapes.length} do)`);
+      const bad = solids.filter((o) => o.data && !acisShape(o.data).ok).map((o) => o.handle);
+      check(bad.length === 0, `${name}: each payload is SAT or SAB and ends as it should${bad.length > 0 ? ` (${bad.join(", ")})` : ""}`);
+      const kinds = [...new Set(shapes.map((s) => `${s.kind} ${s.end}`))];
+      console.log(`info ${name}: release ${d.release}, ${solids.length} solids, regions and bodies, payloads [${kinds.join(" | ")}]`);
+      const r = acisByRelease.get(d.release) ?? { files: 0, solids: 0, payloads: 0, kinds: new Set<string>() };
+      r.files++;
+      r.solids += solids.length;
+      r.payloads += shapes.length;
+      kinds.forEach((k) => r.kinds.add(k));
+      acisByRelease.set(d.release, r);
     }
-    if (d.mmPerUnit !== x.mmPerUnit) differences.push(`units ${d.mmPerUnit} vs ${x.mmPerUnit}`);
-    if (differences.length > 0) check(false, `${name} matches its DXF: ${differences.join("; ")}`);
+    // a DXF beside the DWG, under either name the samples use
+    const twinPaths = [path.replace(/\.dwg$/i, ".dxf"), path.replace(/\.dwg$/i, "_ascii.dxf")].filter((t) => existsSync(t));
+    if (twinPaths.length === 0 || DIFFERENT_SAVES.has(path.split("/").pop() ?? "") || PROXY_MULTILEADER_TWINS.has(name)) continue;
+    for (const twin of twinPaths) {
+      const source = dxfText(twin);
+      const x = parseDxf(source);
+      twins++;
+      // the solids are matched with the first twin: NAME.dxf, else NAME_ascii.dxf
+      if (twin === twinPaths[0]) acisTwin(name, solids, dxfAcisObjects(source));
+      const a = countsOf(d);
+      const b = countsOf(x);
+      const differences: string[] = [];
+      if (!sameCounts(a, b)) differences.push(`objects ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+      else {
+        for (const type of Object.keys(a)) {
+          const p = boxOf(d, type);
+          const q = boxOf(x, type);
+          const tol = 1e-6 * Math.max(1, ...q.map(Math.abs));
+          if (p.some((v, i) => Math.abs(v - q[i]) > tol)) differences.push(`${type} extents ${p} vs ${q}`);
+        }
+        if (textsOf(d) !== textsOf(x)) differences.push("text");
+        const sa = stylesOf(d);
+        const sb = stylesOf(x);
+        if (!sameCounts(sa, sb)) {
+          const keys = [...new Set([...Object.keys(sa), ...Object.keys(sb)])].filter((k) => sa[k] !== sb[k]).sort();
+          differences.push(`styles ${keys.slice(0, 6).map((k) => `${k}: ${sa[k] ?? 0} vs ${sb[k] ?? 0}`).join(", ")}`);
+        }
+        if (hiddenOf(d) !== hiddenOf(x)) differences.push(`hidden layers ${hiddenOf(d)} vs ${hiddenOf(x)}`);
+      }
+      // the 3D meshes: the same count, faces and extents by type; these always fail the check
+      const meshDifferences: string[] = [];
+      const ma = meshesOf(d);
+      const mb = meshesOf(x);
+      for (const type of [...new Set([...Object.keys(ma), ...Object.keys(mb)])].sort()) {
+        const p = ma[type] ?? { meshes: 0, faces: 0, box: [] };
+        const q = mb[type] ?? { meshes: 0, faces: 0, box: [] };
+        if (p.meshes !== q.meshes || p.faces !== q.faces) {
+          meshDifferences.push(`${type} meshes ${p.meshes} with ${p.faces} faces vs ${q.meshes} with ${q.faces}`);
+        } else if (p.faces > 0) {
+          const tol = 1e-6 * Math.max(1, ...q.box.map(Math.abs));
+          if (p.box.some((v, i) => Math.abs(v - q.box[i]) > tol)) meshDifferences.push(`${type} mesh extents ${p.box} vs ${q.box}`);
+        }
+      }
+      if (d.mmPerUnit !== x.mmPerUnit) meshDifferences.push(`units ${d.mmPerUnit} vs ${x.mmPerUnit}`);
+      const label = `${name} matches ${twin.split("/").pop()}`;
+      if (meshDifferences.length > 0) check(false, `${label}: ${meshDifferences.join("; ")}`);
+      // the 2D differences in the _ascii.dxf twins are the readers' known gaps, the same on the baseline commit
+      // (the DWG and the DXF each read the same as before); they are printed, not failed, so they stay visible
+      if (differences.length > 0 && twin.endsWith("_ascii.dxf")) console.log(`note  ${label} in 2D (known gap): ${differences.join("; ")}`);
+      else if (differences.length > 0) check(false, `${label}: ${differences.join("; ")}`);
+    }
   }
   check(read > 0, `${read} sample files read (${[...releases].sort().join(", ")}); ${older} from before R13 refused with a message`);
-  check(twins > 0, `${twins} of them match the DXF file beside them`);
+  check(twins > 0, `${twins} DXF files beside them compared`);
+  // its xrefs' files are not on disk, so both are listed with their paths and stay not found
+  const gh44 = files.find((p) => p.endsWith("gh44-error.dwg"));
+  if (gh44) {
+    const g = parseDwg(new Uint8Array(readFileSync(gh44)));
+    check(
+      g.xrefs.length === 2 && g.xrefs.every((x) => !x.found && x.path.endsWith(".dwg") && x.path.startsWith("N:\\")) && g.skipped.XREF === 2,
+      `gh44-error.dwg lists its xrefs with their paths, not found (${g.xrefs.map((x) => x.name).join(", ")})`,
+    );
+  }
+  for (const release of [...acisByRelease.keys()].sort()) {
+    const r = acisByRelease.get(release);
+    if (r) console.log(`info release ${release}: ${r.files} files, ${r.solids} solids, regions and bodies, ${r.payloads} with ACIS data [${[...r.kinds].sort().join(" | ")}]`);
+  }
+  check(acisFiles > 0 && acisTwinFiles > 0, `${acisFiles} sample files hold solids, regions or bodies; ${acisTwinFiles} of them have a DXF twin to match`);
 }
 
 if (failures > 0) {

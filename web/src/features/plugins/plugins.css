@@ -66,7 +66,7 @@
   background: none;
   color: var(--accent);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .pi-link:hover {
@@ -324,7 +324,7 @@
 }
 
 button.pi-line-no {
-  cursor: pointer;
+  cursor: default;
 }
 
 .menu-dialog.pi-editor .menu-dialog-actions {

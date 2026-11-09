@@ -15,6 +15,7 @@ import { toolPrefs } from "../../app/toolPrefs.ts";
 import type { Vec3 } from "../../core/index.ts";
 import type { Shot } from "./camera.ts";
 import { showProgress } from "./progress.ts";
+import { prepareLibrary } from "./library.ts";
 import { buildScene, type RenderScene } from "./sceneBuilder.ts";
 import { renderSettings, type RenderSettings } from "./settings.ts";
 import { renderStill, yieldTask, type Engine, type Job } from "./still.ts";
@@ -122,6 +123,8 @@ async function exportPanorama(mode: Mode, width: number, samples: number, save: 
       for (const c of view.cubePictures(eye, FACES, size)) faces.push(pixels(c));
     } else {
       const settings = panoramaSettings(samples);
+      await prepareLibrary(settings);
+      if (job.cancelled) return;
       scene = buildScene({ faces: view.modelFaces(), content: view.visibleContent(), lights: view.visibleLights() }, settings, store.viz3d);
       const plan = { width: size, height: size, engine: mode, samples, minutes: 0, format: "png" as const };
       for (const [i, f] of FACES.entries()) {

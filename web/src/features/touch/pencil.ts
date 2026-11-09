@@ -50,4 +50,4 @@ registerMenu("View", () => [
     checked: () => onlyPencil,
     run: () => setPencilOnly(!onlyPencil),
   },
-]);
+], { after: "Crit Mode" });

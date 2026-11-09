@@ -101,7 +101,7 @@ export async function createReportDialog(): Promise<void> {
   const from = h(
     "select",
     { cls: "menu-dialog-input menu-dialog-select cr-from", attrs: { "aria-label": "Format from" } },
-    ...sheets.map((s) => h("option", { value: String(s.index), text: s.name })),
+    ...sheets.map((s) => h("option", { attrs: { translate: "no" }, value: String(s.index), text: s.name })),
   );
 
   let objects: ObjectInfo[] = [];

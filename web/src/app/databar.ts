@@ -109,16 +109,13 @@ function setOptions(next: Partial<Options>): void {
   dataBar.restyle();
 }
 
-/** Window > Data Bar Options. */
+/** Window > Data Bar Options: a ticked toggle for each on/off option, and the three-way choices as a group of rows, the one in force ticked. */
 export function dataBarOptionRows(): Row[] {
   const instant = (label: string, value: Instant): Row => ({ label, checked: () => options.instant === value, run: () => setOptions({ instant: value }) });
   const shown = (label: string, value: Shown): Row => ({ label, checked: () => options.fields === value, run: () => setOptions({ fields: value }) });
   return [
-    { label: "Use Floating Data Bar", checked: () => options.floating, run: () => setOptions({ floating: true }) },
-    { label: "Use Floating Data Bar Only When Tab Key Is Pressed", checked: () => !options.floating, run: () => setOptions({ floating: false }) },
-    "-",
-    { label: "Show Floating Data Bar Below SmartCursor Cues", checked: () => !options.above, run: () => setOptions({ above: false }) },
-    { label: "Show Floating Data Bar Above SmartCursor Cues", checked: () => options.above, run: () => setOptions({ above: true }) },
+    { label: "Use Floating Data Bar Only When Tab Key Is Pressed", checked: () => !options.floating, run: () => setOptions({ floating: !options.floating }) },
+    { label: "Show Floating Data Bar Above SmartCursor Cues", checked: () => options.above, run: () => setOptions({ above: !options.above }) },
     "-",
     instant("Allow Numeric Keypad Entry for Instant Data Bar Activation", "keypad"),
     instant("Do Not Allow Numeric Keypad Entry for Instant Data Bar Activation", "keyboard"),
@@ -128,11 +125,8 @@ export function dataBarOptionRows(): Row[] {
     shown("Show Primary and Secondary Fields on Data Bar", "secondary"),
     shown("Show Primary, Secondary, and Cursor Location Fields on Data Bar", "all"),
     "-",
-    { label: "Auto Cycle to Non-Displayed Fields When Tabbing Past Last Field", checked: () => options.autoCycle, run: () => setOptions({ autoCycle: true }) },
-    { label: "Do Not Auto Cycle to Non-Displayed Fields When Tabbing Past Last Field", checked: () => !options.autoCycle, run: () => setOptions({ autoCycle: false }) },
-    "-",
-    { label: "Show Floating Data Bar After Datum Creation", checked: () => options.afterDatum, run: () => setOptions({ afterDatum: true }) },
-    { label: "Do Not Show Floating Data Bar After Datum Creation", checked: () => !options.afterDatum, run: () => setOptions({ afterDatum: false }) },
+    { label: "Auto Cycle to Non-Displayed Fields When Tabbing Past Last Field", checked: () => options.autoCycle, run: () => setOptions({ autoCycle: !options.autoCycle }) },
+    { label: "Show Floating Data Bar After Datum Creation", checked: () => options.afterDatum, run: () => setOptions({ afterDatum: !options.afterDatum }) },
   ];
 }
 

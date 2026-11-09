@@ -68,7 +68,7 @@ export async function changeSymbolAttrsDialog(): Promise<void> {
   );
   const cls = select("Class");
   const classes = doc.classes();
-  cls.append(...classes.map((c) => h("option", { value: String(c.index), text: c.name })));
+  cls.append(...classes.map((c) => h("option", { attrs: { translate: "no" }, value: String(c.index), text: c.name })));
   cls.value = String(store.activeClassIndex);
   const boxes = GROUPS.map(({ group, label }) => {
     const box = h("input", { checked: true, attrs: { type: "checkbox" } });

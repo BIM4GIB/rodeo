@@ -152,7 +152,7 @@ function buildGrid(): { close(): void } {
     if (sheetId !== null && !data.sheets.some((s) => s.id === sheetId)) sheetId = null;
     sheetSelect.replaceChildren(
       h("option", { text: "All sheets", attrs: { value: "" } }),
-      ...data.sheets.map((s) => h("option", { text: s.title ? `${s.number} ${s.title}` : s.number, attrs: { value: s.id } })),
+      ...data.sheets.map((s) => h("option", { text: s.title ? `${s.number} ${s.title}` : s.number, attrs: { translate: "no", value: s.id } })),
     );
     sheetSelect.value = sheetId ?? "";
   }

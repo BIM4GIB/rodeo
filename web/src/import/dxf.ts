@@ -1,6 +1,7 @@
 // DXF import, the reading side. parseDxf (no DOM) reads an ASCII DXF drawing into its drawable
 // objects in the file's own units: curves stay parametric, and blocks are expanded through their
-// inserts. dxfPlacements then turns them into NewShape geometry in world units (millimetres). It reads
+// inserts, and external references (xrefs) through the files given for them. dxfPlacements then turns
+// them into NewShape geometry in world units (millimetres). It reads
 // what export/dxf.ts writes, plus the common AutoCAD entities; anything else is counted as skipped.
 // import/dwg.ts decodes a .dwg file into the same entries, and drawingOf walks them for both.
 
@@ -22,6 +23,8 @@ const DOT = 0.01;
 const MAX_PAIRS = 5;
 /** Most dashes one hatch's pattern may be cut into; a denser one is skipped. */
 const MAX_STROKES = 50_000;
+/** Most faces the meshes of one drawing may hold; a mesh that would pass it is skipped. */
+export const MAX_MESH_FACES = 2_000_000;
 const BLACK = 0x000000;
 
 /** Millimetres per unit for each $INSUNITS code. Unset (0) and unknown codes count as millimetres. */
@@ -138,14 +141,76 @@ export interface DxfEntity {
   readonly style: DxfStyle;
 }
 
+/** A surface of 3D faces (a 3DFACE, a polyface or polygon mesh, a MESH), in world coordinates. */
+export interface DxfMesh {
+  /** the DXF entity type it came from, e.g. "3DFACE" */
+  readonly type: string;
+  /** the DXF layer name ("0" when the file gives none) */
+  readonly layer: string;
+  readonly style: DxfStyle;
+  /** faces in world file units, each a flat x, y, z list of its corners (three or more) */
+  readonly faces: readonly (readonly number[])[];
+}
+
+/** A 3D solid, region or body as the walk finds it: its ACIS data, still to be meshed (import/solids.ts). */
+export interface DxfSolid {
+  /** "3DSOLID", "REGION" or "BODY" */
+  readonly type: string;
+  readonly layer: string;
+  readonly style: DxfStyle;
+  /** where the inserts it is in put it: from the data's coordinates to world file units */
+  readonly m3: Affine3;
+  /** SAT text or SAB bytes (see Entry.data); the same array for every insert of one block's solid */
+  readonly data: Uint8Array;
+}
+
 export interface DxfDrawing {
   readonly entities: readonly DxfEntity[];
+  /** the 3D surfaces, in file units (empty when there are none) */
+  readonly meshes: readonly DxfMesh[];
+  /** the solids, regions and bodies, which meshSolids (import/solids.ts) turns into meshes; empty once it has */
+  readonly solids: readonly DxfSolid[];
   /** objects left out, counted by DXF type ("HATCH", "DIMENSION", ...) */
   readonly skipped: Readonly<Record<string, number>>;
   /** millimetres per file unit, from $INSUNITS */
   readonly mmPerUnit: number;
   /** the layers that are off or frozen, by upper-case name: what is on them is not shown */
   readonly hiddenLayers: ReadonlySet<string>;
+  /** the external references the drawing defines, each with whether its file was given */
+  readonly xrefs: readonly DxfXref[];
+}
+
+/** An external reference (xref) a drawing attaches: the name its inserts give, the file it came from and whether it overlays. */
+export interface DxfXref {
+  readonly name: string;
+  /** the file it was attached from, as the drawing gives it */
+  readonly path: string;
+  /** an overlay is not shown inside another xref */
+  readonly overlay: boolean;
+  /** true when its file was given and read, so its objects are drawn */
+  readonly found: boolean;
+}
+
+/** An xref block as a drawing defines it: its name, file and overlay flag, and the base point its inserts put at their point. */
+export interface XrefDef {
+  readonly name: string;
+  readonly path: string;
+  readonly overlay: boolean;
+  /** in the file's own units */
+  readonly base: Pt;
+}
+
+/**
+ * A drawing read as the file of an external reference: its model space, blocks, tables, units and
+ * the xrefs it defines, which is what the walk reads of it. The same shape reads a drawing of one's own.
+ */
+export interface XrefSource {
+  readonly entities: readonly Entry[];
+  readonly blocks: ReadonlyMap<string, Block>;
+  readonly tables: DxfTables;
+  /** its $INSUNITS code, which scales it into the drawing it is inserted in */
+  readonly insunits: number;
+  readonly xrefs: readonly XrefDef[];
 }
 
 /** A layer's own colour, line type and weight, and whether it is shown. */
@@ -184,11 +249,18 @@ export interface Pair {
 export interface Entry {
   readonly type: string;
   readonly pairs: Pair[];
+  /**
+   * A 3DSOLID, REGION or BODY's ACIS data, ready for a parser: SAB bytes (they start with "ACIS
+   * BinaryFile") or SAT text bytes. Absent for other entities and when the file stores none.
+   */
+  readonly data?: Uint8Array;
 }
 
 /** A block definition: its base point and the entities in it. */
 export interface Block {
   readonly base: Pt;
+  /** the base point's z (0 when it has none) */
+  readonly baseZ: number;
   readonly entries: readonly Entry[];
 }
 
@@ -198,48 +270,108 @@ interface Vertex {
 }
 
 /** Where the entities being read sit: the transform into file units, the layer they inherit and the block depth. */
-interface Place {
+export interface Place {
   readonly m: Affine;
+  /** the same transform in 3D, into world file units: `m` is its plan view for the entities on the plane */
+  readonly m3: Affine3;
   /** layer of the INSERT that brought them in, or null at the top level */
   readonly layer: string | null;
+  /** the xref names their layers are under, as "SITE PLAN|" (empty outside any xref) */
+  readonly prefix: string;
   readonly depth: number;
   /** how the INSERT that brought them in draws, which is what their by block settings take */
   readonly byBlock: DxfStyle;
 }
 
-interface Walk {
-  readonly blocks: ReadonlyMap<string, Block>;
-  readonly tables: DxfTables;
+export interface Walk {
+  /** what the walk reads blocks, tables, units and xrefs by: the drawing's own, or an xref's while inside it */
+  blocks: ReadonlyMap<string, Block>;
+  tables: DxfTables;
+  insunits: number;
+  xrefs: ReadonlyMap<string, XrefDef>;
+  /** the files given to external references, by upper-case name */
+  readonly sources: ReadonlyMap<string, XrefSource>;
+  /** the xrefs being drawn, outermost first: an xref is not drawn inside itself */
+  readonly open: string[];
+  /** the layers of xrefs that are off or frozen, by upper-case name */
+  readonly hidden: Set<string>;
   readonly entities: DxfEntity[];
   readonly skipped: Record<string, number>;
   /** block copies made so far, arrays included */
   copies: number;
+  readonly meshes: DxfMesh[];
+  readonly solids: DxfSolid[];
+  /** faces held by the meshes so far */
+  meshFaces: number;
+  /** the last mesh when it is a run of 3DFACEs, which the next 3DFACE on its layer in its colour joins */
+  faceRun: { readonly layer: string; readonly color: number; readonly faces: number[][]; readonly mesh: DxfMesh } | null;
 }
 
 const IDENTITY: Affine = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+/** A 3D transform as 12 numbers, row-major: the 3x3 linear part, then the translation. */
+export type Affine3 = readonly number[];
+const IDENTITY3: Affine3 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
 
-/** Reads an ASCII DXF drawing. Throws when the text is not a DXF drawing at all. */
-export function parseDxf(text: string): DxfDrawing {
+/**
+ * Reads an ASCII DXF drawing. Throws when the text is not a DXF drawing at all. `xrefs` gives the
+ * files of its external references by upper-case name (see dxfSource); one not given is left out.
+ */
+export function parseDxf(text: string, xrefs: ReadonlyMap<string, XrefSource> = new Map()): DxfDrawing {
+  const file = dxfSource(text);
+  return drawingOf(file.entities, file.blocks, file.insunits, file.tables, file.xrefs, xrefs);
+}
+
+/**
+ * Reads a DXF file as a drawing of its own or as the file of an external reference: its model space,
+ * blocks, tables, units and the xrefs it defines. Throws when the text is not a DXF drawing at all.
+ */
+export function dxfSource(text: string): XrefSource {
   const sections = sectionsOf(readPairs(text));
   if (sections.size === 0) throw new Error("no SECTION found, so this is not a DXF drawing");
   const header = sections.get("HEADER");
-  return drawingOf(
-    entriesOf(sections.get("ENTITIES") ?? []),
-    blocksOf(entriesOf(sections.get("BLOCKS") ?? [])),
-    insUnits(header),
-    tablesOf(entriesOf(sections.get("TABLES") ?? []), headerNum(header, "$LTSCALE", 40, 1)),
-  );
+  const acds = acdsOf(entriesOf(sections.get("ACDSDATA") ?? []));
+  const { blocks, xrefs } = blocksOf(withAcis(entriesOf(sections.get("BLOCKS") ?? []), acds));
+  const tables = entriesOf(sections.get("TABLES") ?? []);
+  return {
+    entities: leadersNamed(withAcis(entriesOf(sections.get("ENTITIES") ?? []), acds), tables),
+    blocks,
+    tables: tablesOf(tables, headerNum(header, "$LTSCALE", 40, 1)),
+    insunits: insUnits(header),
+    xrefs,
+  };
 }
 
 /**
  * The drawable objects of a run of entities, with blocks (by upper-case name) expanded through their
- * inserts. `insunits` is the drawing's $INSUNITS code. parseDxf and parseDwg both end here.
+ * inserts. `insunits` is the drawing's $INSUNITS code. parseDxf and parseDwg both end here. `xrefs`
+ * are the drawing's own xref definitions, and `sources` the files given to them by upper-case name.
  */
-export function drawingOf(entities: readonly Entry[], blocks: ReadonlyMap<string, Block>, insunits: number, tables: DxfTables = NO_TABLES): DxfDrawing {
-  const w: Walk = { blocks, tables, entities: [], skipped: {}, copies: 0 };
-  readEntries(entities, w, { m: IDENTITY, layer: null, depth: 0, byBlock: PLAIN });
+export function drawingOf(
+  entities: readonly Entry[],
+  blocks: ReadonlyMap<string, Block>,
+  insunits: number,
+  tables: DxfTables = NO_TABLES,
+  xrefs: readonly XrefDef[] = [],
+  sources: ReadonlyMap<string, XrefSource> = new Map(),
+): DxfDrawing {
+  const w: Walk = { blocks, tables, insunits, xrefs: xrefsByName(xrefs), sources, open: [], hidden: new Set(), entities: [], skipped: {}, copies: 0, meshes: [], solids: [], meshFaces: 0, faceRun: null };
+  readEntries(entities, w, { m: IDENTITY, m3: IDENTITY3, layer: null, prefix: "", depth: 0, byBlock: PLAIN });
   const hiddenLayers = new Set([...tables.layers].filter(([, l]) => !l.shown).map(([name]) => name));
-  return { entities: w.entities, skipped: w.skipped, mmPerUnit: MM_PER_INSUNITS[insunits] ?? 1, hiddenLayers };
+  for (const name of w.hidden) hiddenLayers.add(name);
+  return {
+    entities: w.entities,
+    meshes: w.meshes,
+    solids: w.solids,
+    skipped: w.skipped,
+    mmPerUnit: MM_PER_INSUNITS[insunits] ?? 1,
+    hiddenLayers,
+    xrefs: xrefs.map((x) => ({ name: x.name, path: x.path, overlay: x.overlay, found: sources.has(x.name.toUpperCase()) })),
+  };
+}
+
+/** The xref definitions by upper-case name, which is how the walk finds the inserts of them. */
+function xrefsByName(defs: readonly XrefDef[]): Map<string, XrefDef> {
+  return new Map(defs.map((x): [string, XrefDef] => [x.name.toUpperCase(), x]));
 }
 
 /** Group code / value pairs: the lines alternate, a code line then its value. */
@@ -283,24 +415,130 @@ function entriesOf(pairs: readonly Pair[]): Entry[] {
   return out;
 }
 
-/** The blocks of the BLOCKS section, by upper-case name (DXF block names do not match case). */
-function blocksOf(list: readonly Entry[]): Map<string, Block> {
-  const out = new Map<string, Block>();
+/**
+ * The blocks of the BLOCKS section, by upper-case name (DXF block names do not match case), and the
+ * xref blocks, which are kept by name: their objects are in their own file. A BLOCK is an xref when
+ * its flags (70) have 4 (xref) or 8 (overlay), and its path is in group 1.
+ */
+function blocksOf(list: readonly Entry[]): { blocks: Map<string, Block>; xrefs: XrefDef[] } {
+  const blocks = new Map<string, Block>();
+  const xrefs: XrefDef[] = [];
   let name = "";
   let base: Pt = { x: 0, y: 0 };
+  let baseZ = 0;
   let body: Entry[] | null = null;
+  let xref: XrefDef | null = null;
   for (const e of list) {
     if (e.type === "BLOCK") {
       name = (rawOf(e, 2) ?? "").trim().toUpperCase();
       base = pointOf(e, 10) ?? { x: 0, y: 0 };
+      baseZ = numOf(e, 30);
       body = [];
+      const flags = numOf(e, 70);
+      xref = (flags & 12) !== 0 ? { name: (rawOf(e, 2) ?? "").trim(), path: (rawOf(e, 1) ?? "").trim(), overlay: (flags & 8) !== 0, base } : null;
     } else if (e.type === "ENDBLK") {
-      if (body) out.set(name, { base, entries: body });
+      if (xref) xrefs.push(xref);
+      else if (body) blocks.set(name, { base, baseZ, entries: body });
       body = null;
+      xref = null;
     } else {
       body?.push(e);
     }
   }
+  return { blocks, xrefs };
+}
+
+/** The entities whose shape is ACIS data: solids, regions and bodies. */
+export const ACIS_TYPES = new Set(["3DSOLID", "REGION", "BODY"]);
+
+/** A solid, region or body by its handle (upper-case hex, as DXF writes it), with its ACIS data when the file has it. */
+export interface AcisObject {
+  readonly type: string;
+  readonly handle: string;
+  readonly data?: Uint8Array;
+}
+
+/**
+ * Every solid, region and body of a DXF file's text, in ENTITIES and then BLOCKS, with the ACIS data
+ * that Entry.data carries. dwg.check.ts matches these against the DWG twin's objects by handle.
+ */
+export function dxfAcisObjects(text: string): AcisObject[] {
+  const sections = sectionsOf(readPairs(text));
+  const acds = acdsOf(entriesOf(sections.get("ACDSDATA") ?? []));
+  const out: AcisObject[] = [];
+  for (const name of ["ENTITIES", "BLOCKS"]) {
+    for (const e of withAcis(entriesOf(sections.get(name) ?? []), acds)) {
+      if (ACIS_TYPES.has(e.type)) out.push({ type: e.type, handle: (rawOf(e, 5) ?? "").trim().toUpperCase(), data: e.data });
+    }
+  }
+  return out;
+}
+
+/** Gives each solid, region and body its ACIS data (see Entry.data); the other entries pass through. */
+function withAcis(list: readonly Entry[], acds: ReadonlyMap<string, Uint8Array>): Entry[] {
+  return list.map((e) => {
+    if (!ACIS_TYPES.has(e.type)) return e;
+    const data = acisOf(e, acds);
+    return data ? { ...e, data } : e;
+  });
+}
+
+/**
+ * The ACIS data of one entity. Before R2013 it is in the entity itself, as group 1 lines of SAT
+ * text; from R2013 the entity has none, and its data is the ACDSDATA record for its handle (group 5).
+ */
+function acisOf(e: Entry, acds: ReadonlyMap<string, Uint8Array>): Uint8Array | undefined {
+  if (e.pairs.some((p) => p.code === 1 || p.code === 3)) return satBytes(e.pairs);
+  return acds.get((rawOf(e, 5) ?? "").trim().toUpperCase());
+}
+
+/**
+ * The SAT text of an entity's group 1 and 3 lines: a group 1 line starts a new line of text and a
+ * group 3 line goes on from the one before. Text whose first character is not a digit is ciphered,
+ * each printable character swapped for 0x9F minus its code (a SAT file opens with its version
+ * numbers), so it is deciphered here; the same swap is in the DWG reader.
+ */
+function satBytes(pairs: readonly Pair[]): Uint8Array {
+  let text = "";
+  for (const p of pairs) {
+    if (p.code === 1) text += (text.length > 0 ? "\n" : "") + p.value;
+    else if (p.code === 3) text += p.value;
+  }
+  const first = /\S/.exec(text);
+  const ciphered = first !== null && !/\d/.test(first[0]);
+  const out = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    out[i] = ciphered && c > 0x20 && c < 0x9f ? 0x9f - c : c;
+  }
+  return out;
+}
+
+/**
+ * The ACIS data of each ACDSDATA record (R2013 on), by its entity's handle: the bytes of its
+ * ASM_Data column, which are the 310 lines of hex that follow the column's 94 byte count.
+ */
+function acdsOf(records: readonly Entry[]): Map<string, Uint8Array> {
+  const out = new Map<string, Uint8Array>();
+  for (const r of records) {
+    if (r.type !== "ACDSRECORD") continue;
+    let handle = "";
+    let column = "";
+    const hex: string[] = [];
+    for (const p of r.pairs) {
+      if (p.code === 2) column = p.value.trim();
+      else if (p.code === 320 && handle === "") handle = p.value.trim().toUpperCase();
+      else if (p.code === 310 && column === "ASM_Data") hex.push(p.value.trim());
+    }
+    if (handle !== "" && hex.length > 0) out.set(handle, fromHex(hex.join("")));
+  }
+  return out;
+}
+
+/** The bytes of a run of hex digit pairs. */
+function fromHex(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length >> 1);
+  for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(2 * i, 2 * i + 2), 16);
   return out;
 }
 
@@ -377,10 +615,13 @@ function pointOf(e: Entry, code: number): Pt | null {
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
-/** The layer an entity is on: its own, or the layer of the INSERT when it is on layer 0 inside a block. */
-function layerOf(e: Entry, inherited: string | null): string {
+/**
+ * The layer an entity is on: its own, under the xref it is in (`prefix`), or the layer of the INSERT
+ * when it is on layer 0 inside a block (an xref's layer 0 inherits the same way).
+ */
+function layerOf(e: Entry, inherited: string | null, prefix: string): string {
   const own = (rawOf(e, 8) ?? "0").trim() || "0";
-  return own === "0" && inherited !== null ? inherited : own;
+  return own === "0" && inherited !== null ? inherited : prefix + own;
 }
 
 // ---- walking the entities -----------------------------------------------------------
@@ -425,7 +666,7 @@ function readOne(e: Entry, kids: readonly Entry[], w: Walk, place: Place): void 
   // a 3D polyline (flag 8) is in world coordinates, like LINE and the rest
   const ocs = IN_OCS.has(e.type) && !(e.type === "POLYLINE" && (numOf(e, 70) & 8) !== 0) ? ocsOf(e) : null;
   const m = ocs ? compose(place.m, ocs) : place.m;
-  const layer = layerOf(e, place.layer);
+  const layer = layerOf(e, place.layer, place.prefix);
   const style = styleOf(e, layer, place, w);
   switch (e.type) {
     case "POINT": {
@@ -445,9 +686,13 @@ function readOne(e: Entry, kids: readonly Entry[], w: Walk, place: Place): void 
       return;
     }
     case "POLYLINE": {
-      // polygon meshes and polyface meshes are not outlines
-      if ((numOf(e, 70) & (16 | 64)) !== 0) {
-        skip(w, e.type);
+      // polyface and polygon meshes are surfaces, not outlines: their faces are meshes, in world coordinates
+      if ((numOf(e, 70) & 64) !== 0) {
+        pushMesh(w, place, e.type, layer, polyfaceFaces(kids), style);
+        return;
+      }
+      if ((numOf(e, 70) & 16) !== 0) {
+        pushMesh(w, place, e.type, layer, polygonFaces(e, kids), style);
         return;
       }
       const closed = (numOf(e, 70) & 1) === 1;
@@ -470,6 +715,24 @@ function readOne(e: Entry, kids: readonly Entry[], w: Walk, place: Place): void 
       push(w, e.type, layer, outline.length >= 3 ? { kind: "fill", rings: [outline.map((p) => applyPt(m, p))] } : null, style);
       return;
     }
+    case "3DFACE": {
+      // the corners go round the face in world coordinates; a triangle repeats its third corner as its fourth
+      const pts = [10, 11, 12, 13].map((c) => point3Of(e, c)).filter(finite3);
+      const corners = pts.filter((p, i) => i === 0 || !same3(p, pts[i - 1]));
+      if (corners.length > 1 && same3(corners[0], corners[corners.length - 1])) corners.pop();
+      pushMesh(w, place, e.type, layer, [corners.flatMap((p) => [p.x, p.y, p.z])], style);
+      return;
+    }
+    case "MESH":
+      pushMesh(w, place, e.type, layer, subdFaces(e), style);
+      return;
+    case "3DSOLID":
+    case "REGION":
+    case "BODY":
+      // its ACIS data is in world coordinates, so only the inserts place it; one with none cannot be drawn
+      if (e.data) w.solids.push({ type: e.type, layer, style, m3: place.m3, data: e.data });
+      else skip(w, e.type);
+      return;
     case "SPLINE":
       push(w, e.type, layer, splineShape(m, e), style);
       return;
@@ -479,6 +742,9 @@ function readOne(e: Entry, kids: readonly Entry[], w: Walk, place: Place): void 
       push(w, e.type, layer, pts >= 2 ? polylineShape(m, tracePoints(lwVertices(e), false), false) : null, style);
       return;
     }
+    case "MULTILEADER":
+      multileader(w, place, m, e, layer, style);
+      return;
     case "DIMENSION":
     case "ARC_DIMENSION":
     case "LARGE_RADIAL_DIMENSION":
@@ -588,17 +854,27 @@ function lineTypeOf(w: Walk, name: string, scale: number): DxfLineType | null {
  * An INSERT, or a MINSERT array of copies, expanded in place. Each copy is the block moved so its
  * base point is at the origin, scaled, turned and moved to the insertion point, all in the insert's
  * OCS (m is the place's transform after it). Its ATTRIB values are placed as text at their own
- * points, so only the outer transform and their own OCS apply to them.
+ * points, so only the outer transform and their own OCS apply to them. An insert of an xref draws
+ * the xref's file the same way, in its own scope (see enterXref), scaled from its units; one with no
+ * file to draw, or that may not be drawn here, is counted as "XREF".
  */
 function insert(w: Walk, place: Place, m: Affine, e: Entry, layer: string, attribs: readonly Entry[], style: DxfStyle): void {
-  const block = w.blocks.get((rawOf(e, 2) ?? "").trim().toUpperCase());
-  if (!block || place.depth >= MAX_DEPTH) {
-    skip(w, e.type);
+  const name = (rawOf(e, 2) ?? "").trim().toUpperCase();
+  const block = w.blocks.get(name);
+  const def = block ? undefined : w.xrefs.get(name);
+  // an overlay inside another xref, and an xref inside itself, are not drawn
+  const file = def && !(def.overlay && w.open.length > 0) && !w.open.includes(name) ? w.sources.get(name) : undefined;
+  if ((!block && !file) || place.depth >= MAX_DEPTH) {
+    skip(w, def ? "XREF" : e.type);
     return;
   }
+  const entries = block?.entries ?? file?.entities ?? [];
+  const base = block?.base ?? def?.base ?? { x: 0, y: 0 };
+  // an xref's file is in its own units: this takes them to the drawing's
+  const k = file ? unitScale(file.insunits, w.insunits) : 1;
   const at = pointOf(e, 10) ?? { x: 0, y: 0 };
-  const sx = numOf(e, 41, 1);
-  const sy = numOf(e, 42, 1);
+  const sx = numOf(e, 41, 1) * k;
+  const sy = numOf(e, 42, 1) * k;
   // a table in a DXF file has no 50: its horizontal direction (11) turns it instead
   const dir = e.type === "ACAD_TABLE" && !hasCode(e, 50) ? pointOf(e, 11) : null;
   const rot = dir ? Math.atan2(dir.y, dir.x) : numOf(e, 50) * DEG;
@@ -612,6 +888,13 @@ function insert(w: Walk, place: Place, m: Affine, e: Entry, layer: string, attri
   const b = sn * sx;
   const c = -sn * sy;
   const d = cs * sy;
+  // an xref's entities are on its layers, under its name, which is what they are read in (see enterXref)
+  const prefix = file && def ? `${place.prefix}${def.name}|` : place.prefix;
+  const outer = file && def ? enterXref(w, name, prefix, file) : null;
+  // the 3D frame: the insert's own extrusion, then each copy (local3) through the place's transform
+  const sz = numOf(e, 43, 1) * k;
+  const baseZ = block?.baseZ ?? 0;
+  const outer3 = compose3(place.m3, ocs3Of(e) ?? IDENTITY3);
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
       // array steps are in the turned frame of the insert
@@ -622,21 +905,74 @@ function insert(w: Walk, place: Place, m: Affine, e: Entry, layer: string, attri
         b,
         c,
         d,
-        e: at.x + cs * gx - sn * gy - (a * block.base.x + c * block.base.y),
-        f: at.y + sn * gx + cs * gy - (b * block.base.x + d * block.base.y),
+        e: at.x + cs * gx - sn * gy - (a * base.x + c * base.y),
+        f: at.y + sn * gx + cs * gy - (b * base.x + d * base.y),
       };
+      // the same copy in 3D: its plan is `local`, and z scales by 43 about the block's base z, at the insert's elevation
+      const local3: Affine3 = [a, c, 0, local.e, b, d, 0, local.f, 0, 0, sz, numOf(e, 30) - sz * baseZ];
       w.copies++;
       if (w.copies > MAX_OBJECTS) throw new Error(`the drawing has more than ${MAX_OBJECTS} block copies`);
-      readEntries(block.entries, w, { m: compose(m, local), layer, depth: place.depth + 1, byBlock: style });
+      readEntries(entries, w, { m: compose(m, local), m3: compose3(outer3, local3), layer, prefix, depth: place.depth + 1, byBlock: style });
     }
   }
+  if (outer) leaveXref(w, outer);
   for (const att of attribs) {
     // invisible attributes are not drawn
     if ((numOf(att, 70) & 1) !== 0) continue;
     const ocs = ocsOf(att);
-    const attLayer = layerOf(att, layer);
+    const attLayer = layerOf(att, layer, place.prefix);
     addText(w, ocs ? compose(place.m, ocs) : place.m, att, attLayer, styleOf(att, attLayer, { ...place, byBlock: style }, w));
   }
+}
+
+/** How much bigger an xref's file's units are than the drawing's; 1 when either is unitless, as AutoCAD inserts it. */
+function unitScale(xrefUnits: number, drawingUnits: number): number {
+  if (xrefUnits === 0 || drawingUnits === 0) return 1;
+  return (MM_PER_INSUNITS[xrefUnits] ?? 1) / (MM_PER_INSUNITS[drawingUnits] ?? 1);
+}
+
+/** What the walk reads blocks, tables, units and xrefs by, kept while it is inside an xref and put back after. */
+interface Scope {
+  readonly blocks: ReadonlyMap<string, Block>;
+  readonly tables: DxfTables;
+  readonly insunits: number;
+  readonly xrefs: ReadonlyMap<string, XrefDef>;
+}
+
+/**
+ * Switches the walk into an xref's file: its blocks, its own xrefs, its units and its tables, with
+ * its layers added under `prefix` ("SITE PLAN|", say), which is how AutoCAD names them. Returns the
+ * scope it leaves, for leaveXref. The outer layers stay in its tables too, since a layer-0 entity in
+ * the xref takes the layer of the insert that brought it in, which is named in the outer drawing.
+ */
+function enterXref(w: Walk, name: string, prefix: string, file: XrefSource): Scope {
+  const outer: Scope = { blocks: w.blocks, tables: w.tables, insunits: w.insunits, xrefs: w.xrefs };
+  w.open.push(name);
+  w.blocks = file.blocks;
+  w.tables = xrefTables(outer.tables, file.tables, prefix, w.hidden);
+  w.insunits = file.insunits;
+  w.xrefs = xrefsByName(file.xrefs);
+  return outer;
+}
+
+/** Leaves an xref's file for the scope it was entered from. */
+function leaveXref(w: Walk, outer: Scope): void {
+  w.open.pop();
+  w.blocks = outer.blocks;
+  w.tables = outer.tables;
+  w.insunits = outer.insunits;
+  w.xrefs = outer.xrefs;
+}
+
+/** The tables an xref's entities are read by: the scope's, with the xref's layers added under `prefix` (the hidden ones into `hidden`), and its line types and scale. */
+function xrefTables(outer: DxfTables, own: DxfTables, prefix: string, hidden: Set<string>): DxfTables {
+  const layers = new Map(outer.layers);
+  for (const [name, layer] of own.layers) {
+    const key = `${prefix}${name}`.toUpperCase();
+    layers.set(key, layer);
+    if (!layer.shown) hidden.add(key);
+  }
+  return { layers, lineTypes: new Map([...outer.lineTypes, ...own.lineTypes]), ltscale: own.ltscale };
 }
 
 /**
@@ -654,7 +990,10 @@ function dimension(w: Walk, place: Place, m: Affine, e: Entry, layer: string, st
   w.copies++;
   if (w.copies > MAX_OBJECTS) throw new Error(`the drawing has more than ${MAX_OBJECTS} block copies`);
   const local: Affine = { a: 1, b: 0, c: 0, d: 1, e: at.x - block.base.x, f: at.y - block.base.y };
-  readEntries(block.entries, w, { m: compose(m, local), layer, depth: place.depth + 1, byBlock: style });
+  // in 3D, the clone point's elevation (12's z) stands against the block's base z
+  const local3 = translate3(local.e, local.f, numOf(e, 32) - block.baseZ);
+  const outer3 = compose3(place.m3, ocs3Of(e) ?? IDENTITY3);
+  readEntries(block.entries, w, { m: compose(m, local), m3: compose3(outer3, local3), layer, prefix: place.prefix, depth: place.depth + 1, byBlock: style });
 }
 
 /** One line family of a hatch pattern: its angle (degrees), a point it passes through, the step to the next line and its dashes. */
@@ -1064,6 +1403,193 @@ function unit(v: { x: number; y: number; z: number }): { x: number; y: number; z
   return { x: v.x / l, y: v.y / l, z: v.z / l };
 }
 
+// ---- 3D: transforms and meshes -------------------------------------------------------
+
+interface Pt3 {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** What a point is when its group codes are missing: NaN, which every face that uses it leaves out. */
+const NO_POINT3: Pt3 = { x: NaN, y: NaN, z: NaN };
+
+/**
+ * The object coordinate system of an entity's extrusion as a 3D transform's linear part: its columns
+ * are AutoCAD's x and y axes and the extrusion (the arbitrary axis rule ocsOf takes its plan view by).
+ * Null for the usual +z.
+ */
+function ocs3Of(e: Entry): Affine3 | null {
+  if (!hasCode(e, 230)) return null;
+  const nx = numOf(e, 210);
+  const ny = numOf(e, 220);
+  const nz = numOf(e, 230);
+  const len = Math.hypot(nx, ny, nz);
+  if (!(len > 0) || (Math.abs(nx) < 1e-12 && Math.abs(ny) < 1e-12 && nz > 0)) return null;
+  const n = { x: nx / len, y: ny / len, z: nz / len };
+  const w = Math.abs(n.x) < 1 / 64 && Math.abs(n.y) < 1 / 64 ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+  const ax = unit({ x: w.y * n.z - w.z * n.y, y: w.z * n.x - w.x * n.z, z: w.x * n.y - w.y * n.x });
+  const ay = unit({ x: n.y * ax.z - n.z * ax.y, y: n.z * ax.x - n.x * ax.z, z: n.x * ax.y - n.y * ax.x });
+  return [ax.x, ay.x, n.x, 0, ax.y, ay.y, n.y, 0, ax.z, ay.z, n.z, 0];
+}
+
+/** m applied after n: n first, then m (both 3D). */
+function compose3(m: Affine3, n: Affine3): Affine3 {
+  const out: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) out.push(m[4 * i] * n[j] + m[4 * i + 1] * n[4 + j] + m[4 * i + 2] * n[8 + j]);
+    out.push(m[4 * i] * n[3] + m[4 * i + 1] * n[7] + m[4 * i + 2] * n[11] + m[4 * i + 3]);
+  }
+  return out;
+}
+
+function translate3(x: number, y: number, z: number): Affine3 {
+  return [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z];
+}
+
+/** A flat x, y, z list moved by the 3D transform. */
+export function placeFlat(m: Affine3, f: ArrayLike<number>): number[] {
+  const out = new Array<number>(f.length);
+  for (let i = 0; i + 2 < f.length; i += 3) {
+    const x = f[i];
+    const y = f[i + 1];
+    const z = f[i + 2];
+    out[i] = m[0] * x + m[1] * y + m[2] * z + m[3];
+    out[i + 1] = m[4] * x + m[5] * y + m[6] * z + m[7];
+    out[i + 2] = m[8] * x + m[9] * y + m[10] * z + m[11];
+  }
+  return out;
+}
+
+/**
+ * Adds a mesh to the walk: its faces, each a flat x, y, z list of corners (a face needs three) in the
+ * entity's own frame, moved into the drawing by the place's 3D transform. A mesh with no face, or one
+ * that would take the drawing past MAX_MESH_FACES faces, is skipped. 3DFACEs one after another on the
+ * same layer in the same colour make one mesh. The solids reader adds its meshes through here too.
+ */
+export function pushMesh(w: Walk, place: Place, type: string, layer: string, faces: readonly (readonly number[])[], style: DxfStyle): void {
+  const kept = faces.filter((f) => f.length >= 9 && f.length % 3 === 0 && f.every(Number.isFinite));
+  if (kept.length === 0 || w.meshFaces + kept.length > MAX_MESH_FACES) {
+    skip(w, type);
+    return;
+  }
+  w.meshFaces += kept.length;
+  const placed = kept.map((f) => placeFlat(place.m3, f));
+  // a run of 3DFACEs on one layer in one colour is one mesh: a terrain of thousands of them is one surface
+  const run = w.faceRun;
+  if (type === "3DFACE" && run && run.layer === layer && run.color === style.color && w.meshes[w.meshes.length - 1] === run.mesh) {
+    run.faces.push(...placed);
+    return;
+  }
+  const mesh: DxfMesh = { type, layer, style, faces: placed };
+  w.meshes.push(mesh);
+  w.faceRun = type === "3DFACE" ? { layer, color: style.color, faces: placed, mesh } : null;
+}
+
+function finite3(p: Pt3): boolean {
+  return Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
+}
+
+function same3(a: Pt3, b: Pt3): boolean {
+  return Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9 && Math.abs(a.z - b.z) < 1e-9;
+}
+
+/** The point in group codes x, x + 10 and x + 20, with z 0 when it has none; NaN when x or y is missing. */
+function point3Of(e: Entry, code: number): Pt3 {
+  const p = pointOf(e, code);
+  if (!p) return NO_POINT3;
+  return { x: p.x, y: p.y, z: hasCode(e, code + 20) ? numOf(e, code + 20) : 0 };
+}
+
+/** The numbers of every pair with this group code, in order (NaN where one is not a number). */
+function valuesOf(e: Entry, code: number): number[] {
+  return e.pairs.filter((p) => p.code === code).map((p) => parseNum(p.value));
+}
+
+/**
+ * A polyface mesh's faces. Its position vertices (flags 128 and 64) are numbered from 1 in the order
+ * they come; each face record (flag 128) names its corners by those numbers in 71 to 74, where a
+ * negative number is a corner whose edge is hidden and 0 is no corner. A face that names a missing
+ * position is left out.
+ */
+function polyfaceFaces(kids: readonly Entry[]): number[][] {
+  const positions: Pt3[] = [];
+  const records: number[][] = [];
+  for (const v of kids) {
+    const flags = numOf(v, 70);
+    if ((flags & 128) === 0) continue;
+    if ((flags & 64) !== 0) positions.push(point3Of(v, 10));
+    else records.push([71, 72, 73, 74].map((code) => numOf(v, code)));
+  }
+  const faces: number[][] = [];
+  for (const r of records) {
+    const picked: Pt3[] = [];
+    for (const i of r) {
+      if (i === 0) continue;
+      const p = positions[Math.abs(i) - 1];
+      if (p) picked.push(p);
+    }
+    if (picked.length >= 3 && picked.length === r.filter((i) => i !== 0).length) faces.push(picked.flatMap((p) => [p.x, p.y, p.z]));
+  }
+  return faces;
+}
+
+/**
+ * A polygon mesh's faces. Its vertices are M by N, the one at (m, n) being the (m × N + n)th, and each
+ * square of four neighbours is a face; the mesh is closed across its ends in M (flag 1) and in N (flag
+ * 32). A smoothed mesh (75) is drawn from its fitted vertices, all but the frame control points (flag
+ * 16), which make a grid of its surface densities (73 by 74). Nothing when the vertices do not fit.
+ */
+function polygonFaces(e: Entry, kids: readonly Entry[]): number[][] {
+  const flags = numOf(e, 70);
+  const verts = kids.filter((v) => (numOf(v, 70) & 16) === 0).map((v) => point3Of(v, 10));
+  const grids = [
+    [numOf(e, 71), numOf(e, 72)],
+    [numOf(e, 73), numOf(e, 74)],
+  ];
+  const grid = grids.find(([m, n]) => m >= 2 && n >= 2 && m * n === verts.length);
+  if (!grid) return [];
+  const [M, N] = grid;
+  const at = (m: number, n: number): Pt3 => verts[m * N + n];
+  const alongM = (flags & 1) !== 0 ? M : M - 1;
+  const alongN = (flags & 32) !== 0 ? N : N - 1;
+  const faces: number[][] = [];
+  for (let m = 0; m < alongM; m++) {
+    for (let n = 0; n < alongN; n++) {
+      const corners = [at(m, n), at((m + 1) % M, n), at((m + 1) % M, (n + 1) % N), at(m, (n + 1) % N)];
+      faces.push(corners.flatMap((p) => [p.x, p.y, p.z]));
+    }
+  }
+  return faces;
+}
+
+/**
+ * A MESH's faces, read over its base cage (its subdivision is not applied): each face is its corner
+ * count and that many indices into its vertices (from 0), from the face list's first 93 items. The
+ * vertices are the 10, 20 and 30 groups, not the 92 count: a DXF MESH may carry a proxy graphic's
+ * byte count under 92 as well. A face with a missing or out-of-range corner is left out.
+ */
+function subdFaces(e: Entry): number[][] {
+  const xs = valuesOf(e, 10);
+  const ys = valuesOf(e, 20);
+  const zs = valuesOf(e, 30);
+  const count = Math.min(xs.length, ys.length, zs.length);
+  const verts: Pt3[] = [];
+  for (let k = 0; k < count; k++) verts.push({ x: xs[k], y: ys[k], z: zs[k] });
+  const items = valuesOf(e, 90).slice(0, numOf(e, 93));
+  const faces: number[][] = [];
+  for (let i = 0; i < items.length; ) {
+    const n = items[i];
+    if (!(n >= 1)) break;
+    const idx = items.slice(i + 1, i + 1 + n);
+    if (idx.length === n && n >= 3 && idx.every((k) => Number.isInteger(k) && k >= 0 && k < verts.length)) {
+      faces.push(idx.flatMap((k) => [verts[k].x, verts[k].y, verts[k].z]));
+    }
+    i += n + 1;
+  }
+  return faces;
+}
+
 /**
  * A SPLINE as a sampled polyline: through its control points (10/20, with weights 41 when rational)
  * and knots (40) when it has them, otherwise a smooth curve through its fit points (11/21).
@@ -1375,6 +1901,213 @@ function bulgeTo(out: Pt[], a: Pt, b: Pt, bulge: number): void {
     out.push({ x: cx + radius * Math.cos(t), y: cy + radius * Math.sin(t) });
   }
   out.push(b);
+}
+
+// ---- multileaders -------------------------------------------------------------------
+
+/** The groups of one nested section: those outside its sub-sections, and each sub-section's groups in turn. */
+interface Nested {
+  readonly own: Pair[];
+  readonly inner: Pair[][];
+}
+
+/**
+ * Splits a run of groups at the markers of its sub-sections: `open` (300, 302 or 304) starts one and
+ * `close` (301, 303 or 305) ends it. A sub-section keeps its own sub-sections' groups, to be split in turn.
+ */
+function nestedIn(pairs: readonly Pair[], open: number, close: number): Nested {
+  const own: Pair[] = [];
+  const inner: Pair[][] = [];
+  let section: Pair[] | null = null;
+  for (const p of pairs) {
+    if (section === null) {
+      if (p.code === open) section = [];
+      else own.push(p);
+    } else if (p.code === close) {
+      inner.push(section);
+      section = null;
+    } else section.push(p);
+  }
+  if (section) inner.push(section);
+  return { own, inner };
+}
+
+/**
+ * A MULTILEADER's groups by level: its own, its context's own (CONTEXT_DATA{ outside its leaders)
+ * and the groups of each leader (LEADER{, which holds its LEADER_LINE{s).
+ */
+function leaderGroups(e: Entry): { top: Entry; context: Entry; leaders: Pair[][] } {
+  const top = nestedIn(e.pairs, 300, 301);
+  const context = nestedIn(top.inner[0] ?? [], 302, 303);
+  return { top: { type: e.type, pairs: top.own }, context: { type: e.type, pairs: context.own }, leaders: context.inner };
+}
+
+/**
+ * The MULTILEADERs of a DXF file with their blocks named the way a DWG reader names them. A content
+ * block is named by its handle (group 341 of CONTEXT_DATA{, with 296 set), which is the group 5 of
+ * its BLOCK_RECORD, so that record's name (group 2) goes in as the leader's group 2. The arrowhead
+ * blocks, the MULTILEADER's own (342) and each leader line's (341 in LEADER_LINE{), are given by
+ * name in place of their handles, as leaderArrows does for DWG.
+ */
+function leadersNamed(entities: readonly Entry[], tables: readonly Entry[]): Entry[] {
+  const names = new Map<string, string>();
+  for (const r of tables) {
+    const handle = (rawOf(r, 5) ?? "").trim().toUpperCase();
+    const name = (rawOf(r, 2) ?? "").trim();
+    if (r.type === "BLOCK_RECORD" && handle && name) names.set(handle, name);
+  }
+  const nameOf = (handle: string): string => names.get(handle.trim().toUpperCase()) ?? "";
+  return entities.map((e): Entry => {
+    if (e.type !== "MULTILEADER") return e;
+    const { context } = leaderGroups(e);
+    const name = nameOf(rawOf(context, 341) ?? "");
+    const pairs = leaderArrows(e.pairs, nameOf);
+    return { ...e, pairs: name && numOf(context, 296) === 1 ? [...pairs, { code: 2, value: name }] : pairs };
+  });
+}
+
+/** The section markers of a MULTILEADER's groups, by code: what opens one at each depth, and its close is the next code up. */
+const LEADER_MARKERS: Readonly<Record<number, string>> = { 300: "CONTEXT_DATA{", 302: "LEADER{", 304: "LEADER_LINE{" };
+
+/**
+ * A MULTILEADER's groups with each arrowhead handle (342 of its own, 341 in a LEADER_LINE{) made the
+ * block `blockOf` gives for it: a name to look up, "_NONE" for no arrowhead, or empty for AutoCAD's
+ * default. The markers are told by their values, since 304 also holds the content's text.
+ */
+export function leaderArrows(pairs: readonly Pair[], blockOf: (handle: string) => string): Pair[] {
+  let depth = 0;
+  return pairs.map((p): Pair => {
+    if (LEADER_MARKERS[p.code] === p.value.trim()) depth++;
+    else if (LEADER_MARKERS[p.code - 1] !== undefined && p.value.trim() === "}") depth--;
+    else if ((depth === 0 && p.code === 342) || (depth === 3 && p.code === 341)) return { code: p.code, value: blockOf(p.value) };
+    return p;
+  });
+}
+
+/**
+ * A MULTILEADER as AutoCAD draws it: each leader line through its leader's last point, the dogleg
+ * from that point along the leader's dogleg vector, an arrowhead at each line's first point, and
+ * the content: MText, or the block named by its group 2. A line whose type is 0 is invisible, with
+ * its arrowhead; a spline leader is drawn straight.
+ */
+function multileader(w: Walk, place: Place, m: Affine, e: Entry, layer: string, style: DxfStyle): void {
+  const { top, context, leaders } = leaderGroups(e);
+  // the MULTILEADER's own leader type (170); the dogleg is on unless its switch (291) is off
+  const pathType = numOf(top, 170, 1);
+  const dogleg = numOf(top, 291, 1) !== 0;
+  // the arrowhead's size: the context's (140), else the MULTILEADER's (42)
+  const arrowSize = numOf(context, 140, numOf(top, 42));
+  for (const groups of leaders) {
+    const leader = nestedIn(groups, 304, 305);
+    const own: Entry = { type: e.type, pairs: leader.own };
+    // the leader's last point (290 says it is set), which its lines run to
+    const last = numOf(own, 290, 1) !== 0 ? pointOf(own, 10) : null;
+    let visible = false;
+    for (const line of leader.inner) {
+      const lineE: Entry = { type: e.type, pairs: line };
+      if (lineSetting(lineE, 1, 170, pathType) === 0) continue;
+      visible = true;
+      const pts = [...repeatedPoints(lineE, 10), ...(last ? [last] : [])].filter((p, i, all) => i === 0 || !same(p, all[i - 1]));
+      push(w, e.type, layer, polylineShape(m, pts, false), style);
+      // its arrowhead: the line's own block when it sets one (93 has 32), else the MULTILEADER's
+      const block = (numOf(lineE, 93) & 32) !== 0 ? rawOf(lineE, 341) : rawOf(top, 342);
+      const [first, toward] = pts;
+      if (first && toward) leaderArrow(w, place, m, e, layer, style, first, toward, lineSetting(lineE, 16, 40, arrowSize), block ?? "");
+    }
+    const leg = visible && dogleg && last ? doglegShape(m, last, own) : null;
+    if (leg) push(w, e.type, layer, leg, style);
+  }
+  // the content: MText from its point (12) along its direction (13), at its height (41) and attachment (171)
+  const text = rawOf(context, 304) ?? "";
+  if (numOf(context, 290) !== 0 && text.trim() !== "") {
+    const mtext: Entry = {
+      type: "MTEXT",
+      pairs: [
+        { code: 1, value: text },
+        ...pairsAt(10, pointOf(context, 12)),
+        ...pairsAt(11, pointOf(context, 13)),
+        { code: 40, value: String(numOf(context, 41)) },
+        { code: 71, value: String(numOf(context, 171, 1)) },
+      ],
+    };
+    addText(w, m, mtext, layer, style);
+  }
+  // the block: its record's name, at group 15, scaled by 16 and turned by 46 (radians)
+  const name = rawOf(top, 2);
+  if (name && numOf(context, 296) === 1) {
+    const at = pointOf(context, 15) ?? { x: 0, y: 0 };
+    const scale = pointOf(context, 16) ?? { x: 1, y: 1 };
+    const block: Entry = {
+      type: e.type,
+      pairs: [
+        { code: 2, value: name },
+        ...pairsAt(10, at),
+        { code: 41, value: String(scale.x) },
+        { code: 42, value: String(scale.y) },
+        { code: 50, value: String(numOf(context, 46) / DEG) },
+      ],
+    };
+    insert(w, place, m, block, layer, [], style);
+  }
+}
+
+/**
+ * A leader line's setting: its own value at `code` when its override flags (93) include `flag`
+ * (1 type, 16 arrowhead size, 32 arrowhead), else the MULTILEADER's `fallback`.
+ */
+function lineSetting(line: Entry, flag: number, code: number, fallback: number): number {
+  return (numOf(line, 93) & flag) !== 0 ? numOf(line, code, fallback) : fallback;
+}
+
+/** The x and y groups of a point at `code` (and code + 10), or none when there is no point. */
+function pairsAt(code: number, p: Pt | null): Pair[] {
+  return p ? [{ code, value: String(p.x) }, { code: code + 10, value: String(p.y) }] : [];
+}
+
+/**
+ * A leader line's arrowhead at its first point `tip`, pointing away from `toward`, `size` long: none
+ * for the _NONE block, the block named when the drawing has it (AutoCAD draws an arrowhead block one
+ * unit long with its tip at the origin and its back along -x), and otherwise, as for a leader that
+ * names no block, AutoCAD's default closed filled arrow.
+ */
+function leaderArrow(w: Walk, place: Place, m: Affine, e: Entry, layer: string, style: DxfStyle, tip: Pt, toward: Pt, size: number, block: string): void {
+  const name = block.trim().toUpperCase();
+  if (!(size > 0) || name === "_NONE") return;
+  if (name !== "" && w.blocks.has(name)) {
+    const turn = Math.atan2(tip.y - toward.y, tip.x - toward.x) / DEG;
+    const pairs: Pair[] = [{ code: 2, value: name }, ...pairsAt(10, tip), { code: 41, value: String(size) }, { code: 42, value: String(size) }, { code: 50, value: String(turn) }];
+    insert(w, place, m, { type: e.type, pairs }, layer, [], style);
+    return;
+  }
+  const arrow = arrowheadShape(m, tip, toward, size);
+  if (arrow) push(w, e.type, layer, arrow, style);
+}
+
+/**
+ * AutoCAD's default arrowhead, a closed filled one: its tip at a leader line's first point, its back
+ * along the first segment toward `toward`, `size` long and a third as wide. Null when it has no size.
+ */
+function arrowheadShape(m: Affine, tip: Pt, toward: Pt, size: number): DxfShape | null {
+  const len = Math.hypot(toward.x - tip.x, toward.y - tip.y);
+  if (!(size > 0) || !(len > 0)) return null;
+  const ux = (toward.x - tip.x) / len;
+  const uy = (toward.y - tip.y) / len;
+  const bx = tip.x + ux * size;
+  const by = tip.y + uy * size;
+  const half = size / 6;
+  return {
+    kind: "fill",
+    rings: [[applyPt(m, tip), applyPt(m, { x: bx - uy * half, y: by + ux * half }), applyPt(m, { x: bx + uy * half, y: by - ux * half })]],
+  };
+}
+
+/** The dogleg from a leader's last point along its dogleg vector (11), for its length (40); null when either is missing. */
+function doglegShape(m: Affine, from: Pt, leader: Entry): DxfShape | null {
+  const v = pointOf(leader, 11);
+  const length = numOf(leader, 40);
+  const n = v ? Math.hypot(v.x, v.y) : 0;
+  if (!v || !(n > 0) || !(length > 0)) return null;
+  return polylineShape(m, [from, { x: from.x + (v.x / n) * length, y: from.y + (v.y / n) * length }], false);
 }
 
 // ---- objects for the document ------------------------------------------------------

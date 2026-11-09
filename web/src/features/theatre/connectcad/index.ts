@@ -16,6 +16,7 @@ import type { EditSession } from "../../../core/index.ts";
 import { attempt, setEditGroup } from "../../../app/commands.ts";
 import { store } from "../../../app/state.ts";
 import { errorMessage, toast } from "../../../app/toast.ts";
+import { need } from "../../../app/menuReasons.ts";
 import { addStageRows, addStageTools } from "../registry.ts";
 import { clearCableNumbers, connectSelected, editDeviceArray, editSockets, numberCables, renumberObjects } from "./dialogs.ts";
 import { checkDrawing, clearMarkup } from "./markup.ts";
@@ -59,16 +60,16 @@ function panelCommand(label: string, job: (s: EditSession, ids: readonly string[
 addStageRows("ConnectCAD", () => [
   { label: "ConnectCAD Settings…", enabled: open, run: run(connectcadSettings) },
   "-",
-  { label: "Connect Selected", enabled: selection, run: connectSelected },
+  { label: "Connect Selected", why: need.selection, enabled: selection, run: connectSelected },
   { label: "Check Drawing…", enabled: open, run: run(checkDrawing) },
   { label: "ConnectCAD Status", enabled: open, run: openConnectcadStatus },
   { label: "Clear Markup", enabled: open, run: clearMarkup },
   "-",
   { label: "Number Cables…", enabled: open, run: run(numberCables) },
   { label: "Clear Cable Numbers", enabled: open, run: run(clearCableNumbers) },
-  { label: "Renumber ConnectCAD Objects…", enabled: selection, run: run(renumberObjects) },
-  { label: "Combine Panels", enabled: selection, run: () => panelCommand("Combine Panels", combinePanels) },
-  { label: "Split Panels", enabled: selection, run: () => panelCommand("Split Panels", splitPanels) },
+  { label: "Renumber ConnectCAD Objects…", why: need.selection, enabled: selection, run: run(renumberObjects) },
+  { label: "Combine Panels", why: need.selection, enabled: selection, run: () => panelCommand("Combine Panels", combinePanels) },
+  { label: "Split Panels", why: need.selection, enabled: selection, run: () => panelCommand("Split Panels", splitPanels) },
   "-",
   { label: "Calculate Cable Lengths…", enabled: open, run: run(calculateCableLengths) },
   { label: "Analyze Cable Routes", enabled: open, run: run(analyzeCableRoutes) },
@@ -91,8 +92,8 @@ addStageRows("ConnectCAD", () => [
 
 addStageRows("ConnectCAD Layout", () => [
   { label: "Create Equipment…", enabled: open, run: run(createEquipment) },
-  { label: "Create Rack Elevation…", enabled: selection, run: run(createRackElevation) },
-  { label: "Create Equipment Detail View…", enabled: selection, run: run(createEquipmentDetailView) },
+  { label: "Create Rack Elevation…", why: need.selection, enabled: selection, run: run(createRackElevation) },
+  { label: "Create Equipment Detail View…", why: need.selection, enabled: selection, run: run(createEquipmentDetailView) },
 ]);
 
 addStageTools((env) => [new DeviceTool(env), new DeviceBuilderTool(env), new ExternalTool(env), new DistributionAmpTool(env), new TermPanelTool(env), new JackfieldTool(env), new LinkedJackfieldTool(env), new ConnectorPanelTool(env), new AdapterTool(env), new SocketTool(env), new SocketLoopTool(env), new TerminatorTool(env), new ConnectTool(env), new ReRouteTool(env), new LegendTool(env), new LayoutRoomTool(env), new EquipmentRackTool(env), new EquipmentItemTool(env), new RackFrameTool(env), new AdapterSlotTool(env), new RackWorksheetTool(env), new PanelConnectorTool(env), new ColorCodedTextTool(env), new LinkedQrTool(env), new CableRouteTool(env), new DropPointTool(env), new EditCablingTool(env)]);

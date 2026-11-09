@@ -89,7 +89,7 @@
   background: none;
   border: 0;
   border-radius: var(--radius);
-  cursor: pointer;
+  cursor: default;
 }
 
 .th-tab:hover {
@@ -133,7 +133,7 @@
   text-align: left;
   white-space: nowrap;
   background: var(--surface);
-  cursor: pointer;
+  cursor: default;
   user-select: none;
 }
 

@@ -10,11 +10,13 @@ This page covers making and editing 3D objects: the Model menu's extrudes, sweep
 
 It needs an extrude in the drawing to copy settings from. New extrudes are saved without a cached body, as Vectorworks saves the parts of most plug-in objects.
 
+Object Info shows and edits an extrude's footprint (X, Y, Width and Depth, from its lower left corner) and its Bottom. Its Height is shown but not set yet.
+
 **Limits:** whether Vectorworks rebuilds one on opening isn't confirmed.
 
 ### Multiple Extrude
 
-**Model › Multiple Extrude…** (<kbd>⌥⌘E</kbd>) makes one multiple extrude of the height given through two or more of the shapes Extrude takes, on one layer or group: the backmost at the bottom and the frontmost at the top (more evenly between). It takes the backmost's class, attributes and material. It too copies settings from an extrude and has no cached body.
+**Model › Multiple Extrude…** (<kbd>⌥⌘E</kbd>) makes one multiple extrude of the height given through two or more of the shapes Extrude takes, on one layer or group: the backmost at the bottom and the frontmost at the top (more evenly between). It takes the backmost's class, attributes and material. It too copies settings from an extrude and has no cached body. Object Info shows and edits its footprint and Bottom, as for an extrude.
 
 ### Tapered Extrude
 
@@ -280,4 +282,4 @@ Each of these commands can place its list as text where the drawing is clicked n
 
 ### 3D Properties
 
-**AEC › Machine Design › 3D Properties…** adds, for the same selection, their radii of gyration and, from a density or specific gravity, their mass, weight and mass moments of inertia.
+**Tools › Machine Design › 3D Properties…** adds, for the same selection, their radii of gyration and, from a density or specific gravity, their mass, weight and mass moments of inertia.

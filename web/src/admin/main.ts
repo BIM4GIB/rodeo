@@ -1,22 +1,72 @@
-// The admin page (rodeo.build/admin, admin.html): Overview, People and Settings for the accounts in
-// ADMIN_EMAILS (server/src/admin.ts). It is a page of its own, without the editor, so it opens
-// fast on a phone. The tab shows in the address (#people); the overview's period is remembered.
+// The admin page (rodeo.build/admin, admin.html), for the accounts in ADMIN_EMAILS
+// (server/src/admin.ts and its neighbours). It is a page of its own, without the editor, so it opens
+// fast on a phone. A side bar (a strip along the top on narrow screens) holds its tabs in three
+// groups: what is happening (Live, Overview, Audience, Revenue, Usage), what admins look after
+// (People, Feedback, Errors, Gallery, Announcements, Funding), and the server (Settings, System).
+// The tab shows in the address (#people); the period the analytics tabs show is remembered.
 
 import { h } from "../app/dom.ts";
 import { errorMessage } from "../app/toast.ts";
 import { account, adminApi, refreshUser, serverConfig } from "../platform/api.ts";
 import type { ServerConfig, User } from "../platform/protocol.ts";
-import { overviewView } from "./overview.ts";
+import { announcementsView } from "./announcements.ts";
+import { audienceView } from "./audience.ts";
+import type { AdminContext, Tab } from "./context.ts";
+import { errorsView } from "./errors.ts";
+import { feedbackView } from "./feedback.ts";
+import { fundingView } from "./funding.ts";
+import { galleryView } from "./gallery.ts";
+import { liveView } from "./live.ts";
+import { overviewTab } from "./overview.ts";
 import { peopleView } from "./people.ts";
+import { revenueView } from "./revenue.ts";
 import { settingsView } from "./settings.ts";
+import { systemView } from "./system.ts";
+import { usageView } from "./usage.ts";
 
-type Tab = "overview" | "people" | "settings";
+interface TabSpec {
+  readonly id: Tab;
+  readonly label: string;
+  /** shows the period picker */
+  readonly period?: boolean;
+  readonly view: (ctx: AdminContext) => HTMLElement;
+}
 
-const TABS: readonly { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "people", label: "People" },
-  { id: "settings", label: "Settings" },
+const GROUPS: readonly { readonly label: string; readonly tabs: readonly TabSpec[] }[] = [
+  {
+    label: "Analytics",
+    tabs: [
+      { id: "live", label: "Live", view: liveView },
+      { id: "overview", label: "Overview", period: true, view: overviewTab },
+      { id: "audience", label: "Audience", period: true, view: audienceView },
+      { id: "revenue", label: "Revenue", period: true, view: revenueView },
+      { id: "usage", label: "Usage", period: true, view: usageView },
+    ],
+  },
+  {
+    label: "Manage",
+    tabs: [
+      // made once and kept while the page is open, so its search and place survive a look elsewhere
+      { id: "people", label: "People", view: (ctx) => (people ??= peopleView(ctx.currency)) },
+      { id: "feedback", label: "Feedback", view: feedbackView },
+      { id: "errors", label: "Errors", view: errorsView },
+      { id: "gallery", label: "Gallery", view: galleryView },
+      { id: "announcements", label: "Announcements", view: announcementsView },
+      { id: "funding", label: "Funding and sponsor", view: fundingView },
+    ],
+  },
+  {
+    label: "Server",
+    tabs: [
+      { id: "settings", label: "Settings", view: settingsView },
+      { id: "system", label: "System", view: systemView },
+    ],
+  },
 ];
+
+const TABS: readonly TabSpec[] = GROUPS.flatMap((g) => g.tabs);
+
+let people: HTMLElement | null = null;
 
 const PERIODS: readonly { days: number; label: string }[] = [
   { days: 7, label: "Last 7 days" },
@@ -26,8 +76,8 @@ const PERIODS: readonly { days: number; label: string }[] = [
 ];
 
 const PERIOD_KEY = "openvwx.admin.days";
-/** the overview is fetched again this often while it is in front */
-const REFRESH_MS = 60_000;
+/** the side bar's counts (new feedback, the day's errors) are fetched again this often */
+const BADGES_MS = 120_000;
 
 const root = document.getElementById("admin") as HTMLElement;
 
@@ -79,60 +129,85 @@ function tabOf(hash: string): Tab {
   return TABS.some((t) => t.id === id) ? (id as Tab) : "overview";
 }
 
-function start(user: User, currency: string | null): void {
+function start(user: User, cfg: ServerConfig, currency: string | null): void {
   let tab = tabOf(location.hash);
   let days = storedDays();
-  let timer = 0;
-  let people: HTMLElement | null = null;
+  let shown: AbortController | null = null;
+  const counts = new Map<Tab, number>();
 
   const content = h("main", { cls: "adm-main" });
   const period = h("select", { cls: "adm-input", attrs: { "aria-label": "Period" } }, ...PERIODS.map((p) => h("option", { text: p.label, value: String(p.days) })));
   period.value = String(days);
   const updated = h("span", { cls: "adm-updated", attrs: { "aria-live": "polite" } });
-  const tabs = h("nav", { cls: "adm-tabs", attrs: { "aria-label": "Admin" } });
+  const nav = h("nav", { cls: "adm-nav", attrs: { "aria-label": "Admin" } });
 
-  const renderTabs = (): void => {
-    tabs.replaceChildren(
-      ...TABS.map((t) => {
-        const a = h("a", { cls: t.id === tab ? "adm-tab on" : "adm-tab", text: t.label, attrs: { href: `#${t.id}` } });
-        if (t.id === tab) a.setAttribute("aria-current", "page");
-        return a;
-      }),
+  const renderNav = (): void => {
+    nav.replaceChildren(
+      ...GROUPS.map((g) =>
+        h(
+          "div",
+          { cls: "adm-nav-group" },
+          h("span", { cls: "adm-nav-label", text: g.label }),
+          ...g.tabs.map((t) => {
+            const n = counts.get(t.id) ?? 0;
+            const a = h(
+              "a",
+              { cls: t.id === tab ? "adm-nav-item on" : "adm-nav-item", attrs: { href: `#${t.id}` } },
+              h("span", { text: t.label }),
+              n > 0 ? h("span", { cls: "adm-nav-count", text: n > 99 ? "99+" : String(n) }) : null,
+            );
+            if (t.id === tab) a.setAttribute("aria-current", "page");
+            return a;
+          }),
+        ),
+      ),
     );
-    period.hidden = tab !== "overview";
-    updated.hidden = tab !== "overview";
   };
 
-  /** Fetches the overview; `quiet` keeps what is shown until the new one is in (the minute's refresh). */
-  const loadOverview = async (quiet: boolean): Promise<void> => {
-    if (!quiet) content.replaceChildren(h("p", { cls: "adm-empty", text: "Loading…" }));
-    try {
-      const o = await adminApi.overview(days);
-      if (tab !== "overview") return;
-      const y = window.scrollY;
-      content.replaceChildren(overviewView(o));
-      if (quiet) window.scrollTo(0, y);
-      updated.textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
-    } catch (err) {
-      if (!quiet) content.replaceChildren(h("p", { cls: "adm-error", text: errorMessage(err) }));
-    }
+  const badge = (t: Tab, n: number): void => {
+    if ((counts.get(t) ?? 0) === n) return;
+    counts.set(t, n);
+    renderNav();
   };
 
   const show = (): void => {
-    clearInterval(timer);
-    renderTabs();
-    if (tab === "overview") {
-      void loadOverview(false);
-      timer = window.setInterval(() => {
-        if (document.visibilityState === "visible") void loadOverview(true);
-      }, REFRESH_MS);
-    } else if (tab === "people") {
-      // kept while the page is open, so its search and place survive a look at the overview
-      people ??= peopleView(currency);
-      content.replaceChildren(people);
-    } else {
-      content.replaceChildren(settingsView(currency));
+    shown?.abort();
+    shown = new AbortController();
+    const spec = TABS.find((t) => t.id === tab) ?? TABS[1];
+    renderNav();
+    nav.querySelector(".adm-nav-item.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    period.hidden = !spec.period;
+    updated.textContent = "";
+    const signal = shown.signal;
+    const ctx: AdminContext = {
+      user,
+      config: cfg,
+      currency,
+      days,
+      signal,
+      badge,
+      updated: (text) => {
+        if (!signal.aborted) updated.textContent = text ?? "";
+      },
+    };
+    try {
+      content.replaceChildren(spec.view(ctx));
+    } catch (err) {
+      content.replaceChildren(h("p", { cls: "adm-error", text: errorMessage(err) }));
     }
+    document.title = `${spec.label} · Rodeo Admin`;
+  };
+
+  const loadBadges = (): void => {
+    adminApi
+      .overview(1)
+      .then((o) => {
+        badge("feedback", o.inbox.feedback);
+        badge("errors", o.inbox.errors);
+      })
+      .catch(() => {
+        // the counts wait for the next turn
+      });
   };
 
   period.addEventListener("change", () => {
@@ -142,11 +217,12 @@ function start(user: User, currency: string | null): void {
     } catch {
       // not remembered
     }
-    void loadOverview(false);
+    show();
   });
   window.addEventListener("hashchange", () => {
     tab = tabOf(location.hash);
     show();
+    window.scrollTo(0, 0);
   });
 
   root.replaceChildren(
@@ -154,12 +230,15 @@ function start(user: User, currency: string | null): void {
       "header",
       { cls: "adm-header" },
       h("a", { cls: "adm-brand", attrs: { href: "/", title: "Open the editor" } }, h("img", { attrs: { src: "/icon.svg", alt: "" } }), h("span", { text: "Rodeo" }), h("span", { cls: "adm-brand-sub", text: "Admin" })),
-      tabs,
       h("div", { cls: "adm-header-end" }, updated, period, h("span", { cls: "adm-me", text: user.name, title: user.email })),
     ),
-    content,
+    h("div", { cls: "adm-shell" }, nav, content),
   );
   show();
+  loadBadges();
+  window.setInterval(() => {
+    if (document.visibilityState === "visible") loadBadges();
+  }, BADGES_MS);
 }
 
 async function boot(): Promise<void> {
@@ -182,7 +261,7 @@ async function boot(): Promise<void> {
     return;
   }
   const terms = cfg.credit ?? cfg.ai?.credit ?? null;
-  start(user, terms?.currency ?? null);
+  start(user, cfg, terms?.currency ?? null);
 }
 
 boot().catch((err: unknown) => message("The admin page couldn't load", errorMessage(err)));

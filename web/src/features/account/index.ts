@@ -6,7 +6,6 @@ import { onReady, registerMenu, registerTopBar, registerUrlHandler, registerWelc
 import type { Row } from "../../app/menu.ts";
 import { toast } from "../../app/toast.ts";
 import { currentUser, refreshUser } from "../../platform/api.ts";
-import { openFundingSettings } from "./adminFunding.ts";
 import { config, loadConfig } from "./config.ts";
 import { balanceBeforeTopUp, creditTerms, formatCredit } from "./credit.ts";
 import { openFundingDialog } from "./funding.ts";
@@ -92,10 +91,7 @@ registerWelcome(adCard, "main");
 registerWelcome(donateLink, "foot");
 
 registerMenu("Help", () => {
-  const cfg = config();
-  const user = currentUser();
   const rows: Row[] = [];
-  if (cfg?.funding) rows.push({ label: "Support Rodeo…", run: openFundingDialog });
-  if (cfg && user?.admin) rows.push({ label: "Funding and Sponsor Settings…", run: openFundingSettings });
+  if (config()?.funding) rows.push({ label: "Support Rodeo…", run: openFundingDialog });
   return rows;
 });

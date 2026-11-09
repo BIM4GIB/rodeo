@@ -3,12 +3,12 @@
 // collaboration"). The collab feature's UI (avatars, cursors, follow) and crit
 // mode use the API below; the collab feature starts it when a cloud drawing opens.
 //
-// Every change is one splice of the record list. Local changes apply at once
-// and are sent one at a time; the server orders them with everyone else's.
-// A change from someone else that arrives while ours are unconfirmed is
-// rewritten past ours (theirs first, as the server ordered it); a change of
-// ours that touches the same records as theirs is turned back here and refused
-// there, so every editor ends with the same bytes.
+// Every change is the runs of the record list it replaced (core/splice.ts).
+// Local changes apply at once and are sent one at a time; the server orders
+// them with everyone else's. A change from someone else that arrives while ours
+// are unconfirmed is rewritten past ours (theirs first, as the server ordered
+// it); a change of ours that touches the same records as theirs is turned back
+// here and refused there, so every editor ends with the same bytes.
 //
 // Project Sharing: layers checked out by someone else can't be changed here.
 // While someone else holds one, the session's layer guard refuses such a change
@@ -21,6 +21,7 @@ import type { EditSession } from "../../core/index.ts";
 import { ApiError, collabUrl, files, type Progress } from "../../platform/api.ts";
 import {
   BIG_DRAWING,
+  COLLAB_PROTOCOL,
   type Checkout,
   type Comment,
   type Peer,
@@ -28,8 +29,10 @@ import {
   type Role,
   type ServerMessage,
   type WireOp,
+  type WireRun,
 } from "../../platform/protocol.ts";
-import { Replica, type Incoming } from "./replica.ts";
+import type { Run } from "../../core/splice.ts";
+import { Replica, type Incoming, type Outgoing } from "./replica.ts";
 
 export type CollabStatus = "connecting" | "live" | "offline";
 
@@ -147,8 +150,18 @@ function fromBase64(text: string): Uint8Array {
 /** A change as the server sends it, records and header bytes decoded. */
 function incoming(op: WireOp): Incoming {
   const header = op.header && { at: op.header.at, bytes: fromBase64(op.header.bytes) };
-  return { start: op.start, del: op.del, add: op.add.map(fromBase64), kind: op.kind, ids: op.ids, header };
+  const run = (r: WireRun): Run<Uint8Array> => ({ start: r.start, del: r.del, add: r.add.map(fromBase64) });
+  return { runs: [run(op), ...(op.more ?? []).map(run)], kind: op.kind, ids: op.ids, header };
 }
+
+/** A change of ours as the server takes it: its first run, the others in `more`, records base64. */
+function outgoing(op: Outgoing): WireOp {
+  const header = op.header && { at: op.header.at, bytes: toBase64(op.header.bytes) };
+  const [first, ...rest] = op.runs.map((r): WireRun => ({ start: r.start, del: r.del, add: r.add.map(toBase64) }));
+  return { ...first, ...(rest.length ? { more: rest } : {}), kind: op.kind, ids: op.ids, header };
+}
+
+const OUTDATED = "Rodeo was updated: reload the page to keep editing with others";
 
 const PRESENCE_MS = 66;
 const RETRY_MS = [1000, 2000, 5000, 10000];
@@ -196,10 +209,7 @@ class Live implements CollabSession {
     collabSeq: number,
   ) {
     this.replica = new Replica(session, collabSeq, {
-      send: (op) => {
-        const header = op.header && { at: op.header.at, bytes: toBase64(op.header.bytes) };
-        this.send({ t: "op", id: op.id, base: op.base, op: { start: op.start, del: op.del, add: op.add.map(toBase64), kind: op.kind, ids: op.ids, header } });
-      },
+      send: (op) => this.send({ t: "op", id: op.id, base: op.base, op: outgoing(op) }),
       undone: (why) =>
         this.rejected(
           why === "clash"
@@ -312,7 +322,7 @@ class Live implements CollabSession {
     const ws = new WebSocket(collabUrl(this.fileId));
     this.ws = ws;
     let welcomed = false;
-    ws.onopen = () => ws.send(JSON.stringify({ t: "hello", versionId: this.versionId }));
+    ws.onopen = () => ws.send(JSON.stringify({ t: "hello", versionId: this.versionId, proto: COLLAB_PROTOCOL }));
     ws.onmessage = (e) => {
       let msg: ServerMessage;
       try {
@@ -327,12 +337,14 @@ class Live implements CollabSession {
       if (this.ws !== ws) return;
       this.ws = null;
       if (this.closed) return;
+      const outdated = e.code === 4003 && e.reason === "outdated";
       if (!welcomed && failed) {
-        failed(new Error(e.code === 1006 ? "the server could not be reached" : e.reason || `closed (${e.code})`));
+        failed(new Error(outdated ? OUTDATED : e.code === 1006 ? "the server could not be reached" : e.reason || `closed (${e.code})`));
         return;
       }
-      // 4003: removed from the drawing
+      // 4003: removed from the drawing, or this page is older than the server ("outdated")
       if (e.code === 4003) {
+        if (outdated) this.rejected(OUTDATED);
         this.leave();
         return;
       }

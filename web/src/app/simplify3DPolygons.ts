@@ -44,7 +44,7 @@ export async function simplify3DPolygonsDialog(): Promise<void> {
   const layer = h(
     "select",
     { cls: "menu-dialog-input menu-dialog-select wide", attrs: { "aria-label": "Put Simplified Result in Layer" } },
-    ...layers.map((l) => h("option", { value: l.id, text: l.name })),
+    ...layers.map((l) => h("option", { attrs: { translate: "no" }, value: l.id, text: l.name })),
   );
   layer.value = layers.some((l) => l.id === store.activeLayerId) ? store.activeLayerId! : (layers[0]?.id ?? "");
   const v = await showDialog<{ mm: number; layerId: string }>({

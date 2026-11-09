@@ -1,0 +1,107 @@
+/* The agent pill in the top bar: a chip on the app's pill surface, with what agents are doing and
+   a Stop or Resume button. Solid like the other pills: no blur, no glass. */
+
+.mcp-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  max-width: 360px;
+  height: 26px;
+  padding: 0 3px 0 9px;
+  border: 1px solid var(--pill-border);
+  border-radius: 13px;
+  background: var(--pill);
+  color: var(--text-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mcp-pill-main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.mcp-pill-main:hover {
+  color: var(--text);
+}
+
+.mcp-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mcp-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.mcp-pill[data-mode="paused"] .mcp-dot {
+  background: var(--text-3);
+}
+
+.mcp-pill[data-mode="working"] .mcp-dot {
+  animation: mcp-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes mcp-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcp-pill[data-mode="working"] .mcp-dot {
+    animation: none;
+  }
+}
+
+.mcp-pill-stop {
+  flex: none;
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--fill-strong);
+  color: var(--text);
+  font: inherit;
+  cursor: default;
+}
+
+.mcp-pill-stop:hover {
+  background: var(--btn);
+}
+
+.mcp-pill[data-mode="working"] .mcp-pill-stop {
+  color: var(--danger);
+}
+
+.mcp-pill[data-mode="paused"] .mcp-pill-stop {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* a phone's top bar has no room for words: the dot and the button stay */
+@media (max-width: 600px) {
+  .mcp-pill {
+    max-width: none;
+  }
+
+  .mcp-pill-text {
+    display: none;
+  }
+}

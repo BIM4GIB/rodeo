@@ -31,12 +31,12 @@ export function accountSlot(place: "topbar" | "hub" = "topbar"): HTMLElement {
       ? h("button", { cls: "btn", text: "Sign in", attrs: { type: "button", title: "Sign in to keep your drawings in the cloud" } })
       : h(
           "button",
-          { cls: "tb-btn acct-signin", attrs: { type: "button", "aria-label": "Sign in", title: "Sign in" } },
+          { cls: "tb-btn acct-signin", attrs: { type: "button", "aria-label": "Sign in", title: "Sign in to keep your drawings in the cloud" } },
           h("span", { cls: "acct-signin-icon", html: PERSON }),
           h("span", { cls: "acct-signin-label", text: "Sign in" }),
         );
   signIn.addEventListener("click", () => openSignIn(""));
-  const avatar = h("button", { cls: "acct-avatar", attrs: { type: "button", "aria-label": "Account", title: "Account" } });
+  const avatar = h("button", { cls: "acct-avatar", attrs: { type: "button", "aria-label": "Account", title: "Account and plan" } });
   menuButton(avatar, accountRows);
   slot.append(signIn, avatar);
 
@@ -68,6 +68,7 @@ function accountRows(): Row[] {
       : { label: "Free plan", enabled: () => false },
     "-",
     { label: "Account…", run: openAccountDialog },
+    { label: "Connect an Agent…", run: () => void import("../mcp/index.ts").then((m) => m.openAgentsDialog()) },
   ];
   if (cfg.billing) {
     rows.push(supporter ? { label: "Manage Plan…", run: () => void managePlan() } : { label: "Get Rodeo Plus…", run: openSupporterDialog });

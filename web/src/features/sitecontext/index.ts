@@ -22,7 +22,7 @@ registerMenu("View", () => [
     checked: () => siteOverlay.on,
     run: () => siteOverlay.setShown(!siteOverlay.on),
   },
-]);
+], { after: "Set Lighting Options…" });
 
 on3d((v) => siteOverlay.attach(v));
 

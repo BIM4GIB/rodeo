@@ -6,7 +6,7 @@ This page covers running Python scripts and Vectorscripts written for Vectorwork
 
 ### Python scripts
 
-Python written for Vectorworks runs on the open drawing from **Plug-ins › Run Script…**, and from **Tools › Plug-ins** as in Vectorworks. It runs in a window that:
+Python written for Vectorworks runs on the open drawing from **Tools › Plug-ins › Run Script…**, as in Vectorworks. It runs in a window that:
 
 - keeps the script in this browser
 - opens and saves `.py` files
@@ -116,3 +116,11 @@ npm run vwx -- dxf drawing.vwx out.dxf
 npm run vwx -- pdf drawing.vwx out.pdf [--layer NAME ...]
 npm run vwx -- roundtrip drawing.vwx
 ```
+
+### Agents on your own files
+
+`npx -y @rodeo.build/cli mcp` runs Rodeo as a local MCP server for Claude Code, Claude Desktop, Cursor and other agents, with no browser and no account: it inspects and converts any file Rodeo reads, and makes, reads, edits and models in .vwx drawings. In Claude Code: `claude mcp add rodeo-files -- npx -y @rodeo.build/cli mcp`. In Claude Desktop or Cursor, add a server with the command `npx` and the arguments `-y @rodeo.build/cli mcp`.
+
+Paths are relative to the folder the agent starts it in. It never replaces a file unless the agent asks to overwrite.
+
+**Limits:** .vwx drawings over 500 MB are for Rodeo itself. Pictures of the drawing (looks and renders) need Rodeo in a browser.
