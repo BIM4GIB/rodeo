@@ -46,7 +46,7 @@ export function mountStories(root: HTMLElement): void {
   const storyRow = (st: StoryInfo): HTMLElement => {
     const units = store.session?.doc.info.units;
     const sub = [st.suffix && `Suffix ${st.suffix}`, formatLength(st.elevation, units)].filter(Boolean).join(" · ");
-    const names = h("div", { cls: "names" }, h("div", { cls: "name", text: st.name }), h("div", { cls: "sub", text: sub }));
+    const names = h("div", { cls: "names" }, h("div", { cls: "name", text: st.name, attrs: { translate: "no" } }), h("div", { cls: "sub", text: sub }));
     const count = h("span", { cls: "count", text: String(st.layers.length), title: "Design layers on this story" });
     const row = h("div", { cls: `row story-row${st.index === selected ? " selected" : ""}`, attrs: { "data-story": String(st.index) } }, names, count);
     row.addEventListener("click", () => {
@@ -77,7 +77,7 @@ export function mountStories(root: HTMLElement): void {
     const level = st.levels.find((v) => v.layer === l.name);
     const above = (l.elevation ?? 0) - st.elevation;
     const sub = [level?.type, `${above >= 0 ? "+" : ""}${formatLength(above, units)}`].filter(Boolean).join(" · ");
-    const names = h("div", { cls: "names" }, h("div", { cls: "name", text: l.name }), h("div", { cls: "sub", text: sub }));
+    const names = h("div", { cls: "names" }, h("div", { cls: "name", text: l.name, attrs: { translate: "no" } }), h("div", { cls: "sub", text: sub }));
     const count = h("span", { cls: "count", text: String(l.objectCount), title: "Objects on this layer" });
     const row = h("div", { cls: `row story-layer${l.id === store.activeLayerId ? " active" : ""}`, attrs: { "data-id": l.id } }, names, count);
     row.addEventListener("click", () => setActiveLayer(l.id));

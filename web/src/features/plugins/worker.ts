@@ -13,7 +13,7 @@ export interface PluginError {
   readonly line: number | null;
 }
 
-export type Outcome = { readonly ok: true; readonly text?: string } | { readonly ok: false; readonly error: PluginError };
+export type Outcome = { readonly ok: true; readonly text?: string; readonly value?: unknown } | { readonly ok: false; readonly error: PluginError };
 
 export type LogLevel = "log" | "warn" | "error";
 
@@ -23,6 +23,8 @@ export interface WorkerEvents {
   log(level: LogLevel, text: string, line: number | null): void;
   /** the plug-in added a menu item */
   menu(id: string, label: string): void;
+  /** the plug-in added a render engine (openvwx.render.engine), described by `spec` (plain data, unchecked) */
+  engine?(id: string, spec: unknown): void;
   /** an error nothing in the plug-in caught (a timer, a rejected promise nobody awaited) */
   uncaught(error: PluginError): void;
 }
@@ -36,6 +38,8 @@ interface Message {
   readonly method?: string;
   readonly args?: unknown[];
   readonly label?: string;
+  readonly spec?: unknown;
+  readonly value?: unknown;
   readonly level?: string;
   readonly line?: number | null;
 }
@@ -87,6 +91,11 @@ export class PluginWorker {
   /** Runs one menu item the plug-in added. */
   invoke(menuId: string): Promise<Outcome> {
     return this.request("invoke", { menu: menuId });
+  }
+
+  /** Has one of the plug-in's render engines make a picture of `job` (plain data); its pictures come back as the outcome's value. */
+  render(engineId: string, job: unknown): Promise<Outcome> {
+    return this.request("render", { engine: engineId, job });
   }
 
   /** Evaluates one line of the script console: an expression's value, or a body's result. */
@@ -155,6 +164,9 @@ export class PluginWorker {
       case "menu":
         this.events.menu(String(m.id), String(m.label ?? ""));
         return;
+      case "engine":
+        this.events.engine?.(String(m.id), m.spec);
+        return;
       case "uncaught":
         this.events.uncaught(this.mapError(m.error));
         return;
@@ -163,11 +175,12 @@ export class PluginWorker {
         return;
       case "done":
       case "invoked":
-      case "evaluated": {
+      case "evaluated":
+      case "rendered": {
         const resolve = m.id !== undefined ? this.waiting.get(m.id) : undefined;
         if (!resolve) return;
         this.waiting.delete(m.id as number);
-        resolve(m.ok ? { ok: true, text: m.text } : { ok: false, error: this.mapError(m.error) });
+        resolve(m.ok ? { ok: true, text: m.text, value: m.value } : { ok: false, error: this.mapError(m.error) });
         return;
       }
       default:

@@ -1,4 +1,4 @@
-// AEC > Electrical > Conductor Sizing Calc…, Vectorworks' Conductor Sizing Calculator: one of a
+// AEC > MEP > Conductor Sizing Calc…, Vectorworks' Conductor Sizing Calculator: one of a
 // conductor's wire size, resistivity, voltage drop, phase factor, voltage, current or length,
 // worked out from the rest by the voltage drop formula VD = PF × K × I × L / CM (K the material's
 // resistivity in ohm-circular mils per foot at the temperature, from its value at 75 °C and its
@@ -104,7 +104,7 @@ const last = {
   voltage: "",
 };
 
-/** AEC > Electrical > Conductor Sizing Calc…: a conductor's wire size, resistivity, voltage drop, phase factor, voltage, current or run length from the rest. */
+/** AEC > MEP > Conductor Sizing Calc…: a conductor's wire size, resistivity, voltage drop, phase factor, voltage, current or run length from the rest. */
 export async function conductorSizingDialog(): Promise<void> {
   const input = (label: string, value: string): HTMLInputElement =>
     h("input", { cls: "menu-dialog-input", value, attrs: { type: "text", inputmode: "decimal", "aria-label": label } });

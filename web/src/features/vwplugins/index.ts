@@ -217,7 +217,6 @@ registerMenu(
       ],
     },
   ],
-  { after: "Run Script…" },
 );
 
 // ---- its own Object Info layout ---------------------------------------------------------------------

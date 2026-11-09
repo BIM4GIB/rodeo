@@ -1,6 +1,6 @@
 // Modify > Guides, as Vectorworks Fundamentals has them: guides are the objects in the class named
 // Guides. Make Guide puts the selected objects in it (making the class when the drawing has none),
-// Show Guides and Hide Guides set the class's visibility, Select Guides selects the guides on the
+// Show Guides (a ticked toggle) shows or hides the class, Select Guides selects the guides on the
 // active layer (or in the group being edited), and Delete All Guides deletes those on every layer.
 // Each is one undo step.
 
@@ -34,12 +34,13 @@ export function makeGuide(): void {
   if (r) toast(`${ids.length} object${ids.length === 1 ? " is a guide" : "s are guides"} now, in the class ${GUIDES}.`, "info");
 }
 
-export function canShowGuides(): boolean {
-  const c = guidesClass();
-  return !!c && c.visibility !== "visible";
+/** Whether the drawing has the Guides class, which Show Guides shows or hides. */
+export function hasGuidesClass(): boolean {
+  return guidesClass() !== null;
 }
 
-export function canHideGuides(): boolean {
+/** Whether the guides are shown: their class visible or grayed, not hidden. */
+export function guidesShown(): boolean {
   const c = guidesClass();
   return !!c && c.visibility !== "hidden";
 }

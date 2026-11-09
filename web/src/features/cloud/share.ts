@@ -1,6 +1,7 @@
 // Share dialog for a cloud drawing: the people in it with their roles (an owner
 // changes or removes them), invitations by role with an optional email, and public
-// view-only links with the embed code for each. A change takes effect at once and
+// view-only links with each one's preview, embed options and codes (features/embed/panel.ts), and
+// publishing to the gallery (features/gallery/publish.ts). A change takes effect at once and
 // the dialog reloads what it touched; the controls the user is typing in are kept.
 
 import { h } from "../../app/dom.ts";
@@ -9,6 +10,8 @@ import { toast, errorMessage } from "../../app/toast.ts";
 import { currentUser, files, sharing } from "../../platform/api.ts";
 import { CAN_EDIT, type Invite, type Member, type Role, type Share } from "../../platform/protocol.ts";
 import { openSupporterDialog } from "../account/supporter.ts";
+import { embedPanel } from "../embed/panel.ts";
+import { galleryRow } from "../gallery/publish.ts";
 import { cloudCall, explainFailure } from "./cloud.ts";
 import { copyRow, note, openModal } from "./ui.ts";
 
@@ -177,13 +180,12 @@ async function showShare(fileId: string): Promise<void> {
     createLink,
   );
 
-  const shareCard = (s: Share): HTMLElement => {
+  const shareCard = (s: Share, index: number): HTMLElement => {
     const revoke = h("button", { cls: "btn small danger", text: "Revoke", attrs: { type: "button" } });
     revoke.addEventListener("click", async () => {
       const ok = await confirmDialog("Revoke Link", "Anyone with this link loses access to the drawing. Revoke it?", "Revoke");
       if (ok) await act("Revoke", () => sharing.revokeShare(s.token));
     });
-    const embed = `<iframe src="${s.embedUrl}" width="800" height="600" style="border:0" allowfullscreen></iframe>`;
     return h(
       "div",
       { cls: "share-link" },
@@ -194,8 +196,7 @@ async function showShare(fileId: string): Promise<void> {
         revoke,
       ),
       copyRow(s.url, "Link"),
-      note("Embed code", "share-hint"),
-      copyRow(embed, "Embed code"),
+      embedPanel(s, file.name, index === 0),
     );
   };
 
@@ -220,6 +221,7 @@ async function showShare(fileId: string): Promise<void> {
   modal.body.append(section("People", peopleBox));
   if (canShare) {
     modal.body.append(inviteSection(), section("Public link", linksBox));
+    if (canManage) modal.body.append(section("Gallery", galleryRow(fileId, () => modal.close())));
   } else {
     modal.body.append(note("Only owners and editors can change who sees this drawing."));
   }

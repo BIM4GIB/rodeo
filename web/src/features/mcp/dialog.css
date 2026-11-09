@@ -1,0 +1,169 @@
+/* Connect an Agent: the dialog where a token is made for an outside agent and the line that
+   connects it is copied. Solid panels, as the editor's other dialogs; colours are the tokens in
+   tokens.css, so both themes follow. */
+
+.menu-dialog.mcp-dialog {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.mcp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+.mcp-heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mcp-status {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.mcp-warn {
+  margin: 0;
+  color: var(--warn);
+}
+
+/* ---- connections ------------------------------------------------------ */
+
+.mcp-tokens {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcp-token {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.mcp-token:last-child {
+  border-bottom: none;
+}
+
+.mcp-token-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcp-token-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-token-name strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* an app whose name Rodeo couldn't check: a quiet warning after its name */
+.mcp-unverified {
+  color: var(--warn);
+  font-weight: 400;
+}
+
+.mcp-token-prefix {
+  flex: none;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.mcp-token-meta {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.mcp-token-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.mcp-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* ---- a new connection ------------------------------------------------- */
+
+.mcp-new .menu-dialog-field {
+  margin-bottom: 0;
+}
+
+.mcp-new .menu-dialog-label {
+  flex: none;
+}
+
+.mcp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mcp-actions,
+.mcp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mcp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcp-tabs {
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
+.mcp-snippet {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.mcp-snippet-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  text-decoration: none;
+}

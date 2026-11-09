@@ -93,7 +93,7 @@
   padding: 5px 8px;
   border-radius: 7px;
   color: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .sx-item.active {
@@ -230,7 +230,7 @@
   background: var(--btn);
   color: var(--text);
   font: 12px var(--font);
-  cursor: pointer;
+  cursor: default;
 }
 
 .sx-query-btn.primary {
@@ -317,7 +317,7 @@
   color: var(--text);
   text-align: left;
   font: 11px var(--mono);
-  cursor: pointer;
+  cursor: default;
 }
 
 .sx-help-example:hover {
@@ -362,7 +362,7 @@
   color: var(--text);
   font: 12px var(--font);
   text-align: left;
-  cursor: pointer;
+  cursor: default;
 }
 
 .sx-usage:hover {

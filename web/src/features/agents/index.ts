@@ -4,8 +4,9 @@
 // credit where the server sells it). A planner model works with a team of subagents on a cheaper
 // one. Registered with app/ext.ts when imported; the engine loads with the first message.
 
-import { appContext, registerMenu, registerPalette } from "../../app/ext.ts";
+import { appContext, registerLeaveGuard, registerMenu, registerPalette } from "../../app/ext.ts";
 import type { Row } from "../../app/menu.ts";
+import { windowBusy } from "./busy.ts";
 import { agentsPanel } from "./panel.ts";
 import "./agents.css";
 
@@ -20,3 +21,6 @@ const ICON =
 registerPalette({ id: AGENTS_PALETTE, title: "Agents", side: "left", icon: ICON, tabOf: "navigation", fill: true, body: agentsPanel() });
 
 registerMenu("Window", (): Row[] => [{ label: "Agents", run: () => appContext()?.palettes.show(AGENTS_PALETTE) }]);
+
+// an agent looking in 3D or rendering keeps its drawing in front until it is done
+registerLeaveGuard(windowBusy);

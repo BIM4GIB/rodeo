@@ -1,7 +1,7 @@
 // Composition root: owns the session lifecycle (open, change, save, export),
 // builds the tools, renderer and panels, and wires global listeners.
 
-import { PLAN_VIEW, blobSource, bytesSource, openVwxStream, setTurnSteps, withHeldImages, type ChangeEvent, type EditSession, type LayerView } from "../core/index.ts";
+import { PLAN_VIEW, blobSource, bytesSource, openVwxStream, savedYear, setTurnSteps, withHeldImages, type ChangeEvent, type EditSession, type LayerView } from "../core/index.ts";
 import { blankDrawing } from "../core/blank.ts";
 import { exportDxf as toDxf } from "../export/dxf.ts";
 import { pageEmf } from "../export/emf.ts";
@@ -22,10 +22,10 @@ import { documentBlob, documentBytes, holdOptions, writeToFile } from "./writeOu
 import { floating3d, mountFloatingPanes, redrawFloating, type PlanAt } from "./floatingPanes.ts";
 import { createSymbolDialog, duplicateArrayDialog } from "./arrayDialog.ts";
 import { installAutosave } from "./autosave.ts";
-import { type RecentEntry, loadRecent, openRecentEntry, rememberRecent } from "./recent.ts";
+import { type RecentEntry, loadRecent, openRecentEntry, recentRows, rememberRecent } from "./recent.ts";
 import { note, reportFailure } from "./reports.ts";
 import { askPdfOptions, printPdf } from "./exportDialog.ts";
-import { importDroppedDwg, importDroppedDxf, importDwgFile, importDxfFile, openDwgBytes } from "./dxfImport.ts";
+import { importDroppedDwg, importDroppedDxf, importDwgFile, importDxfFile, type ImportOptions, openDwgBytes } from "./dxfImport.ts";
 import { installCrosshair } from "./crosshair.ts";
 import { drawRulers, installRulers } from "./rulers.ts";
 import { drawOriginMarker } from "./origin.ts";
@@ -70,7 +70,7 @@ import { exportKmlDialog } from "./kmlExport.ts";
 import { exportUsdDialog } from "./usdExport.ts";
 import { importPdf, importPdfFile } from "./pdfImport.ts";
 import { importMetafile, importMetafileFile, isMetafile } from "./emfImport.ts";
-import { openContextMenu } from "./menu.ts";
+import { openContextMenu, type Row } from "./menu.ts";
 import { confirmDialog, mountMenuBar } from "./menubar.ts";
 import { drawingRows, mountDocTabs, type DocTab, type DocTabActions } from "./docTabs.ts";
 import { mountMenuStrip } from "./menuStrip.ts";
@@ -98,6 +98,7 @@ import { PanTool, ToolController, type ToolEnv, type ToolOverlay } from "./tools
 import { SelectTool, forceSelect, forceSelectTarget, selectForMenu } from "./tools/select.ts";
 import { hiddenObjects, onHiddenChange, withoutHidden } from "./hiddenObjects.ts";
 import { mountUnhideButton } from "./objectVisibility.ts";
+import { decodeWaitingXt, stopDecodingXt } from "./parasolidDecode.ts";
 import { CircleTool, LineTool, RectTool, RoundRectTool } from "./tools/draw.ts";
 import { ParkingAlongPathTool, ParkingAreaTool, RailingTool, StakeTool } from "./tools/paths.ts";
 import { FenceTool } from "./tools/fence.ts";
@@ -243,6 +244,8 @@ import { RotateTool } from "./tools/rotate.ts";
 import { View } from "./view.ts";
 import { installViewHistory } from "./viewHistory.ts";
 import {
+  canClosePane,
+  closePane,
   livePane,
   livePlanPane,
   mountPanes,
@@ -252,6 +255,7 @@ import {
   paneCount,
   paneKind,
   pictureOf,
+  relabelPanes,
   setLivePane,
   setLivePlanPane,
   setPaneKind,
@@ -259,22 +263,27 @@ import {
   startView,
   type PaneKind,
 } from "./viewPanes.ts";
-import { mountModeBar, mountViewBar } from "./viewbar.ts";
+import { mountModeBar, mountViewBar, STANDARD_VIEWS } from "./viewbar.ts";
 import type { CameraState, PaneLook, RenderMode, View3D, ViewPreset } from "./view3d.ts";
 import { mountWelcome, recentSource } from "./welcome.ts";
 import {
   appStarted,
+  closeQuestion,
   documentChanged,
   documentSource,
+  drawingClosed,
   editMade,
   extensionPalettes,
+  extensionTabMarks,
   fileIn,
   leaveRefusal,
   mountExtensionChrome,
   readOnlySession,
   registerOverlay,
+  setTabsRedraw,
   view3dCreated,
   type DocumentSource,
+  type DrawingRef,
 } from "./ext.ts";
 
 /** quiet time after an edit before the 3D model is rebuilt */
@@ -312,7 +321,7 @@ function imperialRegion(): boolean {
 }
 
 /** Vectorworks' render mode numbers (a design layer's saved view) for the 3D view's modes, and back */
-const CODE_OF_MODE: Record<RenderMode, number> = { wireframe: 0, hidden: 6, dashed: 7, sketch: 6, shaded: 11, textured: 11, realistic: 11, pathtraced: 11 };
+const CODE_OF_MODE: Record<RenderMode, number> = { wireframe: 0, hidden: 6, dashed: 7, sketch: 6, shaded: 11, textured: 11, realistic: 11, pathtraced: 11, ai: 11 };
 const MODE_OF_CODE = new Map<number, RenderMode>([
   [0, "wireframe"],
   [6, "hidden"],
@@ -339,6 +348,12 @@ interface OpenDrawing {
   selection: ReadonlySet<string>;
   /** null until it has been in front: it opens fitted */
   view: { cx: number; cy: number; scale: number } | null;
+  /** what features (an agent's run) hold on to it by */
+  readonly ref: DrawingRef;
+  /** draws it while it is behind (an agent looking at it), made when first asked for */
+  behindScene: Scene | null;
+  /** stops hearing of its edits made while it is behind */
+  readonly unlisten: () => void;
 }
 
 /** Tools a command takes up for its clicks: each hands back to the tool used before the command. */
@@ -399,6 +414,7 @@ export class App {
   private shown: OpenDrawing | null = null;
   /** draws the tab strip again */
   private redrawTabs: () => void = () => {};
+  private tabsQueued = false;
 
   constructor() {
     // the 3D view as it was last left, when Preferences > 3D remembers it
@@ -910,8 +926,12 @@ export class App {
       },
       close: (i) => void this.closeDrawing(this.drawings[i] ?? null),
       newDrawing: () => void this.newDrawing(),
+      newFromTemplate: () => void this.newFromTemplate(),
+      open: () => void this.openPicker(),
+      recentRows: () => recentRows((entry) => void this.openRecent(entry)),
     };
     this.redrawTabs = mountDocTabs(byId("stage"), tabActions);
+    setTabsRedraw(() => this.redrawTabs());
     const menuBar = mountMenuBar(byId<HTMLButtonElement>("btn-menu"), {
       scene: this.scene,
       view: this.view,
@@ -963,7 +983,7 @@ export class App {
         standardView: (preset) => void this.standardView(preset),
         topPlan: () => this.topPlan(),
         renderMode: () => this.renderMode3d,
-        setRenderMode: (mode) => this.setRenderMode(mode),
+        setRenderMode: (mode) => this.chooseRenderMode(mode),
         duplicateArray: () => void duplicateArrayDialog(this.scene),
         createSymbol: () => void createSymbolDialog(this.scene),
         saveView: () => void saveViewDialog(panels.savedViews),
@@ -985,10 +1005,12 @@ export class App {
       fit: () => this.fit(true),
       fitObjects: () => this.fitObjects(),
       toggle3d: () => this.toggle3d(),
+      planAlone: () => this.planAlone(),
+      view3dAlone: () => void this.view3dAlone(),
       standardView: (preset) => void this.standardView(preset),
       topPlan: () => this.topPlan(),
       renderMode: () => this.renderMode3d,
-      setRenderMode: (mode) => this.setRenderMode(mode),
+      setRenderMode: (mode) => this.chooseRenderMode(mode),
     });
     mountModeBar(this.controller);
     mountStatusBar();
@@ -997,12 +1019,12 @@ export class App {
       view3d: () => this.view3d,
       standardView: (preset) => this.standardView(preset),
       lookAlong: async (toward) => {
-        if (!store.view3d) await this.show3d();
+        if (!store.view3d) await this.focus3d();
         if (store.view3d) this.view3d?.lookAlong(toward);
       },
       topPlan: () => this.topPlan(),
       show3d: async () => {
-        if (!store.view3d) await this.show3d();
+        if (!store.view3d) await this.focus3d();
       },
       zoom: (factor) => {
         if (store.view3d) this.view3d?.zoomBy(factor);
@@ -1057,10 +1079,10 @@ export class App {
     const steer = async (picked: boolean): Promise<void> => {
       const n = navigationFor(store.tool);
       stage.classList.toggle("steering", n !== null);
-      if (n && store.session && !store.view3d) await this.show3d();
+      if (n && store.session && !store.view3d) await this.focus3d();
       const v = this.view3d;
       if (!v) return;
-      v.setNavigation(n?.nav ?? "orbit", n?.sensitivity);
+      v.setNavigation(n?.nav ?? "orbit", n?.sensitivity, n?.viewing);
       if (n?.objectCentre) v.orbitAboutObjects(this.withParts(store.selection));
       if (n?.viewerHeight == null) {
         standing = null;
@@ -1131,7 +1153,7 @@ export class App {
     installFileDrop((file, handle, all) => {
       const pictures = all.filter((f) => isImageName(f.name));
       if (store.session && isImageName(file.name)) void importImages(pictures, this.view);
-      else void this.openFile(file, handle);
+      else void this.openFile(file, handle, all);
     });
     void loadRecent();
     installAutosave({ openDocument: async (bytes, name) => void (await this.openDocument(bytes, name, null)) });
@@ -1155,7 +1177,7 @@ export class App {
       this.requestDraw();
     });
     new ResizeObserver(() => this.renderer.resize()).observe(byId("canvas-wrap"));
-    // Window > View Panes: the plan and 3D views in two, three or four panes
+    // View > Multiple View Panes: the plan and 3D views in two, three or four panes
     mountPanes(byId("canvas-wrap"), {
       resized: () => this.renderer.resize(),
       activate: (i) => (paneKind(i) === "plan" ? this.activatePlanPane(i) : this.activatePane(i)),
@@ -1163,6 +1185,8 @@ export class App {
         this.queuePictures(true);
         this.queuePlanPictures();
       },
+      view: (i) => this.paneView(i),
+      menu: (i) => this.paneMenu(i),
     });
     onPanes(() => (this.panesApplied = this.applyPanes()));
     // Reset Multiple View Panes: the live 3D view back to its pane's standard view too, once it's shown
@@ -1180,13 +1204,11 @@ export class App {
     stage.classList.toggle("two-panes", multiPane());
     // the plan panes' pictures follow the drawing, not the live plan's zoom
     store.on(["session", "file", "selection", "layer", "class", "display", "attrs"], () => this.queuePlanPictures());
-    // with several panes, a click in the inactive live plan or live 3D pane makes it active, and does nothing else
+    // with several panes, a press in the inactive live plan or live 3D pane makes it active first, then does what a press there does
     const activate =
       (to3d: boolean) =>
-      (e: PointerEvent): void => {
+      (): void => {
         if (!multiPane() || store.view3d === to3d || (to3d ? livePane() : livePlanPane()) < 0) return;
-        e.stopImmediatePropagation();
-        e.preventDefault();
         store.view3d = to3d;
         store.emit("view3d");
         this.requestDraw();
@@ -1217,27 +1239,36 @@ export class App {
       view: this.view,
       palettes,
       controller: this.controller,
+      snap: this.snap,
       canvas: this.canvas,
       requestDraw: () => this.requestDraw(),
       openDocument: async (bytes, name, options) => void (await this.openDocument(bytes, name, null, options?.replace ?? false, options?.source ?? null)),
+      openFile: (file) => this.openFile(file, Promise.resolve(null)),
       documentBytes: async () => (store.session ? documentBytes(store.session) : null),
       fit: () => this.fit(),
       show3d: async () => {
-        // several panes, none of them 3D: the active one becomes the 3D view
-        if (multiPane() && livePane() < 0) await this.turnActivePane("3d");
-        else if (!store.view3d) await this.show3d();
+        // with several panes, the live 3D view's pane made the active one (the active pane turned into one when none is)
+        await this.focus3d();
         // the model waits for a pause in the edits (onDocChange): a look or render asked for now has the edits made so far
         clearTimeout(this.rebuild3dTimer);
         this.update3d();
         return this.view3d;
       },
       view3d: () => this.view3d,
+      show3dAlone: async () => {
+        await this.view3dAlone();
+        clearTimeout(this.rebuild3dTimer);
+        this.update3d();
+        return this.view3d;
+      },
       show2d: () => this.topPlan(),
       renderMode: () => this.renderMode3d,
       setRenderMode: (mode) => this.setRenderMode(mode),
       setTool,
       setToolFrom: (id, obj) => this.controller.setToolFrom(id, obj),
       save: () => this.save(),
+      frontDrawing: () => this.shown?.ref ?? null,
+      drawings: () => this.drawings.map((d) => d.ref),
     });
   }
 
@@ -1374,7 +1405,11 @@ export class App {
     try {
       const picked = await pickFile(false, true);
       if (picked && /\.dwg$/i.test(picked.name)) await this.openDwg(picked.file, picked.name);
-      else if (picked && isRevitModelName(picked.name)) await this.openRevitModel(new Uint8Array(await picked.file.arrayBuffer()), picked.name);
+      else if (picked && meshFormat(picked.name)) {
+        // a STEP or IGES model comes in as a dropped one does: into a new drawing when none is open
+        if (!store.session) await this.newDrawing();
+        await importMesh(new File([picked.file], picked.name), this.scene, this.view);
+      } else if (picked && isRevitModelName(picked.name)) await this.openRevitModel(new Uint8Array(await picked.file.arrayBuffer()), picked.name);
       else if (picked && isRevitName(picked.name)) await showRevitFile(new Uint8Array(await picked.file.arrayBuffer()), picked.name, this.view);
       else if (picked && isArchicadName(picked.name)) await this.openArchicadModel(picked.file, picked.name);
       else if (picked) tellFileIn(picked.file, picked.name, await this.openDocument(picked.file, picked.name, picked.handle));
@@ -1397,8 +1432,8 @@ export class App {
   }
 
   /** A .dwg opened with File > Open, or dropped with no drawing open: its objects in a new, untitled drawing. */
-  private async openDwg(file: Blob, name: string): Promise<void> {
-    await openDwgBytes(new Uint8Array(await file.arrayBuffer()), name, () => this.newDrawing(), this.scene, this.view);
+  private async openDwg(file: Blob, name: string, options: ImportOptions = {}): Promise<void> {
+    await openDwgBytes(new Uint8Array(await file.arrayBuffer()), name, () => this.newDrawing(), this.scene, this.view, options);
   }
 
   /** Opens `data` as the next "Untitled n", with no file behind it: Save asks where it goes. */
@@ -1418,8 +1453,14 @@ export class App {
   private async openRevitModel(bytes: Uint8Array, fileName: string): Promise<void> {
     const before = store.session;
     let made: RevitDrawing | null = null;
+    // the drawing made again with more elements in full, from the worker once this one is open
+    let tab: OpenDrawing | null = null;
+    let detail: { drawing: RevitDrawing; count: number } | null = null;
     const opened = await this.openReading(fileName, async (say, signal) => {
-      const drawing = await revitModelDrawing(bytes, fileName, (step) => say(`${step}…`), signal);
+      const drawing = await revitModelDrawing(bytes, fileName, (step) => say(`${step}…`), signal, (d, count) => {
+        detail = { drawing: d, count };
+        if (tab) void this.detailRevit(tab, d, count);
+      });
       made = drawing;
       return { data: drawing.bytes, name: `${drawing.name.replace(/[\\/:*?"<>|]+/g, "-")}.vwx`, handle: null };
     });
@@ -1427,6 +1468,50 @@ export class App {
     if (store.session === before || !made) return;
     this.untitled = true;
     toast(revitSummary(made), "info");
+    tab = this.shown;
+    const early = detail as { drawing: RevitDrawing; count: number } | null;
+    if (tab && early) void this.detailRevit(tab, early.drawing, early.count);
+  }
+
+  /**
+   * A Revit model's drawing `d`, open as it came in, takes the place of `drawing`, the same made again
+   * with `count` more elements drawn in full instead of as boxes, while it is still untouched (nothing
+   * done, so nothing to undo, and not saved). Its tab, layer and view stay as they were.
+   */
+  private async detailRevit(d: OpenDrawing, drawing: RevitDrawing, count: number): Promise<void> {
+    const untouched = (): boolean => this.drawings.includes(d) && !d.handle && !d.session.canUndo() && !d.session.canRedo();
+    const missed = (): void => {
+      if (this.drawings.includes(d)) toast(`${count.toLocaleString()} more ${count === 1 ? "element" : "elements"} of ${baseName(d.name)} can now be drawn in full. This drawing stays as it is: open the Revit file again to get them.`, "info");
+    };
+    if (!untouched()) return missed();
+    let session: EditSession;
+    try {
+      session = await openVwxStream(bytesSource(drawing.bytes), d.name, inflater());
+    } catch {
+      return;
+    }
+    if (!untouched() || (d === this.shown && leaveRefusal())) return missed();
+    const front = d === this.shown;
+    if (front) this.stash();
+    const camera = front && this.view3d?.visible ? this.view3d.cameraState() : null;
+    const next: OpenDrawing = {
+      ...d,
+      session,
+      fileSize: drawing.bytes.length,
+      layerId: d.layerId && session.doc.layers().some((l) => l.id === d.layerId) ? d.layerId : null,
+      selection: new Set<string>(),
+      ref: this.drawingRef(() => next),
+      behindScene: null,
+      unlisten: session.onChange((e) => this.changedBehind(next, e)),
+    };
+    this.drawings[this.drawings.indexOf(d)] = next;
+    d.unlisten();
+    drawingClosed(d.ref, next.ref);
+    if (front) {
+      this.present(next);
+      if (camera) this.view3d?.setCameraState(camera);
+    }
+    toast(`${count.toLocaleString()} more ${count === 1 ? "element" : "elements"} of ${baseName(d.name)} now drawn in full.`, "info");
   }
 
   /** Opens the Archicad project `file` (named `fileName`) as a new drawing of its model, made off the page; says what came in. */
@@ -1457,17 +1542,19 @@ export class App {
     }
   }
 
-  /** A file dropped on the window: a .dxf, .dwg, .pdf, .emf or 3D model (.obj, .glb, .gltf, .3ds, .stl, .ifc, .usd, .3dm, .fbx, .dae, .kmz, .blend, .ply, .skp) is imported into the open drawing (a DWG or model into a new one when none is open), a .csv, .tsv, .dif, .slk or .xlsx as a worksheet, a Revit project opens as a drawing of its model (a family's or template's details are shown), anything else is opened (with its handle, when the browser gave one). */
-  private async openFile(file: File, handle: Promise<FileSystemFileHandle | null>): Promise<void> {
+  /** A file dropped on the window: a .dxf, .dwg, .pdf, .emf or 3D model (.obj, .glb, .gltf, .3ds, .stl, .ifc, .usd, .3dm, .stp, .step, .igs, .iges, .sldprt, .ipt, .fcstd, .f3d, .prt, .fbx, .dae, .kmz, .blend, .ply, .skp) is imported into the open drawing (a DWG or model into a new one when none is open), a .csv, .tsv, .dif, .slk or .xlsx as a worksheet, a Revit project opens as a drawing of its model (a family's or template's details are shown), anything else is opened (with its handle, when the browser gave one). */
+  private async openFile(file: File, handle: Promise<FileSystemFileHandle | null>, all: readonly File[] = []): Promise<void> {
+    // the other files dropped with it may be the external references it needs
+    const siblings = all.filter((f) => f !== file);
     if (/\.dxf$/i.test(file.name)) {
-      await importDroppedDxf(file, this.scene, this.view);
+      await importDroppedDxf(file, this.scene, this.view, { siblings });
       return;
     }
     if (/\.dwg$/i.test(file.name)) {
-      if (store.session) await importDroppedDwg(file, this.scene, this.view);
+      if (store.session) await importDroppedDwg(file, this.scene, this.view, { siblings });
       else {
         try {
-          await this.openDwg(file, file.name);
+          await this.openDwg(file, file.name, { siblings });
         } catch (err) {
           toast(`Could not read ${file.name}: ${errorMessage(err)}`);
         }
@@ -1616,8 +1703,13 @@ export class App {
       await nextTask();
       if (cancelled) return "cancelled";
       done();
-      this.attach(session, file.name, file.handle, size, source, replacing);
+      // a file from before Vectorworks 2018 opens converted to the current format: it keeps no file
+      // handle, so saving asks where to write and the original stays as Vectorworks wrote it
+      const year = savedYear(session.doc.info.savedWith);
+      const converted = year !== null && year < 2018;
+      this.attach(session, file.name, converted ? null : file.handle, size, source, replacing);
       if (file.handle) void rememberRecent(file.handle);
+      if (converted) toast(`${baseName(file.name)} is from Vectorworks ${year}: its 2D came in, its 3D objects and images aren't read yet. Saving makes a new file in the current format, so the original stays as it is.`, "info");
       return "open";
     } catch (err) {
       if (cancelled) return "cancelled";
@@ -1644,10 +1736,14 @@ export class App {
     }
   }
 
-  /** View > Standard Views: the 3D view (built when needed) seen from a standard direction; with several panes, the active pane's. */
+  /**
+   * View > Standard Views: the 3D view (built when needed) seen from a standard direction; with
+   * several panes, the live 3D view's, its pane made the active one (the active pane turned into a
+   * 3D view when no pane is one).
+   */
   private async standardView(preset: ViewPreset): Promise<void> {
-    if (multiPane() && store.session) return this.turnActivePane("3d", preset);
-    if (!store.view3d) await this.show3d();
+    if (multiPane() && store.session && livePane() < 0) return this.turnActivePane("3d", preset);
+    await this.focus3d();
     if (store.view3d) this.view3d?.setView(preset);
   }
 
@@ -1658,7 +1754,7 @@ export class App {
       return;
     }
     this.sectionKind = kind;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (this.controller.activeId !== "section2d") this.sectionFrom = this.controller.activeId;
     this.controller.setTool("section2d");
   }
@@ -1666,7 +1762,7 @@ export class App {
   /** Modify > Hatch…: once a hatch is chosen, the Hatch tool takes its origin and turn on the 2D drawing, then hands back. */
   private async startHatch(): Promise<void> {
     if (!(await chooseHatch())) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("hatch");
   }
@@ -1674,7 +1770,7 @@ export class App {
   /** Modify > Drafting Aids > Create Dividing Lines…: the Dividing Lines tool takes its two clicks on the 2D drawing, then hands back. */
   private startDividing(): void {
     if (!startDividingLines()) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("dividing");
   }
@@ -1682,7 +1778,7 @@ export class App {
   /** Modify > Align > Align/Distribute Leader Lines…: once the dialog is set, the Leader Lines tool takes the reference line's two clicks on the 2D drawing, then hands back. */
   private async startLeaders(): Promise<void> {
     if (!(await startAlignLeaders())) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("alignleaders");
   }
@@ -1690,7 +1786,7 @@ export class App {
   /** Modify > Rotate 3D…: for Next Mouse Click, the center is clicked on the 2D drawing, then the tool hands back. */
   private startRotate3D(): void {
     void rotate3DDialog(this.scene, () => {
-      if (store.view3d) this.toggle3d();
+      if (store.view3d) this.topPlan();
       if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
       this.controller.setTool("rotate3dcentre");
     });
@@ -1699,15 +1795,27 @@ export class App {
   /** AEC > Roof Face…: once the dialog is set, the Roof Face tool takes the axis' clicks on the 2D drawing, then hands back. */
   private async startRoofFace(): Promise<void> {
     if (!(await roofFaceDialog())) return;
-    if (store.view3d) this.toggle3d();
+    if (store.view3d) this.topPlan();
     if (!CLICK_TOOLS.has(this.controller.activeId)) this.clicksFrom = this.controller.activeId;
     this.controller.setTool("roofaxis");
   }
 
-  /** View > Standard Views > Top/Plan: back to the 2D drawing; with several panes, the active pane becomes a plan. */
+  /**
+   * View > Standard Views > Top/Plan: back to the 2D drawing; with several panes, the live plan's
+   * pane made the active one (the active pane turned into a plan when no pane is one).
+   */
   private topPlan(): void {
-    if (multiPane() && store.session) void this.turnActivePane("plan");
-    else if (store.view3d) this.toggle3d();
+    if (multiPane() && store.session) {
+      if (livePlanPane() < 0) void this.turnActivePane("plan");
+      else this.setActive3d(false);
+      this.requestDraw();
+      return;
+    }
+    if (!store.view3d) return;
+    this.view3d?.hide();
+    store.view3d = false;
+    store.emit("view3d");
+    this.requestDraw();
   }
 
   /**
@@ -1759,20 +1867,63 @@ export class App {
     store.emit("view3d");
   }
 
-  /** View > 3D View: shows or hides the 3D view of the visible design layers; with several panes, turns the active pane into the other kind. */
+  /**
+   * View > 3D View and the 3 key: shows or hides the 3D view of the visible design layers; with
+   * several panes, makes the live plan's pane or the live 3D view's the active one, as Top/Plan and
+   * the standard views do.
+   */
   toggle3d(): void {
-    if (multiPane() && store.session) {
-      void this.turnActivePane(store.view3d ? "plan" : "3d");
-      return;
-    }
-    if (store.view3d) {
-      this.view3d?.hide();
-      store.view3d = false;
-      store.emit("view3d");
+    if (store.view3d) this.topPlan();
+    else void this.focus3d();
+  }
+
+  /**
+   * Shows the 3D view: alone, or with several panes the live 3D view's pane made the active one (the
+   * active pane turned into a 3D view when no pane is one).
+   */
+  private async focus3d(): Promise<void> {
+    if (!store.session) return;
+    if (!multiPane()) {
+      if (!store.view3d) await this.show3d();
+    } else if (livePane() < 0) {
+      await this.turnActivePane("3d");
+    } else if (this.view3d?.visible) {
+      this.setActive3d(true);
       this.requestDraw();
     } else {
-      void this.show3d();
+      await this.show3d();
     }
+  }
+
+  /** The top bar's 2D: the plan alone, in one pane (from several, the live plan, at its zoom and place). */
+  private planAlone(): void {
+    if (!multiPane()) {
+      this.topPlan();
+      return;
+    }
+    this.setActive3d(false);
+    setPaneLayout("single");
+    this.requestDraw();
+  }
+
+  /** The top bar's 3D: the 3D view alone, in one pane (from several, the live 3D view, its camera kept). */
+  private async view3dAlone(): Promise<void> {
+    if (multiPane() && livePane() >= 0 && this.view3d?.visible) {
+      this.setActive3d(true);
+      setPaneLayout("single");
+      return;
+    }
+    if (multiPane()) setPaneLayout("single");
+    await this.focus3d();
+  }
+
+  /** View > Rendering and the render mode pop-up: with several panes, the live 3D view's pane made the active one first. */
+  private chooseRenderMode(mode: RenderMode): void {
+    if (multiPane() && livePane() >= 0 && this.view3d?.visible) {
+      this.setActive3d(true);
+      this.requestDraw();
+    }
+    this.setRenderMode(mode);
   }
 
   private async show3d(): Promise<void> {
@@ -1811,6 +1962,10 @@ export class App {
       this.view3d.setViz(store.viz3d);
       this.view3d.setDashes(this.dashes3d());
       this.view3d.onPick = (id, additive) => this.pick3d(id, additive);
+      // the selection drawn over the model, the objects inside the selected groups with them
+      const select = (): void => this.view3d?.setSelected(this.withParts(store.selection));
+      store.on("selection", select);
+      select();
       this.view3d.afterRender.add(() => this.queuePictures());
       view3dCreated(this.view3d);
     }
@@ -1869,7 +2024,7 @@ export class App {
   }
 
   /**
-   * Window > View Panes: several panes show the 3D view beside the plan (built now if it isn't yet)
+   * View > Multiple View Panes: several panes show the 3D view beside the plan (built now if it isn't yet)
    * when any of them is a 3D one, the active pane staying active, the other panes starting from
    * their standard views; one pane hides the 3D view unless it is the active one.
    */
@@ -1986,10 +2141,10 @@ export class App {
   }
 
   /**
-   * With several panes, Top/Plan, 3D View and the standard views act on the active pane: it becomes
-   * a plan, starting as the live plan is, or a 3D view seen from `preset` (isometric when none),
-   * and takes the live view of its kind; the live view of the other kind it held moves to another
-   * pane of that kind, when there is one.
+   * With several panes, the active pane becomes a plan, starting as the live plan is, or a 3D view
+   * seen from `preset` (isometric when none), and takes the live view of its kind; the live view of
+   * the other kind it held moves to another pane of that kind, when there is one. Top/Plan, 3D View
+   * and the standard views do this when no pane shows their kind; a pane's chip, whenever asked.
    */
   private async turnActivePane(kind: PaneKind, preset?: ViewPreset): Promise<void> {
     const i = store.view3d ? livePane() : livePlanPane();
@@ -2024,8 +2179,52 @@ export class App {
     this.queuePlanPictures();
   }
 
-  /** Draws the pictures of the 3D panes without the live view again, soon, when what they show has changed (or `force`). */
+  /** Makes pane `i` the active one: the live view of its kind moves there first when it shows a picture. */
+  private focusPane(i: number): void {
+    if (pictureOf(i)) {
+      if (paneKind(i) === "plan") this.activatePlanPane(i);
+      else this.activatePane(i);
+    } else {
+      this.setActive3d(i === livePane());
+    }
+    this.requestDraw();
+  }
+
+  /** A pane's chip menu: pane `i` made active, then showing the plan or the 3D view (seen from `preset`, when given). */
+  private async showInPane(i: number, kind: PaneKind, preset?: ViewPreset): Promise<void> {
+    this.focusPane(i);
+    await this.turnActivePane(kind, preset);
+  }
+
+  /** The standard view 3D pane `i` looks from, by name, for its chip; null for a plan or a view turned from them. */
+  private paneView(i: number): string | null {
+    const v = this.view3d;
+    if (paneKind(i) !== "3d" || !v) return null;
+    const state = i === livePane() ? v.cameraState() : this.paneCams.get(i);
+    const preset = state ? v.standardViewOf(state) : startView(i);
+    return STANDARD_VIEWS.find(([p]) => p === preset)?.[1] ?? null;
+  }
+
+  /** The menu of pane `i`'s chip: what it shows, the standard views (a 3D pane's), and closing it. */
+  private paneMenu(i: number): Row[] {
+    const rows: Row[] = [
+      { label: "Show Plan Here", checked: () => paneKind(i) === "plan", run: () => void this.showInPane(i, "plan") },
+      { label: "Show 3D Here", checked: () => paneKind(i) === "3d", run: () => void this.showInPane(i, "3d") },
+    ];
+    if (paneKind(i) === "3d") {
+      rows.push("-", ...STANDARD_VIEWS.map(([preset, label]): Row => ({ label, i18n: `View › ${label}`, run: () => void this.showInPane(i, "3d", preset) })));
+    }
+    rows.push("-", { label: "Close Pane", enabled: () => canClosePane(i), run: () => closePane(i) });
+    return rows;
+  }
+
+  /**
+   * Names the panes' chips again, then draws the pictures of the 3D panes without the live view
+   * again, soon, when what they show has changed (or `force`). Called after every frame of the
+   * live 3D view, so its pane's chip follows it.
+   */
   private queuePictures(force = false): void {
+    relabelPanes();
     const v = this.view3d;
     if (!multiPane() || !v?.visible || (!force && v.lookVersion === this.picturedAt)) return;
     clearTimeout(this.picturesTimer);
@@ -2101,6 +2300,12 @@ export class App {
     }
   }
 
+  /** Draws the 3D view again as Parasolid faces arrive from the worker (parasolidDecode.ts). */
+  private readonly redraw3dFaces = (): void => {
+    this.stale3d = true;
+    if (this.seen3d) this.update3d();
+  };
+
   /** Gives the 3D view the current document's model when it is out of date. */
   private update3d(): void {
     const session = store.session;
@@ -2116,6 +2321,8 @@ export class App {
     this.stale3d = false;
     if (!this.view3d.visible) this.unframed3d = true;
     if (floating3d()) redrawFloating("3d");
+    // the solids this build left with their edges' faces go to the worker for their Parasolid ones
+    decodeWaitingXt(this.redraw3dFaces);
   }
 
   /** Design layers the 3D view shows: those the plan shows, or every visible one while a sheet layer is active. */
@@ -2162,16 +2369,103 @@ export class App {
       classIndex: null,
       selection: new Set<string>(),
       view: null,
+      ref: this.drawingRef(() => d),
+      behindScene: null,
+      unlisten: session.onChange((e) => this.changedBehind(d, e)),
     };
     const at = replacing ? this.drawings.indexOf(replacing) : -1;
     if (at >= 0) this.drawings[at] = d;
     else this.drawings.push(d);
+    if (at >= 0 && replacing) {
+      replacing.unlisten();
+      drawingClosed(replacing.ref, d.ref);
+    }
     this.present(d);
+  }
+
+  /**
+   * An open drawing as features hold on to it (an agent's run): the window's layer, selection and
+   * view while it is in front, what its tab keeps while it is behind.
+   */
+  private drawingRef(of: () => OpenDrawing): DrawingRef {
+    const front = (): boolean => this.shown === of();
+    const plan = (): View => {
+      const d = of();
+      const v = new View();
+      v.setSize(this.view.width, this.view.height);
+      if (d.view) v.setCenterAndScale(d.view.cx, d.view.cy, d.view.scale);
+      return v;
+    };
+    return {
+      get session() {
+        return of().session;
+      },
+      get source() {
+        return of().source;
+      },
+      name: () => (front() ? store.fileName : of().name),
+      isOpen: () => this.drawings.includes(of()),
+      isShown: front,
+      show: () => this.switchDrawing(of()),
+      activeLayerId: () => (front() ? store.activeLayerId : of().layerId),
+      setActiveLayer: (id) => {
+        if (front()) setActiveLayer(id);
+        else if (of().layerId !== id) {
+          of().layerId = id;
+          of().selection = new Set<string>();
+        }
+      },
+      activeClassIndex: () => (front() ? store.activeClassIndex : of().classIndex),
+      selection: () => (front() ? store.selection : of().selection),
+      setSelection: (ids) => {
+        if (front()) setSelection(ids);
+        else of().selection = new Set(ids);
+      },
+      editGroupId: () => (front() ? store.editGroupId : null),
+      visibleRect: () => (front() ? this.view : plan()).visibleRect(),
+      zoomTo: (box) => {
+        if (front()) {
+          this.view.fit(box);
+          store.emit("view");
+          this.requestDraw();
+          return;
+        }
+        const v = plan();
+        v.fit(box);
+        of().view = { cx: v.cx, cy: v.cy, scale: v.scale };
+      },
+      scene: () => {
+        const d = of();
+        if (front()) return this.scene;
+        if (!d.behindScene) {
+          d.behindScene = new Scene();
+          d.behindScene.setDocument(d.session.doc);
+        }
+        return d.behindScene;
+      },
+    };
+  }
+
+  /**
+   * An edit to a drawing behind the one in front (an agent at work in it): its scene forgets what
+   * changed, its tab's unsaved mark follows, and what keeps up with edits (edit followers) does.
+   */
+  private changedBehind(d: OpenDrawing, e: ChangeEvent): void {
+    if (d === this.shown || !this.drawings.includes(d)) return;
+    d.behindScene?.invalidate(e);
+    editMade(d.session, e, () => this.drawings.includes(d) && d !== this.shown);
+    if (this.tabsQueued) return;
+    this.tabsQueued = true;
+    requestAnimationFrame(() => {
+      this.tabsQueued = false;
+      this.redrawTabs();
+    });
   }
 
   /** Shows `d` in the window: its active layer, class, selection and view as it was left, or fitted when it is new. */
   private present(d: OpenDrawing): void {
     this.shown = d;
+    d.behindScene = null;
     document.body.classList.toggle("read-only", !!d.source?.readOnly);
     this.detachSession?.();
     this.detachSession = d.session.onChange((e) => this.onDocChange(e));
@@ -2267,10 +2561,16 @@ export class App {
         return;
       }
     }
+    const busy = closeQuestion(d.ref);
+    if (busy && !(await confirmDialog("Close drawing", `${busy} Close ${baseName(d.name)} all the same?`, "Close"))) return;
     if (d.session.dirty && !(await confirmDialog("Unsaved changes", `Close ${baseName(d.name)} and discard its unsaved changes?`, "Discard"))) return;
     const i = this.drawings.indexOf(d);
     if (i < 0) return;
     this.drawings.splice(i, 1);
+    d.unlisten();
+    drawingClosed(d.ref, null);
+    // its bodies still waiting for Parasolid faces are not wanted
+    stopDecodingXt(d.session.doc);
     if (d !== this.shown) {
       this.redrawTabs();
       return;
@@ -2331,6 +2631,7 @@ export class App {
       title: d.source?.label ? `${d.name} · ${d.source.label}` : d.name,
       dirty: d.session.dirty,
       front: d === this.shown,
+      marks: extensionTabMarks(d.ref),
     }));
   }
 
@@ -2678,7 +2979,7 @@ export class App {
 }
 
 /** the render modes the 3D view draws in, to check a kept one against */
-const RENDER_MODES: readonly RenderMode[] = ["shaded", "textured", "wireframe", "hidden", "dashed", "sketch", "realistic", "pathtraced"];
+const RENDER_MODES: readonly RenderMode[] = ["shaded", "textured", "wireframe", "hidden", "dashed", "sketch", "realistic", "pathtraced", "ai"];
 
 /** the 3D conversion resolution last given to the core */
 let turnStepsSet = 0;

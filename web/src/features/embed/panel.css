@@ -1,0 +1,108 @@
+/* The Share dialog's "Embed and preview" section: a link's picture and how it is made, how its embed
+   starts, and the codes to copy. Surfaces are solid tokens, as the rest of the editor's panels. */
+
+.embed-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+.embed-panel-summary {
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.embed-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.embed-panel-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.embed-panel-poster {
+  flex: 0 0 160px;
+  width: 160px;
+  height: 84px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.embed-panel-preview-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.embed-panel-status {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.embed-panel-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  align-items: center;
+}
+
+/* a label above its control, so each choice reads down the column */
+.embed-panel-options .menu-dialog-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.embed-panel-options .menu-dialog-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.embed-panel-turn {
+  margin: 0;
+}
+
+@media (max-width: 480px) {
+  .embed-panel-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.embed-panel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* the tab in front is pressed: the accent, as the editor shows a chosen option */
+.embed-panel .embed-panel-tab[aria-pressed="true"],
+.embed-panel .embed-panel-tab[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.embed-panel-code {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.embed-panel-code .menu-dialog-field {
+  margin-bottom: 0;
+}

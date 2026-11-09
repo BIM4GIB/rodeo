@@ -14,6 +14,7 @@ import { stopGlide } from "./glide.ts";
 import { prefs } from "./prefs.ts";
 import { SnapLoupe } from "./loupe.ts";
 import { dataBar } from "./databar.ts";
+import { t } from "./i18n.ts";
 
 export interface Painter {
   readonly ctx: CanvasRenderingContext2D;
@@ -272,7 +273,8 @@ function strokeSnapGlyph(ctx: CanvasRenderingContext2D, s: Pt, kind: SnapKind): 
 }
 
 /** Small pill with the snap name, up and to the right of the marker. */
-function snapLabel(ctx: CanvasRenderingContext2D, s: Pt, text: string): void {
+function snapLabel(ctx: CanvasRenderingContext2D, s: Pt, english: string): void {
+  const text = t(english);
   ctx.font = `11px ${SNAP_FONT}`;
   const w = ctx.measureText(text).width + 10;
   const h = 16;

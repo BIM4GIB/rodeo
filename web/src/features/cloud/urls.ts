@@ -1,12 +1,12 @@
 // Links that open a drawing when the page loads: ?file=<id> (a cloud drawing),
-// ?invite=<token> (an invitation to one), ?share=<token> (a public view-only link) and
-// ?embed=<token> (the same, framed in another page). Each drops its parameter from the
+// ?invite=<token> (an invitation to one) and ?share=<token> (a public view-only link; ?embed= is
+// the embed feature's). Each drops its parameter from the
 // address bar once it has run, so a reload does not repeat it. ?layer=<id> makes that
 // layer active once a drawing has opened from one of these links.
 
 import { setActiveLayer } from "../../app/commands.ts";
 import { h } from "../../app/dom.ts";
-import { type AppContext, type DocumentSource, documentSource, registerUrlHandler } from "../../app/ext.ts";
+import { type AppContext, type DocumentSource, documentSource, onDocument, registerUrlHandler } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
 import { confirmDialog } from "../../app/menubar.ts";
 import { errorMessage, toast } from "../../app/toast.ts";
@@ -66,15 +66,11 @@ registerUrlHandler("invite", (token) => {
 });
 
 registerUrlHandler("share", (token, params, ctx) => {
-  void openShared(token, params, ctx, false);
+  void openShared(token, params, ctx);
 });
 
-registerUrlHandler("embed", (token, params, ctx) => {
-  void openShared(token, params, ctx, true);
-});
-
-/** Opens a shared drawing view only. An embed also loses the editor's chrome (embed.css). */
-async function openShared(token: string, params: URLSearchParams, ctx: AppContext, embed: boolean): Promise<void> {
+/** Opens a shared drawing view only, under a bar saying so. */
+async function openShared(token: string, params: URLSearchParams, ctx: AppContext): Promise<void> {
   if (!(await serverConfig())) return;
   try {
     const shared = await cloudCall("Opening the shared drawing…", "Open", () =>
@@ -87,31 +83,35 @@ async function openShared(token: string, params: URLSearchParams, ctx: AppContex
     // the open was refused (unsaved changes were kept): nothing of the link is shown
     if (documentSource() !== source) return;
     applyLayer(params, ctx);
-    if (embed) showEmbedLink(token);
-    else showBanner(info, content.bytes);
+    showBanner(info, content.bytes, source, ctx);
   } finally {
-    dropParams(embed ? "embed" : "share", "layer");
+    dropParams("share", "layer");
   }
 }
 
-/** The bar above a shared drawing: view only, who shared it, and Download when the owner allows it. */
-function showBanner(info: SharedFile, bytes: Uint8Array): void {
+/** The bar over the shared drawing and the drawing it belongs to; it shows only while that drawing is in front. */
+let banner: { readonly bar: HTMLElement; readonly source: DocumentSource } | null = null;
+
+onDocument((_session, source) => {
+  if (banner) banner.bar.hidden = source !== banner.source;
+});
+
+/** The bar above a shared drawing: view only, who shared it, and Edit a Copy and Download when the owner allows it. */
+function showBanner(info: SharedFile, bytes: Uint8Array, source: DocumentSource, ctx: AppContext): void {
+  banner?.bar.remove();
   const bar = h("div", { cls: "share-banner", attrs: { role: "status" } }, h("span", { text: `View only · shared by ${info.ownerName}` }));
+  banner = { bar, source };
   if (info.allowDownload) {
+    const copy = h("button", { cls: "btn small", text: "Edit a Copy", attrs: { type: "button" } });
+    copy.addEventListener("click", () => {
+      // a copy of the bytes: opening may hand them to a worker
+      void ctx.openDocument(bytes.slice(), `Copy of ${withVwx(info.fileName)}`);
+    });
     const download = h("button", { cls: "btn small", text: "Download", attrs: { type: "button" } });
     download.addEventListener("click", () => {
       downloadBlob(withVwx(info.fileName), new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/octet-stream" }));
     });
-    bar.append(download);
+    bar.append(h("span", { cls: "share-banner-actions" }, copy, download));
   }
   (document.querySelector(".app") ?? document.body).prepend(bar);
-}
-
-/** An embed's "Open in openvwx" link: the same drawing in the editor, in a new tab. */
-function showEmbedLink(token: string): void {
-  document.body.classList.add("embed");
-  const url = new URL(location.href);
-  url.search = `?share=${encodeURIComponent(token)}`;
-  url.hash = "";
-  document.body.append(h("a", { cls: "embed-link", text: "Open in Rodeo", attrs: { href: url.href, target: "_blank", rel: "noopener" } }));
 }

@@ -139,7 +139,7 @@ function activeLayer(): LayerInfo | undefined {
 }
 
 function layerRow(layer: LayerInfo, active: boolean, list: HTMLElement, render: () => void): HTMLElement {
-  const names = h("div", { cls: "names", title: "Double-click to rename" }, h("div", { cls: "name", text: layer.name }));
+  const names = h("div", { cls: "names", title: "Double-click to rename" }, h("div", { cls: "name", text: layer.name, attrs: { translate: "no" } }));
   if (layer.kind === "sheet") {
     names.append(h("div", { cls: "sub", text: layer.title || "Untitled sheet" }));
   }

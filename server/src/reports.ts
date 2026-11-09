@@ -16,7 +16,8 @@ import type {
   NewErrorReport,
   ReportValue,
 } from "../../web/src/platform/protocol.ts";
-import { allowed, clientIp, currentUser, isAdmin, requireUser } from "./auth.ts";
+import { logAdmin } from "./adminLog.ts";
+import { allowed, clientIp, currentUser, isAdmin, requireUser, type UserRow } from "./auth.ts";
 import { config } from "./config.ts";
 import { all, get, run, tx } from "./db.ts";
 import { onServerError, readJson } from "./http.ts";
@@ -195,12 +196,20 @@ function groupOut(g: GroupRow, latest: ReportRow): ErrorReportGroup {
   };
 }
 
-/** An admin signed in, or a script with REPORTS_TOKEN. */
-function requireReader(c: Context): void {
+/**
+ * An admin signed in, or a script with REPORTS_TOKEN. Gives the admin's row when there is one, for
+ * the admin log; null for a script with no admin signed in.
+ */
+function requireReader(c: Context): UserRow | null {
   const auth = c.req.header("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (token && config.reportsToken && safeEqual(token, config.reportsToken)) return;
-  if (!isAdmin(requireUser(c))) fail(403, "Only admins can read error reports", "forbidden");
+  if (token && config.reportsToken && safeEqual(token, config.reportsToken)) {
+    const user = currentUser(c);
+    return user && isAdmin(user) ? user : null;
+  }
+  const user = requireUser(c);
+  if (!isAdmin(user)) fail(403, "Only admins can read error reports", "forbidden");
+  return user;
 }
 
 /** Drops reports and groups not seen for 30 days (housekeeping). */
@@ -261,8 +270,11 @@ export function registerReports(app: Hono): void {
 
   // clears a group once its error is fixed: a report of it after that starts a new group
   app.delete("/api/admin/reports/:fingerprint", (c) => {
-    requireReader(c);
-    if (run("DELETE FROM error_groups WHERE fingerprint = ?", c.req.param("fingerprint")) === 0) fail(404, "No such error", "not_found");
+    const admin = requireReader(c);
+    const fingerprint = c.req.param("fingerprint");
+    const group = get<{ message: string }>("SELECT message FROM error_groups WHERE fingerprint = ?", fingerprint);
+    if (!group || run("DELETE FROM error_groups WHERE fingerprint = ?", fingerprint) === 0) fail(404, "No such error", "not_found");
+    if (admin) logAdmin(admin, "errors.clear", cleanLine(group.message, 60));
     return c.json({ ok: true });
   });
 }

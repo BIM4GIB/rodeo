@@ -9,8 +9,9 @@ import { store } from "../../app/state.ts";
 export const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 /**
- * Narrower than this, the palettes start hidden and put away, rails and all (the drawing takes the
- * window). On a phone they are a bottom sheet, which starts closed (dock.ts).
+ * Narrower than this, the palettes start put away for the visit, rails and all (the drawing takes the
+ * window), and widening past it brings them back; the arrangement saved stays the wider window's. On a
+ * phone they are a bottom sheet, which starts closed (dock.ts).
  */
 const NARROW_PX = 900;
 /** The snap radius (CSS px) for a finger, until the user sets one in the Snapping palette. */
@@ -26,14 +27,19 @@ function snapSaved(): boolean {
   }
 }
 
-/** Palettes start hidden in a narrow window; a finger snaps from a wider radius. */
+/** Palettes start put away in a narrow window, for this visit only; a finger snaps from a wider radius. */
 export function applyTouchLayout(ctx: AppContext): void {
   if (window.innerWidth < NARROW_PX) {
-    for (const p of ctx.palettes.list()) {
-      if (ctx.palettes.isShown(p.id)) ctx.palettes.toggle(p.id);
-    }
     // the docks' rails go too; showing a palette (Window > Palettes) brings them back, or on a phone opens its sheet
-    if (!ctx.palettes.away) ctx.palettes.toggleAway();
+    ctx.palettes.awayForVisit();
+    // widening past it brings back the arrangement kept from wider windows
+    const wide = matchMedia(`(min-width: ${NARROW_PX}px)`);
+    const widened = (): void => {
+      if (!wide.matches) return;
+      wide.removeEventListener("change", widened);
+      ctx.palettes.endVisit();
+    };
+    wide.addEventListener("change", widened);
   }
   if (COARSE && !snapSaved()) {
     store.snapSettings = { ...store.snapSettings, radiusPx: COARSE_SNAP_PX };

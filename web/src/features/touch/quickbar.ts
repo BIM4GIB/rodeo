@@ -1,7 +1,8 @@
 // The quick bar for touch screens (coarse pointers only): Undo, Redo, Esc, Delete
 // and Shift and Option latches, so a drawing can be edited without a keyboard. It
-// floats at the drawing's right edge. A latch stays on until it is tapped again; the
-// tool controller ORs it into the pointer events the tools get (ToolController.setLatch).
+// floats at the drawing's right edge, or on a phone in a row over the Mode bar
+// (touch.css). A latch stays on until it is tapped again; the tool controller ORs it
+// into the pointer events the tools get (ToolController.setLatch).
 
 import { redo, undo } from "../../app/commands.ts";
 import type { AppContext } from "../../app/ext.ts";

@@ -20,7 +20,7 @@ export function mountMenuStrip(strip: HTMLElement, menus: () => readonly { reado
     if (key === drawn) return;
     drawn = key;
     strip.replaceChildren(
-      ...defs.map((d) => h("button", { cls: "menu-strip-title", text: d.title, attrs: { type: "button", "aria-haspopup": "menu", "data-title": d.title } })),
+      ...defs.map((d) => h("button", { cls: "menu-strip-title", text: d.title, attrs: { type: "button", "aria-haspopup": "menu", "data-title": d.title, "data-i18n": `Menu › ${d.title}` } })),
     );
   };
 

@@ -1,10 +1,10 @@
 // The admin page's Settings: the AI credit each new account starts with, a maker of tagged links
-// (?ref=) whose visits show under Campaigns, how visits are counted, and the editor's own admin
-// windows.
+// (?ref=) whose visits show under Campaigns, and how visits are counted.
 
 import { h } from "../app/dom.ts";
 import { errorMessage } from "../app/toast.ts";
 import { adminApi } from "../platform/api.ts";
+import type { AdminContext } from "./context.ts";
 import { money } from "./format.ts";
 
 function card(title: string, ...children: (Node | null)[]): HTMLElement {
@@ -72,20 +72,11 @@ function aboutCard(): HTMLElement {
     "How visits are counted",
     h(
       "p",
-      { cls: "adm-card-note", text: "The editor tells the server when it opens, each minute while it's in front, and when a drawing opens (its kind, never its name). No cookie is set and nothing is kept on the visitor's device. The server knows a visitor by a hash of their address and browser with a salt that changes every day, so each person counts once a day and can't be followed from one day to the next; addresses aren't kept. Test browsers and crawlers aren't counted, and neither are admins when signed in." },
+      { cls: "adm-card-note", text: "The editor tells the server when it opens, each minute while it's in front, and when a drawing opens (its kind, never its name). No cookie is set and nothing is kept on the visitor's device. The server knows a visitor by a hash of their address and browser with a salt that changes every day, so each person counts once a day and can't be followed from one day to the next; addresses aren't kept. Where a visit came from is Cloudflare's guess from the address: the country, and with Cloudflare's visitor location headers on, the city and a position rounded to about 10 km. Test browsers and crawlers aren't counted, and neither are admins when signed in." },
     ),
   );
 }
 
-function editorCard(): HTMLElement {
-  const link = (text: string, href: string): HTMLElement => h("a", { cls: "adm-btn", text, attrs: { href, target: "_blank", rel: "noopener" } });
-  return card(
-    "In the editor",
-    h("p", { cls: "adm-card-note", text: "Announcements, the funding bar and the sponsor card are set from the editor's Help menu." }),
-    h("div", { cls: "adm-actions" }, link("Feedback inbox", "/?admin=feedback"), link("Error reports", "/?admin=errors"), link("Open the editor", "/")),
-  );
-}
-
-export function settingsView(currency: string | null): HTMLElement {
-  return h("div", { cls: "adm-settings" }, currency ? welcomeCard(currency) : null, linkCard(), aboutCard(), editorCard());
+export function settingsView(ctx: AdminContext): HTMLElement {
+  return h("div", { cls: "adm-settings" }, ctx.currency ? welcomeCard(ctx.currency) : null, linkCard(), aboutCard());
 }

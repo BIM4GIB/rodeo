@@ -6,7 +6,7 @@ This page covers Rodeo's window and how to arrange it: the bars and palettes, mo
 
 ### The window
 
-The workspace is laid out after Spline's editor and is dark by default. **View › Theme** sets Dark, Light or System, and **View › Dark Canvas** inverts the drawing's ink and paper.
+The workspace is laid out after Spline's editor and is dark by default. **View › Appearance** sets the theme (Dark, Light or System), and its **Dark Canvas** row inverts the drawing's ink and paper.
 
 Full-height side panels flank the drawing, which sits in an inset card, beside one sidebar on the right packed as Vectorworks packs its palettes:
 
@@ -21,12 +21,15 @@ The top bar holds:
 
 - the Menu button (every menu)
 - the file's name
-- 2D or 3D, with the standard views and render mode
-- the tools in groups (each shows its last used tool; its caret drops the rest)
-- undo
-- the zoom (type a percentage)
-- Export (PDF, image files, SVG, DXF, Print)
-- Save
+- **2D**, **3D** and **Split**: the plan alone, the 3D view alone, or the plan and the 3D view in panes, as last arranged
+- the **Standard views**, **Render mode** and **View panes** pop-ups, and **More view options**: Projection, Active Plane, Rotate Plan, Set Plan Rotation… and Quick Preferences
+- the tools in groups by discipline (each shows its last used tool; its caret drops the rest), scrolled with ‹ and › when they don't fit
+- the **Tool sets** button, which drops every tool set's tools and opens the Tool Sets palette
+- **Undo** and **Redo**
+- **Fit to Window** and the zoom (type a percentage of the 2D plan)
+- **Save**, with a caret that holds Save As, Export, Share, Publish and Print
+
+A greyed-out row in a menu says why under it while the pointer rests on it (on a phone, once it is tapped), and its tooltip says the same.
 
 A right-click on the top bar (or **Window › Top Bar**) shows or hides its groups:
 
@@ -42,7 +45,8 @@ Over the drawing, the View bar pill holds:
 
 - the active layer and its scale, and the active class, with the layer and class options and visibility lists (see [Layers and classes](layers-classes.md))
 - the saved views
-- the active working plane
+
+The active working plane is in the top bar's **More view options › Active Plane**.
 
 **Window › View Bar Options** shows the View bar:
 
@@ -71,7 +75,7 @@ The Mode bar shows the active tool, its modes, its preferences, the step to take
 - Connect/Combine's single, dual and combining modes, chosen by number keys
 - the Selection tool's rectangle, polygon or lasso marquee and interactive scaling
 
-When the canvas is too narrow for every mode, the tool shows its icon alone and each mode group drops its modes from one button.
+When the canvas is too narrow for every mode, the tool shows its icon alone and each mode group drops its modes from one button. When the step has no room for its hint, the hint's key chips go first, from the last, and then the step ends in an ellipsis. The whole hint is the bar's tooltip.
 
 ### Notification Center
 
@@ -88,6 +92,24 @@ Right-click:
 - the drawing for what applies to the selection (or, on empty space, paste, select, zoom and grid)
 - a layer, class or viewport row for its own commands
 - a palette's title to roll it up, close, dock, float or tab it. The Tools and Tool Sets palettes also offer Small Icons, Large Icons or Icons and Names there, and Resources small, medium or large thumbnails or a list.
+
+A greyed-out row in a right-click menu says why under it, as a menu's rows do (see [The top bar](#the-top-bar)).
+
+### Touch screens and phones
+
+On a touch screen a finger is the main pointer, and the bars change to suit it:
+
+- Undo, Redo, Esc, Delete and the Shift and Option latches are the quick keys, a column at the drawing's right edge, not part of the top bar.
+- The top bar's microphone is hidden. The round microphone at the drawing's lower right is the one that starts voice commands.
+- The tool row has no ‹ and › buttons: a swipe scrolls it, and its faded edges show that more tools lie beyond.
+- A dock is at least as wide as the top bar's end over it, up to 35% of the window's width (see [Folding and auto-hiding docks](#folding-and-auto-hiding-docks)).
+
+On a phone, a window 560 px wide or less:
+
+- The tools are a bar along the bottom, with the **Tool sets** button at its end.
+- The top bar holds the Menu, 2D, 3D and Split, **Palettes** and Save. Save's caret is left out, so Save As, Export and Print are in **File**, and crit mode is in **View › Crit Mode**.
+- The quick keys lie in a row above the Mode bar at the drawing's lower left, and the round microphone at its lower right.
+- The palettes are one bottom sheet, opened from the **Palettes** button.
 
 ### Smart Options display
 
@@ -112,7 +134,66 @@ The chat follows the newest message as it streams. Scroll up to read back and it
 
 Agents model buildings and gardens from parts, and products and machine parts (housings, brackets, lids) as one closed solid each, with their holes, slots and pockets cut, ready to export as STL.
 
-**Limits:** conversations are kept in this browser only.
+Each open drawing has its own chat, so agents can work in several drawings at once. The panel shows the one for the drawing in front. The line under the chat's title names its drawing, and lists the agents at work in your other tabs: click one to bring its drawing to the front. Start an agent in one drawing, switch to another tab and start a second, and both keep going.
+
+An agent behind another tab goes on reading, editing, building, running scripts, looking at the plan and exporting in its own drawing. What needs the window (looking in 3D, rendering, changing the view, running a menu command, importing a file) waits until you bring its drawing to the front; its tab shows an amber pause and a note says so. While an agent is looking in 3D or rendering, its drawing stays in front until it is done (or you stop it). When an agent finishes in a drawing you aren't looking at, a note says so and its tab keeps a spark until you open it. Closing a drawing whose agent is at work asks first, and stops the agent.
+
+The conversations list names the drawing each one was in.
+
+**Limits:** conversations are kept in this browser only. An agent's edits to a live cloud drawing (one shared with others) wait until that drawing is in front, as its changes go out live from there. Voice commands work in the drawing in front when you speak.
+
+### Connect an Agent
+
+**Window › Connect an Agent…** (also in your account menu) lets Claude, ChatGPT, Claude Code, Cursor or another AI agent work in your open drawing while you watch. The agent uses its own AI account, so it takes none of your Rodeo credit.
+
+**Sign in from your agent.** Give the agent Rodeo's address, `https://rodeo.build/mcp`, and it sends you to Rodeo to sign in:
+
+- **Claude** (claude.ai and the Claude desktop and phone apps): Settings › Connectors › Add custom connector, paste the address and press Connect. Once added, it works in all of them. On a Team or Enterprise plan, an owner adds it first.
+- **Claude Code**: run `claude mcp add --transport http --scope user rodeo https://rodeo.build/mcp`, then type `/mcp`, choose rodeo and sign in.
+- **Cursor**: add `{"mcpServers":{"rodeo":{"url":"https://rodeo.build/mcp"}}}` to `~/.cursor/mcp.json` and sign in when Cursor asks.
+- **ChatGPT**: with developer mode on, create a connector with the address and choose OAuth.
+
+Rodeo's page shows which app is asking, where it will send you back, and what it will be able to do. An app Rodeo can't check is marked **not verified by Rodeo**. An app on your own computer, such as Claude Code, is marked too: allow it only if you just started connecting it. Press **Allow** and you're back in the app.
+
+**Or make a token**, for agents that take a header instead: name it, press **Create Token**, and paste the line the dialog shows into your agent.
+
+The agent works in the drawing in front of the Rodeo tab you used last, with the Agents panel's tools: it reads the drawing, looks at the plan and the model, edits, builds in 3D, renders, exports and runs scripts. Each edit is one undo step. Files it exports are downloaded in your browser; full-size renders wait in the agent menu. It can give Rodeo a small file to import.
+
+While an agent works, a pill in the top bar names it and says what it is doing; click it for its recent calls and files. **Stop** halts the call in progress and refuses the agent's calls until you press **Resume**.
+
+The dialog lists the apps you connected and your tokens, with when each was last used and by which app. **Remove** one and it loses access at once. Rodeo keeps only fingerprints of tokens, so it can't show one again: make a new one if you lose it. A connected app unused for 60 days is disconnected by itself.
+
+**Limits:** an agent's calls need a Rodeo tab open and signed in, and Rodeo draws only while its tab is on screen, so keep it visible. If you sign in with an emailed link while connecting, open the link in the same browser; on a phone, signing in with Google, Microsoft or GitHub is simplest. Agents can't open files on your computer from Rodeo: they give it files of up to 4 MB.
+
+## Voice commands
+
+### Talking to Rodeo
+
+Hold <kbd>Space</kbd> still for a moment and a bubble opens by the pointer: say what to do and let go. Rodeo's agent does it: "rotate this 90", "move this door here", "make that wall 200 thicker", "what's on this layer?". The card that follows shows its answer, what the command cost, **Undo**, and **Continue in Agents**, which opens the conversation in the Agents panel; <kbd>⌘Z</kbd> undoes the agent's changes in one step. A follow-up within ten minutes carries on the same conversation. Pressing Space and dragging straight away still pans.
+
+Voice commands need you signed in, and use AI credit as the Agents panel does; without enough credit, holding the key offers a top-up before anything is recorded. The first time, Rodeo says where your speech goes. **Turn on voice** asks to use the microphone, and **Not now** turns voice off; **Tools › Voice Commands…** turns it on again.
+
+### Pointing while you speak
+
+While you hold the key, a click drops a numbered pin, snapped as the tools snap, labelled with what is under it. "This" and "that" mean the objects under the pins (or the selection), "here" and "there" the places, in the order you clicked: "move this door here", "copy these three times along here, 1200 apart". The bubble marks each pointing word with its pin, and the agent is told what each one points at. A drag still pans (in 3D it orbits). <kbd>Backspace</kbd> takes the last pin away, <kbd>Enter</kbd> sends, <kbd>Esc</kbd> cancels.
+
+### What the agent gets
+
+Your words, the selected objects (their names, classes and layers), the pins and what is under them, and what the view shows. It works as the Agents panel does, on its fast model unless the settings choose the panel's.
+
+### Firefox and Brave
+
+Firefox has no speech recognition of its own, and Brave's often doesn't answer. There Rodeo's server turns your speech into text: the browser records while you hold the key, and when you let go the bubble says "Turning speech into text…" before the agent starts (<kbd>Esc</kbd> stops it). It uses a little AI credit, shown on the card. When Firefox asks for the microphone, tick **Remember this decision**, or it asks each time. In other browsers, **Speech to text** in the settings can choose Rodeo's server too.
+
+### Touch and mouse
+
+With a mouse, the microphone button in the top bar starts listening. On a touch screen that button is hidden, and the round one at the drawing's lower right does the job. Tap the drawing to drop pins and tap the microphone again to send, or press and hold it while you speak.
+
+### Voice settings
+
+**Tools › Voice Commands…** turns voice on or off and sets the key to hold (Space, the right Option or Alt key, or only the microphone button), the language, the speech to text (automatic, the browser's, or Rodeo's server), the agent's model (fast, or the Agents panel's) and, in Chrome where it can, speech recognised on this computer so no audio leaves it.
+
+**Limits:** every command goes to the agent, so it takes a few seconds and needs a sign-in and AI credit. Chrome sends speech to Google, Edge to Microsoft and Safari to Apple unless it is recognised on the computer; Rodeo gets only the words. With Rodeo's speech to text the words show only after you let go, a command is at most 30 seconds, and the recording is passed to the speech model once and not kept. A pause before a pan opens the microphone briefly; nothing is sent when nothing is said.
 
 ## Navigating: zoom, pan and undo
 
@@ -120,15 +201,17 @@ Agents model buildings and gardens from parts, and products and machine parts (h
 
 The **Zoom** tool (<kbd>⇧Z</kbd>): click to zoom in, Option-click to zoom out, or drag a box.
 
+The zoom field at the top bar's right end sets the 2D plan's zoom as a percentage. It is greyed out while only the 3D view shows, and its tooltip says so.
+
 ### Undo/redo
 
-Undo/redo works for every edit, pan/zoom, fit and zoom to selection. **View › Previous View** and **Next View** step back and forth through the views shown (a zoom or pan counts once it has settled).
+Undo/redo works for every edit, pan/zoom, fit and zoom to selection. Its buttons are at the right of the top bar's tools (on a touch screen, on the quick keys). **View › Previous View** and **Next View** step back and forth through the views shown (a zoom or pan counts once it has settled).
 
 ### Fitting the view
 
 - **View › Fit to Objects** (<kbd>⌘6</kbd>) fits the selection, or everything when nothing is selected, in the plan or the 3D view.
 - **View › Fit to Page Area** fits a sheet's page in the window.
-- **Normal Scale** shows the drawing as large as it prints at the active layer's scale.
+- **Normal Scale** shows the 2D plan as large as it prints at the active layer's scale.
 
 ### Line thickness on screen
 
@@ -158,11 +241,14 @@ Each kind of snap turns on and off in the Snapping palette, whose **Snap Setting
 
 The data bar shows live coordinates, length and angle; <kbd>Tab</kbd> lets you type exact values.
 
-**Window › Data Bar Options** sets:
+**Window › Data Bar Options** has:
 
-- whether it shows always or only once Tab is pressed
-- whether it shows below the cursor or above it
-- whether a number typed while it shows starts its first field: keypad numbers too, the main keys only, or neither (the default, so the 3 key keeps showing the 3D view)
+- **Use Floating Data Bar Only When Tab Key Is Pressed**, a toggle: ticked, the bar shows only once Tab is pressed
+- **Show Floating Data Bar Above SmartCursor Cues**, a toggle: off, the bar shows below the cursor
+- **Allow Numeric Keypad Entry for Instant Data Bar Activation**, **Do Not Allow Numeric Keypad Entry for Instant Data Bar Activation** or **Do Not Allow Instant Data Bar Activation** (the default, so the 3 key keeps showing the 3D view): whether a number typed while the bar shows starts its first field, from keypad numbers too, the main keys only, or neither
+- **Show Only Primary Fields on Data Bar**, **Show Primary and Secondary Fields on Data Bar** or **Show Primary, Secondary, and Cursor Location Fields on Data Bar**: which fields it shows
+- **Auto Cycle to Non-Displayed Fields When Tabbing Past Last Field**, a toggle, on at first
+- **Show Floating Data Bar After Datum Creation**, a toggle, off at first
 
 It shows each tool's own fields (length and angle, ΔX and ΔY, or the radius), those and ΔX and ΔY, or those and the point's X and Y too. Tab past the last one shown brings out the rest unless turned off.
 
@@ -211,22 +297,30 @@ Object Info names any object. Names are unique in a drawing; emptied, the object
 
 ## Preferences
 
+### Language
+
+Rodeo's interface comes in English, Bahasa Indonesia, Deutsch, Español, Français, Italiano, Nederlands, Polski, Português (Brasil), Tiếng Việt, Türkçe, Русский, Українська, 日本語, 简体中文, 繁體中文 and 한국어. It starts in your browser's language when it has it, and otherwise in English. To change it, use the globe at the end of the start screen's footer, or the Language list in **Edit › Preferences…** › General. The change is immediate, keeps the open drawing as it is, and is remembered in this browser; the gallery and the converter follow it.
+
+Menus, tools, palettes, dialogs, messages (the server's too), What's New and the converter and gallery pages are translated, and the agents in the Agents panel reply in the interface's language. Your drawing's own text (layer, class and resource names, record fields, worksheets, text objects) stays as it was written, and files you save or export are the same whatever the interface's language.
+
+**Limits:** the translations were made with AI and not every language has been read through by a native speaker yet; corrections are welcome (see "Translating Rodeo" in CONTRIBUTING.md). Right-to-left languages (Arabic, Hebrew, Persian) aren't offered yet. Text added since a language was last updated shows in English until it is translated. Messages put together from several parts sometimes read stiffly.
+
 ### The Preferences dialog
 
 **Edit › Preferences…** (<kbd>⌘,</kbd>) has Vectorworks 2026's panes beside a list, kept in the browser:
 
-- **General**: the interface theme, a black background.
+- **General**: the interface theme, the language, a black background.
 - **Edit**: whether Duplicate offsets its copies a grid step or leaves them on the originals; whether the mouse wheel zooms or scrolls the drawing, Shift scrolling sideways and ⌘ or Ctrl zooming (a pinch always zooms).
 - **Display**: zoomed line thickness; Show other objects while in editing modes, which while a group is edited draws the rest of the drawing grayed, or without it neither draws nor snaps to it.
 - **Session**: tool help in the Mode bar.
 - **3D**: the 3D conversion resolution, how finely circles and ellipses in extrude and sweep profiles become faces, from Low to Very High; whether the 3D view opens with the render mode and projection last used.
 - **Autosave**.
 - **Interactive**: a full-screen cursor; the selection box, which sets how near a click picks, and the snap box, the snap radius, each shown at the pointer if wished; pre-selection highlighting, the Selection tool outlining what a click would pick once the pointer rests; animated view transitions, Fit, Zoom to Selection, saved views and Previous and Next View easing there over the time and with the motion chosen, any pan or zoom by hand stopping one.
-- **Appearance**, Vectorworks' Interactive Appearance Settings: the colours of the selection (its outline, handles and the tools' previews), pre-selection, the snap indicators (markers, their names, smart points and the snap box) and the cursor (crosshairs and the selection box, else dark on white and light on black), with Restore Defaults.
+- **Appearance**, Vectorworks' Interactive Appearance Settings: the colours of the selection (its outline, handles, the tools' previews and its highlight in the 3D view), pre-selection, the snap indicators (markers, their names, smart points and the snap box) and the cursor (crosshairs and the selection box, else dark on white and light on black), with Restore Defaults.
 
 ### Quick Preferences
 
-The View bar's Quick Preferences pop-up lists the preferences turned on and off most, each checked while on. At first these are:
+The top bar's **More view options › Quick Preferences** lists the preferences turned on and off most, each checked while on. At first these are:
 
 - **Black Background**
 - **Zoom Line Thickness**
@@ -256,7 +350,7 @@ As in Vectorworks 2027, a tab of Object Info (Shape, Data, Render) or Navigation
 
 Tabs out of the same palette connect into one, and go back when dropped on it, closed, or docked back from its title bar menu ("Dock Data here", "Dock all tabs here").
 
-A tab dragged along the strip moves along it, and "Lock tabs" in that menu holds them where they are. Its Tab Style shows a palette's tabs as icons, names, or both (icons alone fit Navigation's six tabs in half the width).
+A tab dragged along the strip moves along it, and "Lock tabs" in that menu holds them where they are. Its Tab Style shows a palette's tabs as icons, names, or both (icons alone fit Navigation's six tabs in half the width). A tab with no room left goes to a ⋯ **More Tabs** menu at the strip's end, so no tab is cut short.
 
 ### Docking bars at the top and bottom
 
@@ -272,10 +366,12 @@ Floating palettes dock to each other too. Drag one over another and the docking 
 
 ### Dock rails
 
-Along each dock's window edge runs a rail of icons, one per palette of that side, closed ones too:
+Along each dock's window edge runs a rail of icons, one for each palette of that side that is open, used every day, or has been opened before:
 
-- The left rail has Tools, Tool Sets, Navigation and Resources, which starts as a tab of Navigation.
-- The right rail has Object Info, Attributes, Snapping, Visualization and the cloud palettes.
+- The left rail has Tools and Tool Sets.
+- The right rail has Object Info, Attributes, Navigation, Resources, Snapping, Visualization, Working Planes and Agents, with any others opened before.
+
+Resources and Agents are tabs of Navigation, and each has an icon of its own. The other palettes, the cloud ones among them, wait behind the ⋯ **More Palettes** button under the icons until they are opened once. A right-click on the icon of a palette that isn't used every day offers **Move to More Palettes**, which takes its icon off the rail again.
 
 A click on an icon opens a closed palette, brings a rolled-up one or a tab behind another into view, or closes one in view, and a right-click offers its title bar's menu. A dot marks the open ones out of view. A dock with every palette closed is just its rail.
 
@@ -295,11 +391,15 @@ Auto-hiding a dock (the pin on its rail, **Window › Auto-Hide Left Dock** or *
 
 **Window › Palette Options › Auto-Hide Docked Palettes** does it to both docks at once, and **Auto-Hide Floating Palettes** rolls each floating palette up to its title bar while the pointer is elsewhere, unrolling it as the pointer comes back.
 
+On a touch screen, a dock is at least as wide as the top bar's end over it, up to 35% of the window's width, so that the end's buttons fit.
+
 ### Showing and hiding palettes
 
 The Window menu shows each palette again (including Tools and Tool Sets, Vectorworks' grids of tool buttons), hides them all, rolls them up, toggles the View, Mode and Snapping bars and resets the arrangement, which is kept per browser.
 
-**Window › Palettes** lists every palette by its Vectorworks name, each tab of Object Info, Navigation and Visualization too (Shape, Data, Render, Design Layers, Classes, Sheet Layers, Saved Views, Lights, Cameras…). Choosing one brings it to the front, or closes it when it is in view.
+**Window › Palettes** lists every palette by its Vectorworks name, each tab of Object Info, Navigation and Visualization too (Shape, Data, Render, Design Layers, Classes, Sheet Layers, Saved Views, Lights, Cameras…). Choosing one brings it to the front, or closes it when it is in view. Object Info is also ⌘I, which shows or hides it.
+
+A window narrower than 900 px starts with the palettes put away, the docks' rails with them, for that visit only. Showing a palette from the Window menu brings the rails back. Widening the window, or the next wide visit, brings back the saved arrangement.
 
 **Hide Enabled Palettes** (<kbd>⇧⌘P</kbd>) puts them all away and back.
 
@@ -341,7 +441,7 @@ The bars over the drawing move and roll up too:
 
 **Window › Workspaces › Menus…** rearranges the menu bar: new menus, names, order, commands or submenus moved between menus or taken out (still running from their shortcuts). Workspaces keep it.
 
-**Window › Workspaces › Tool Sets…** rearranges the Tool Sets palette: new sets, names, order, which tools each holds. Workspaces keep them.
+**Window › Workspaces › Tool Sets…** rearranges the Tool Sets palette: new sets, names, order, which tools each holds. It also arranges the **Tool sets** button's menu at the end of the top bar's tools. Workspaces keep them.
 
 ### Shortcuts
 
@@ -353,7 +453,7 @@ The bars over the drawing move and roll up too:
 
 ### Splitting the drawing area
 
-**Window › View Panes** (or the View bar's View panes pop-up, or **View › Multiple View Panes**) splits the drawing area into two, three or four panes, all drawn at once and kept up to date as the drawing is edited, each a plan or a 3D view.
+**View › Multiple View Panes** (or the top bar's **View panes** pop-up) splits the drawing area into two, three or four panes, all drawn at once and kept up to date as the drawing is edited, each a plan or a 3D view.
 
 A new arrangement has the plan in the first and a 3D view in each of the others (Front, Right and an isometric view to start with):
 
@@ -369,21 +469,25 @@ The menu pictures each arrangement. Other commands:
 - **Single Pane** goes back to the one view.
 - **Reset Multiple View Panes** goes back to Four Panes, the dividers halfway and each pane in its standard view, and closes the floating panes.
 
-Every pane shows the same layers, classes and clip cube, so **Use Same Visibilities in All Panes** is always on.
+**Use Same Visibilities in All Panes** is greyed out: every pane shows the same layers, classes and clip cube.
+
+Each pane has a chip in its top-left corner: "Plan", or "3D" with the standard view its camera is in ("3D · Right Isometric"), "3D" alone once the camera has left it. Its menu has **Show Plan Here**, **Show 3D Here**, the standard views (for a 3D pane) and **Close Pane**.
 
 ### The active pane
 
-The active pane is ringed in the accent. The render mode, the zoom and Fit act on it, and Top/Plan, 3D View (the View bar's 2D and 3D) and the standard views turn it into a plan or a 3D view, so two plans can show the drawing at different zooms, or every pane a 3D view. A click in another pane makes that one active (the click does nothing else).
+The active pane is ringed in the accent. The render mode, the zoom and Fit act on it. Top/Plan, 3D View (or the 3 key) and the standard views make the active pane one of their kind, a plan pane or a 3D pane, and only when no pane is of that kind does the active pane turn into one. A chip's **Show Plan Here** or **Show 3D Here** turns its pane into one or the other, so two plans can show the drawing at different zooms, or every pane a 3D view. The top bar's 2D and 3D buttons show one view alone and leave the split; **Split** brings the panes back as last arranged.
+
+A click in a pane showing a picture makes it the active one, and does nothing else. A click in the other live pane, the plan or the 3D view, makes it active and then does what a click there does.
 
 The live plan, for drawing and editing, is in the plan pane last made active, and the live 3D view, for orbiting, picking and walking, in the 3D pane last made active. Every other pane shows the drawing from its own view, kept as it was left and drawn again as the drawing or the look changes.
 
 ### Render modes in panes
 
-Each 3D pane keeps its own render mode and projection. The View bar's Render mode and Projection set the live pane's, and the pane the live view moves to takes its own back (a new arrangement starts every pane in the one shown).
+Each 3D pane keeps its own render mode and projection. The top bar's **Render mode** pop-up and **View › Rendering** make the live 3D pane active, then set its render mode, and **More view options › Projection** sets the live pane's projection. The pane the live view moves to takes its own back (a new arrangement starts every pane in the one shown). A pane's picture doesn't show the selection; the live 3D view does.
 
 A Realistic pane without the live 3D view shows the render feature's picture through its own camera, Shaded until that has loaded.
 
-A Path Traced one refines a path-traced picture of its own, a sample a frame up to the Render palette's preview samples (512 at most), on a renderer the panes share, so the live view isn't drawn again meanwhile. The panes refine one at a time, each showing a Realistic picture until its turn, and start over as their camera, size, the model or the settings change.
+A Path Traced one refines a path-traced picture of its own, a sample a frame up to the Render palette's preview samples (**Output › Live view**, 512 at most), on a renderer the panes share, so the live view isn't drawn again meanwhile. The panes refine one at a time, each showing a Realistic picture until its turn, and start over as their camera, size, the model or the settings change.
 
 ### Resizing panes
 

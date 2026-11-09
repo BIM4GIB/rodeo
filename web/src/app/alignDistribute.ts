@@ -10,6 +10,7 @@
 import { applyMoves, selectionEntries, type Move } from "./commands.ts";
 import { h } from "./dom.ts";
 import type { Row } from "./menu.ts";
+import { need } from "./menuReasons.ts";
 import { showDialog } from "./menubar.ts";
 import type { Scene } from "./scene.ts";
 import { store } from "./state.ts";
@@ -138,7 +139,7 @@ export function alignDistribute(scene: Scene, plan: Plan, reference: string | nu
 export function alignDistributeRows(scene: Scene, reference: string | null): Row[] {
   const two = (): boolean => store.selection.size >= 2;
   const three = (): boolean => store.selection.size >= 3;
-  const row = (label: string, plan: Plan, enabled = two): Row => ({ label, enabled, run: () => alignDistribute(scene, plan, reference) });
+  const row = (label: string, plan: Plan, enabled = two): Row => ({ label, why: enabled === three ? need.threeOrMore : need.twoOrMore, enabled, run: () => alignDistribute(scene, plan, reference) });
   return [
     row("Align Left", { x: { how: "align", by: "min" } }),
     row("Align Center", { x: { how: "align", by: "center" } }),
@@ -153,7 +154,7 @@ export function alignDistributeRows(scene: Scene, reference: string | null): Row
     row("Align Insertion Point Horizontally", { x: { how: "align", by: "insertion" } }),
     row("Align Insertion Point Vertically", { y: { how: "align", by: "insertion" } }),
     "-",
-    { label: "Align/Distribute…", enabled: two, run: () => void alignDistributeDialog(scene, reference) },
+    { label: "Align/Distribute…", why: need.twoOrMore, enabled: two, run: () => void alignDistributeDialog(scene, reference) },
   ];
 }
 

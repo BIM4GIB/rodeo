@@ -65,7 +65,7 @@
 }
 
 .fh-bubble:not(:disabled) {
-  cursor: pointer;
+  cursor: default;
 }
 
 .fh-bubble.fail {
@@ -122,7 +122,7 @@
   color: var(--text-2);
   font-size: 11px;
   font-weight: 600;
-  cursor: pointer;
+  cursor: default;
 }
 
 .fh-issue {

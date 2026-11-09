@@ -1,4 +1,4 @@
-// Python scripts: Run Script… (the Plug-ins menu, and Tools > Plug-ins where Vectorworks keeps it)
+// Python scripts: Run Script… (Tools > Plug-ins, where Vectorworks keeps it)
 // opens a window that runs Python or Vectorscript written for Vectorworks on the open drawing.
 // File > Import > Import Script… runs a script file in it; File > Export > Export Script writes the
 // drawing as a Vectorscript that draws it again, and Export Simple VectorScript (3D only) its 3D
@@ -24,8 +24,6 @@ registerMenu("Window", (): Row[] => [{ label: "Script Palettes", items: scriptPa
 
 const runScript = (): void => void import("./panel.ts").then((m) => m.openRunScript());
 const run: Row = { label: "Run Script…", enabled: () => !!store.session, run: runScript };
-
-registerMenu("Plug-ins", () => [run], { after: "Script Console…" });
 
 /** Asks for a .vs, .px or .py file and runs it in the Run Script window. */
 function importScript(): void {

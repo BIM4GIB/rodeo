@@ -421,7 +421,7 @@ export async function organizationDialog(): Promise<void> {
       "select",
       { cls: "menu-dialog-input menu-dialog-select org-texture", attrs: { "aria-label": "Texture" } },
       h("option", { value: "0", text: "None" }),
-      ...textures.map((t) => h("option", { value: String(t.index), text: t.name })),
+      ...textures.map((t) => h("option", { attrs: { translate: "no" }, value: String(t.index), text: t.name })),
       ...(row.texture && !textures.some((t) => t.index === row.texture) ? [h("option", { value: String(row.texture), text: `Texture #${row.texture}` })] : []),
     );
     texture.value = String(row.texture);
@@ -431,7 +431,7 @@ export async function organizationDialog(): Promise<void> {
       "select",
       { cls: "menu-dialog-input menu-dialog-select org-texture", attrs: { "aria-label": "Text style" } },
       h("option", { value: "0", text: "None" }),
-      ...styles.map((t) => h("option", { value: String(t.index), text: t.name })),
+      ...styles.map((t) => h("option", { attrs: { translate: "no" }, value: String(t.index), text: t.name })),
       ...(row.textStyle && !styles.some((t) => t.index === row.textStyle) ? [h("option", { value: String(row.textStyle), text: `Text style #${row.textStyle}` })] : []),
     );
     textStyle.value = String(row.textStyle);
@@ -796,7 +796,7 @@ export async function organizationDialog(): Promise<void> {
           "select",
           { cls: "org-input org-select", attrs: { "aria-label": `Story of ${r.name}` } },
           h("option", { value: "", text: "None" }),
-          ...live.map((st) => h("option", { value: String(stories.indexOf(st)), text: st.name.trim() || "New story" })),
+          ...live.map((st) => h("option", { attrs: st.name.trim() ? { translate: "no" } : {}, value: String(stories.indexOf(st)), text: st.name.trim() || "New story" })),
         );
         story.value = r.story ? String(stories.indexOf(r.story)) : "";
         story.addEventListener("change", () => {

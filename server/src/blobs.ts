@@ -71,7 +71,8 @@ export async function releaseBlobs(ids: Iterable<string | null | undefined>): Pr
     if (!id) continue;
     const refs = get<{ n: number }>(
       `SELECT (SELECT COUNT(*) FROM versions WHERE blob = ?) + (SELECT COUNT(*) FROM audio WHERE blob = ?)
-        + (SELECT COUNT(*) FROM files WHERE thumbnail_blob = ?) AS n`,
+        + (SELECT COUNT(*) FROM files WHERE thumbnail_blob = ?) + (SELECT COUNT(*) FROM files WHERE base_blob = ?) AS n`,
+      id,
       id,
       id,
       id,

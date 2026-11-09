@@ -1,0 +1,139 @@
+/* The Look tab's tiles (lookTab.ts, lookArt.ts) and the AI card (aiCard.ts), from studio/ui.ts's
+   controls. Solid surfaces, as the rest of the palette: no glass or blur. Colours come from
+   tokens.css, so both themes work. */
+
+/* ---- the looks ------------------------------------------------------------- */
+
+/* a tile's label may run to two lines in a narrow column (Warm afternoon, Black and white) */
+.rs-look-tiles .rs-tile-label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  line-height: 1.25;
+  padding: 0 2px 1px;
+}
+
+/* the picture: the scene, its vignette and grain stacked in the tile's 16:10 box */
+.rs-look-art {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.rs-look-scene,
+.rs-look-cool,
+.rs-look-vignette,
+.rs-look-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rs-look-scene > svg,
+.rs-look-grain > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* a cool look: whites take a blue cast */
+.rs-look-cool {
+  background: #9cc2ff;
+  mix-blend-mode: multiply;
+}
+
+.rs-look-vignette {
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.85) 100%);
+}
+
+.rs-look-grain {
+  mix-blend-mode: overlay;
+}
+
+/* ---- the AI card ------------------------------------------------------------ */
+
+.rs-ai-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 12px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--fill);
+}
+
+.rs-ai-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rs-ai-head .rs-icon {
+  color: var(--accent);
+}
+
+.rs-ai-cost {
+  margin: 0 0 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* the words take the card's width, their label above them */
+.rs-ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rs-ai-words {
+  width: 100%;
+  min-height: 58px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.rs-ai-words:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.rs-ai-words::placeholder {
+  color: var(--text-3);
+}
+
+/* the card's labels are short, so its drop-downs take the room (Balanced — and the setting) */
+.rs-ai-card .rs-row {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+/* the switch's label may take the room the card gives it */
+.rs-ai-card .rs-toggle {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.rs-ai-card .rs-toggle .rs-label {
+  white-space: normal;
+}
+
+.rs-ai-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}

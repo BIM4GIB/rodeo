@@ -589,20 +589,31 @@ export interface DocumentInfo {
 
 export type ChangeKind = "objects" | "layers" | "classes" | "all";
 
-/**
- * One change to the document's record list, as collaboration sends it: `del`
- * records from `start` replaced by `add`. `removed` holds the records taken
- * out, for changes this session made (not sent: the receiver has them).
- */
-export interface SpliceOp {
+/** `del` records from `start` of the document's record list replaced by `add`. */
+export interface SpliceRun {
   start: number;
   del: number;
-  add: Uint8Array[];
-  removed?: Uint8Array[];
+  add: readonly Uint8Array[];
+}
+
+/**
+ * One change to the document's record list, as collaboration sends it: `del`
+ * records from `start` replaced by `add`, then each of `more` in turn. `removed`
+ * holds the records taken out, for changes this session made (not sent: the
+ * receiver has them); a session reports its own changes as one run.
+ */
+export interface SpliceOp extends SpliceRun {
+  removed?: readonly Uint8Array[];
   kind: ChangeKind;
   ids: string[];
   /** a change to the file header too (document settings such as units), made with the records */
   header?: HeaderPatch;
+  /**
+   * further runs, each at the positions the runs before it left and at or after the records the
+   * one before it put in (core/splice.ts: in order). A change made far apart (a class at the top of
+   * the file and an object at its end) goes as the runs it changed, not one span over everything.
+   */
+  more?: SpliceRun[];
 }
 
 /**
@@ -1375,6 +1386,10 @@ export interface VwxDocument {
   heliodon(id: string): HeliodonSun | null;
   /** Plug-in parameters and attached records of an object, in file order (empty if none). */
   records(id: string): ObjectRecord[];
+  /** A path plug-in's path (a hardscape's outline, a plant line's run): the polyline or polygon in its path group, by id; null when it has none. */
+  pluginPath(id: string): string | null;
+  /** The heights an object spans in 3D, in its layer's frame (its elevation not added); null when it shows nothing in 3D. */
+  heightsOf(id: string): { readonly min: number; readonly max: number } | null;
   /** The data records attached to a symbol definition (by its SymbolInfo.index), which instances placed after start with. */
   symbolRecords(index: number): ObjectRecord[];
   /** An object's texture parts; empty when it has none yet but can take a texture, null when it can't. */
@@ -1412,10 +1427,20 @@ export interface EditSession {
    * brings with it, such as a drawing kept up with what it's drawn from. With no step to join it's a batch.
    */
   followOn<T>(fn: () => T): T;
+  /** How many steps undo can turn back now: a mark for joinSince. */
+  readonly undoDepth: number;
+  /**
+   * Joins the steps made since undo was `depth` deep into one, so one undo turns them all back (a voice
+   * command the agent carried out in several edits). Nothing when there are fewer than two, while a
+   * batch runs, or when one of them changed the document's settings.
+   */
+  joinSince(depth: number): void;
   onChange(listener: (e: ChangeEvent) => void): () => void;
   markSaved(): void;
   /** Called with each change to the record list once it is made (edits, undo, redo); not for applyRemote. */
   onStep(listener: (op: SpliceOp) => void): () => void;
+  /** The record list as it stands, for collaboration to read what a change replaces. Never change it or its records. */
+  records(): readonly Uint8Array[];
   /**
    * Refuses changes to layers (Project Sharing's checkouts): before a change of this session's
    * (an edit, undo or redo; never applyRemote) takes effect, `guard` is asked with the ids of the
@@ -1425,10 +1450,17 @@ export interface EditSession {
    */
   setLayerGuard(guard: ((layerIds: readonly string[]) => string | null) | null): void;
   /**
-   * Applies a change made elsewhere (a collaborator's). Undo keeps turning back this session's own
-   * steps that it doesn't touch; a step it touches, and those before it, can no longer be undone.
+   * Applies a change made elsewhere (a collaborator's), all its runs at once. Undo keeps turning
+   * back this session's own steps that it doesn't touch; a step it touches, and those before it,
+   * can no longer be undone.
    */
   applyRemote(op: SpliceOp): void;
+  /**
+   * Runs `fn`, whose applyRemote calls change the record list at once (records() shows each) but
+   * rebuild the drawing and tell its listeners once, when `fn` returns: collaboration turning back
+   * changes of its own, taking someone else's and making its own again costs one rebuild.
+   */
+  remoteBatch<T>(fn: () => T): T;
 
   // document settings
   /**
@@ -1757,8 +1789,8 @@ export interface EditSession {
    * Replaces what plug-in object `id` draws with the objects `ids`: objects at the top level of a
    * layer, drawn in the plug-in's own frame (its insertion point at the origin, unturned), as a
    * plug-in's script draws them. They move into it as they are and its old drawing goes (the
-   * groups among its aux records stay); its plan box becomes theirs as its matrix places them. One
-   * undo step.
+   * groups among its aux records stay, and its path and profile groups); its plan box becomes theirs
+   * as its matrix places them. One undo step.
    */
   setPluginDrawing(id: string, ids: readonly string[], keep?: number): void;
   /** the text style the class's texts follow as "Class Text Style": a text style's name index, 0 for none */

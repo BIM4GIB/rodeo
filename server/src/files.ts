@@ -121,12 +121,14 @@ export function memberList(fileId: string): Member[] {
   ).map((r) => ({ userId: r.user_id, name: r.name, email: r.email, avatarUrl: r.avatar_url, role: r.role as Role }));
 }
 
-/** Every stored blob a drawing uses (versions, voice notes, its preview). Read before deleting it. */
+/** Every stored blob a drawing uses (versions, voice notes, its preview, a branch's common ancestor, its gallery cover). Read before deleting it. */
 export function fileBlobs(fileId: string): string[] {
   const ids = [
     ...all<{ blob: string }>("SELECT blob FROM versions WHERE file_id = ?", fileId).map((r) => r.blob),
     ...all<{ blob: string }>("SELECT blob FROM audio WHERE file_id = ?", fileId).map((r) => r.blob),
     ...all<{ blob: string | null }>("SELECT thumbnail_blob AS blob FROM files WHERE id = ?", fileId).map((r) => r.blob),
+    ...all<{ blob: string | null }>("SELECT base_blob AS blob FROM files WHERE id = ?", fileId).map((r) => r.blob),
+    ...all<{ blob: string | null }>("SELECT cover_blob AS blob FROM gallery_entries WHERE file_id = ?", fileId).map((r) => r.blob),
   ];
   return ids.filter((b): b is string => !!b);
 }
@@ -153,10 +155,10 @@ function labelOf(v: string | undefined): string | null {
 // ---- quotas and versions ----
 
 function countOwned(userId: string): number {
-  return get<{ n: number }>("SELECT COUNT(*) AS n FROM files WHERE owner_id = ?", userId)?.n ?? 0;
+  return get<{ n: number }>("SELECT COUNT(*) AS n FROM files WHERE owner_id = ? AND lineage IS NOT 'branch'", userId)?.n ?? 0;
 }
 
-function assertFileQuota(owner: UserRow): void {
+export function assertFileQuota(owner: UserRow): void {
   const limits = limitsOf(owner);
   if (limits.files > 0 && countOwned(owner.id) >= limits.files) {
     fail(409, `Your plan allows ${limits.files} drawings. Delete one to make room, or upgrade.`, "limit");
@@ -195,7 +197,7 @@ function assertSeq(fileId: string, seq: number | null, lastSeq: number): void {
   if (seq > lastSeq) fail(400, "X-Collab-Seq is ahead of the live session");
 }
 
-interface NewVersion {
+export interface NewVersion {
   readonly fileId: string;
   readonly authorId: string;
   readonly blob: string;
@@ -211,7 +213,7 @@ interface NewVersion {
  * before it when that was an unnamed autosave, so a big drawing's autosaves don't pile up full
  * copies. Naming an autosave in the history keeps it.
  */
-type Autosave = "keep" | "replace";
+export type Autosave = "keep" | "replace";
 
 function autosaveOf(v: string | undefined): Autosave | undefined {
   const s = v?.trim().toLowerCase();
@@ -221,8 +223,15 @@ function autosaveOf(v: string | undefined): Autosave | undefined {
   fail(400, "X-Autosave must be keep or replace");
 }
 
-/** Adds a version and makes it the head, prunes past the owner's version limit, checks the bytes limit. Call inside a transaction. */
-function addVersionTx(v: NewVersion): { row: VersionRow; pruned: string[] } {
+/** versions a gallery entry shows (gallery.ts): kept while it is published or hidden, whatever the plan's count */
+const PINNED = "SELECT version_id FROM gallery_entries WHERE version_id IS NOT NULL AND unpublished_at IS NULL";
+
+/** Adds a version and checks limits inside the caller's transaction.
+ * Restore also calls this from attachCollab's transaction(), which does not share db.ts's
+ * tx() depth counter. Do not call tx() here or in a helper reached from here: it would
+ * start a nested BEGIN during restore.
+ */
+export function addVersionTx(v: NewVersion): { row: VersionRow; pruned: string[] } {
   const owner = ownerRow(v.fileId);
   if (!owner) fail(404, "Drawing not found", "not_found");
   const before =
@@ -251,14 +260,14 @@ function addVersionTx(v: NewVersion): { row: VersionRow; pruned: string[] } {
   run("UPDATE files SET head_version_id = ?, size = ?, updated_at = ? WHERE id = ?", id, v.size, now, v.fileId);
 
   const pruned: string[] = [];
-  if (before && before.autosave === 1 && before.label === null) {
+  if (before && before.autosave === 1 && before.label === null && !get<{ x: number }>("SELECT 1 AS x FROM gallery_entries WHERE version_id = ? AND unpublished_at IS NULL", before.id)) {
     run("DELETE FROM versions WHERE id = ?", before.id);
     pruned.push(before.blob);
   }
   const keep = limitsOf(owner).versions;
   if (keep > 0) {
     const newestFirst = all<{ id: string; blob: string }>(
-      "SELECT id, blob FROM versions WHERE file_id = ? ORDER BY created_at DESC, rowid DESC",
+      `SELECT id, blob FROM versions WHERE file_id = ? AND id NOT IN (${PINNED}) ORDER BY created_at DESC, rowid DESC`,
       v.fileId,
     );
     for (const old of newestFirst.slice(keep)) {
@@ -321,7 +330,7 @@ export async function serveVersion(c: Context, row: VersionRow): Promise<Respons
 export function registerFiles(app: Hono): void {
   app.get("/api/files", (c) => {
     const user = requireUser(c);
-    const rows = all<FileRow>(`${FILE_SQL} ORDER BY f.updated_at DESC`, user.id);
+    const rows = all<FileRow>(`${FILE_SQL} WHERE f.lineage IS NOT 'branch' ORDER BY f.updated_at DESC`, user.id);
     return c.json({ files: rows.map(toCloudFile) });
   });
 
@@ -376,12 +385,14 @@ export function registerFiles(app: Hono): void {
     const user = requireUser(c);
     const fileId = c.req.param("id");
     requireRole(fileId, user.id, ["owner"], "Only the owner can delete this drawing");
-    const blobs = fileBlobs(fileId);
+    // a drawing's branches go with it (forks, owned by others, stay)
+    const family = [fileId, ...all<{ id: string }>("SELECT id FROM files WHERE parent_file_id = ? AND lineage = 'branch'", fileId).map((r) => r.id)];
+    const blobs = family.flatMap((id) => fileBlobs(id));
     tx(() => {
-      run("DELETE FROM files WHERE id = ?", fileId);
+      for (const id of family) run("DELETE FROM files WHERE id = ?", id);
     });
     await releaseBlobs(blobs);
-    getHub().kick(fileId);
+    for (const id of family) getHub().kick(id);
     return c.body(null, 204);
   });
 

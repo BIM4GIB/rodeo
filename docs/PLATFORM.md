@@ -57,7 +57,7 @@ host with no server.
 | `SUPPORTER_MONTHLY_LABEL`, `SUPPORTER_YEARLY_LABEL` | prices as shown, default `£2/month`, `£15/year` |
 | `DRIVE_GOOGLE_CLIENT_ID`, `DRIVE_GOOGLE_API_KEY`, `DRIVE_GOOGLE_APP_ID` | opening and saving in Google Drive from the browser (Picker; scope `drive.file`) |
 | `DRIVE_MICROSOFT_CLIENT_ID` | opening and saving in OneDrive from the browser (SPA app registration, redirect `PUBLIC_URL/`, scope `Files.ReadWrite`) |
-| `FREE_FILES`, `FREE_BYTES`, `FREE_VERSIONS`, `FREE_SHARE_LINKS` | free plan limits (defaults 5, 250 MB, 10, false) |
+| `FREE_FILES`, `FREE_BYTES`, `FREE_VERSIONS`, `FREE_SHARE_LINKS` | free plan limits (defaults 5, 250 MB, 10, true) |
 | `SUPPORTER_FILES`, `SUPPORTER_BYTES`, `SUPPORTER_VERSIONS` | Rodeo Plus limits (defaults 0 = no limit, 20 GB, 0 = all) |
 | `MAX_UPLOAD_BYTES` | largest drawing or cloud render job accepted (default 1 GB). The editor sends anything over 8 MB in parts, since Cloudflare takes at most 100 MB a request |
 | `FUNDING_GOAL`, `FUNDING_RAISED`, `FUNDING_CURRENCY` | the starting funding bar (monthly goal and amount raised, currency default `GBP`); an admin can change it in the editor |
@@ -77,6 +77,11 @@ host with no server.
 | `AI_MARKUP`, `AI_MARKUP_PLUS` | what a request costs a user against what the provider charged: defaults `1.3` (30% more) and `1.15` for Rodeo Plus. It covers Stripe's fee, OpenRouter's fee on buying its credit, and exchange |
 | `AI_TOPUPS` | the top-up amounts offered, comma-separated, default `5,10,20` |
 | `AI_HOLD` | the credit a request needs to start, held while it runs, default `0.25` |
+| `VOICE_TRANSCRIBE` | `on` (default): voice commands in browsers with no speech recognition of their own (Firefox, and Brave when its service fails) send the recording to `POST /api/voice/transcribe`, which has an audio model at `AI_BASE_URL` write it down, charged to AI credit; `off`: those browsers can't use voice. Needs `AI_API_KEY` (Anthropic's models don't take audio) |
+| `VOICE_MODEL` | the speech-to-text model, default `google/gemini-3.1-flash-lite` (`openai/whisper-large-v3-turbo` with `VOICE_API=transcriptions`) |
+| `VOICE_API` | `chat` (default): an audio-capable chat model, given a prompt and the drawing's class and layer names; `transcriptions`: OpenRouter's speech-to-text endpoint, cheaper and quicker, without the names |
+| `VOICE_EFFORT` | the chat model's reasoning effort, default `none`; `off` sends none (for a model that rejects it) |
+| `VOICE_REQUESTS_PER_HOUR`, `VOICE_REQUESTS_PER_DAY` | recordings per user (defaults 120 and 600), and at most 20 a minute |
 | `RENDER_URL`, `RENDER_SECRET` | cloud renders: the GPU worker's endpoint (`modal deploy cloudrender/worker.py` prints it) and the secret it checks (the Modal secret `rodeo-render`). Without both, Render Image offers only this computer. Credit (`AI_*` above) is on with them even without an AI key |
 | `RENDER_GPU` | the GPU a job runs on, as Modal names it, default `L40S` |
 | `RENDER_USD_PER_HOUR` | what an hour of it costs at Modal with the worker's CPU and memory, default from the GPU (L40S about $2.11) |
@@ -90,12 +95,13 @@ Funding (goal, raised, donation links) and the sponsor (the start hub's ad) are 
 in the editor) and kept in the database. Paid Stripe checkouts with the metadata
 `kind=donation` (a donation Payment Link) are added to the month's total by the webhook,
 on top of the admin's raised figure, and the total starts again each calendar month (UTC).
-Admins also post and delete the start hub's
-announcements from Help > Announcements… (`PUT /api/admin/announcements`).
+Admins also post, edit and delete the start hub's
+announcements on the admin page's Announcements tab (`PUT /api/admin/announcements`); one can
+also show once as a bar across the top of the editor until a date (`bannerUntil`).
 
 Anyone can send a bug report or feature request from Help > Report a Bug… / Request a
-Feature… or the start screen. Reports are kept in the database and listed for admins in
-Help > Feedback Inbox…; with SMTP set up, each one is also emailed to `ADMIN_EMAILS`, with
+Feature… or the start screen. Reports are kept in the database and listed for admins on
+the admin page's Feedback tab; with SMTP set up, each one is also emailed to `ADMIN_EMAILS`, with
 Reply-To set to the sender's address when they gave one.
 
 The editor also reports errors on its own (`web/src/app/reports.ts`): errors nothing caught,
@@ -103,7 +109,7 @@ failures the user was shown (a render, a cloud save, opening a drawing), and sav
 over 30 s. Each carries the build, browser, GPU, memory and view, and a trail of what happened
 just before (toasts, console warnings, freezes, lost WebGL contexts, parts that wouldn't load);
 never the drawing, and names in quotes are blanked out. The server files its own 500s the same
-way. Reports of one error are grouped; admins read them in Help > Error Reports…, each new
+way. Reports of one error are grouped; admins read them on the admin page's Errors tab, each new
 error is one line in the server log and (with SMTP) an email to `ADMIN_EMAILS`, and
 `node server/scripts/reports.ts` lists them from a terminal with `REPORTS_TOKEN`. API requests
 over 8 s or failing with a 5xx are logged with their size and time.
@@ -173,6 +179,46 @@ An upload is used once, and dropped when unused for an hour.
 | `DELETE /shares/:token` | revokes it |
 | `GET /s/:token` | `SharedFile` (public) |
 | `GET /s/:token/content` | bytes of the head version (public) |
+| `GET /s/:token/poster` | the link's still preview, else the drawing's thumbnail, else a redirect to the icon (public) |
+| `GET /s/:token/turntable` | the link's turning GIF, else a redirect to the poster (public) |
+| `GET /shares/:token/preview` | `SharePreview` (owner or editor) |
+| `PUT /shares/:token/poster?width&height` PNG or JPEG ≤ 1 MB | 204 (owner or editor) |
+| `PUT /shares/:token/turntable?width&height` GIF ≤ 4 MB | 204 (owner or editor) |
+| `GET /oembed?url=&maxwidth=&maxheight=` | oEmbed JSON for a share or embed address (public) |
+
+### Embeds
+
+Options, all optional, in this canonical order (`OPTION_KEYS`). Unknown or invalid values are ignored (the default applies).
+
+| key | values | default | meaning |
+| --- | --- | --- | --- |
+| `view` | `2d`, `3d` | as the drawing opens | start in the 2D drawing or the 3D view. `3d` falls back to 2D when WebGL is missing or the drawing has no 3D model |
+| `layer` | a layer id, a design layer's name, a sheet's number or a sheet's title | as saved | the active layer or sheet. `sheet=` is accepted as an alias when `layer` is absent |
+| `at` | `x,y,span` (document units; span = width shown, > 0) | fitted | the 2D view's centre and width |
+| `cam` | `px,py,pz,tx,ty,tz` (document units) | fitted | the 3D camera's position and the point it looks at |
+| `preset` | `top bottom front back left right iso leftIso rightRearIso leftRearIso lowerRightIso lowerLeftIso lowerRightRearIso lowerLeftRearIso` | `iso` | the 3D standard view when there is no `cam` |
+| `render` | `shaded textured hidden dashed wireframe sketch` | the visitor's 3D render mode | the 3D render mode |
+| `rotate` | `1` (also `true` or present with no value) | off | turn slowly in 3D until touched |
+| `theme` | `auto`, `light`, `dark` | `auto` | the controls' look (`auto` follows the visitor's system) |
+| `ui` | `full`, `min`, `none` | `full` | `full`: name, layer picker, 2D/3D, Fit, Turn, Full Screen, Open in Rodeo. `min`: Open in Rodeo and Full Screen. `none`: a small Rodeo mark only |
+
+Every message is a plain object with `rodeo: 1` and a `type`.
+
+Viewer → host (`window.parent.postMessage(msg, "*")`, only when framed; the data is the share's public data):
+
+- `{ rodeo: 1, type: "ready", name, owner /* string or null */, view: "2d" | "3d", layers: [{ id, name, kind }] }`
+- `{ rodeo: 1, type: "view", view: "2d" | "3d" }` whenever 2D/3D changes
+- `{ rodeo: 1, type: "selection", objects: [{ id, name, type, layer, className }] }` (at most 50; clicks select in 3D)
+- `{ rodeo: 1, type: "error", message }`
+
+Host → viewer (accepted only when `event.source === window.parent`):
+
+- `{ rodeo: 1, type: "setView", view: "2d" | "3d", preset?: <preset> }`
+- `{ rodeo: 1, type: "fit" }`
+- `{ rodeo: 1, type: "rotate", on: boolean }`
+- `{ rodeo: 1, type: "layer", layer: "<id, name, sheet number or title>" }`
+
+Nothing a host sends can change the drawing, sign in, or navigate.
 
 ### Crit mode
 
@@ -222,6 +268,17 @@ modal deploy cloudrender/worker.py`. The worker bakes in `web/dist`, so render c
 cloud renders only when it is deployed again. To try a job without the server:
 `modal run cloudrender/worker.py --pack job.pack.gz`.
 
+### Voice commands
+
+The editor turns speech into text in the browser where it can (Chrome, Edge, Safari) and sends
+only the words to the agent (`/ai/chat`). Where it can't, it records while the voice key is held
+and sends the recording here, which passes it once to the speech model and keeps nothing.
+`GET /config` says whether it can: `voice: { transcribe, by }`.
+
+| | |
+| --- | --- |
+| `POST /voice/transcribe` `VoiceTranscribeRequest` | signed in; 16 kHz mono 16-bit WAV in base64, up to 30 s; `VoiceTranscript` `{ text, charged, balance }`, charged in the credit's currency with the model `voice <model>` in the ledger. 400 `bad_audio`, 402 `credit`, 403 `forbidden`/`plan` (`AI_ACCESS`), 413 `too_long`, 429 `rate_limited`, 503 `not_configured` or `provider_down` |
+
 ### Feedback
 
 | | |
@@ -243,18 +300,33 @@ cloud renders only when it is deployed again. To try a job without the server:
 ### Admin page and visits
 
 The admin page is `/admin` (web/admin.html, web/src/admin), a page of its own for the accounts
-in `ADMIN_EMAILS`, also reached from the editor's Help > Admin Page…. Its Overview shows who is
-in the editor now, visitors a day (guests and signed in), sign-ups, the AI credit bought, given,
-used and still owed, and where visitors came from; People lists the accounts, and an account's
-panel gives or takes back credit (with a note the user sees, and an email if wanted), gives
-Rodeo Plus for a while, signs it out everywhere, suspends it or deletes it; Settings sets the
-credit new accounts start with.
+in `ADMIN_EMAILS`, also reached from the editor's Help > Admin Panel… (the only admin item left
+in the editor). Its side bar has three groups of tabs:
+
+- Analytics. Live: who is in the editor now on a globe, with each visitor's place, device, way
+  in and time in, the last hour, today so far and live editing sessions. Overview: visitors a
+  day, sign-ups, the AI credit bought, given, used and still owed, and where visitors came from.
+  Audience: visitors by country and city on a globe, accounts in Rodeo each day, week and month,
+  the hours people come, visit lengths, a funnel from visiting to paying, weekly sign-up cohorts
+  and new against returning members. Revenue: Rodeo Plus, credit bought and taken against what
+  the providers charged, use by model, cloud renders and the top spenders. Usage: cloud drawings,
+  versions and storage, the gallery, comments, merge requests and agents.
+- Manage. People lists the accounts, and an account's panel gives or takes back credit (with a
+  note the user sees, and an email if wanted), gives Rodeo Plus for a while, signs it out
+  everywhere, suspends it or deletes it. Feedback and Errors are the bug reports and the error
+  reports; Gallery the moderation queue; Announcements and Funding and sponsor what the editor
+  shows.
+- Server. Settings sets the credit new accounts start with and makes tagged links; System shows
+  the server's health, what it is set up with, and the admin log: every step an admin took.
 
 Visits come from the editor (web/src/app/visits.ts): a word when it opens, each minute while it
 is in front, and when a drawing opens (its kind only). No cookie, nothing kept on the device:
 the server knows a visitor by a hash of their address and browser with a salt that changes each
-day, so a person counts once a day and can't be followed across days. Admins' own visits,
-crawlers and test browsers (`navigator.webdriver`) aren't counted. Rows are kept 400 days.
+day, so a person counts once a day and can't be followed across days. Where a visit came from
+is the country Cloudflare names (`CF-IPCountry`) and, when its "Add visitor location headers"
+managed transform is on, the city, region and a position rounded to 0.1° (about 10 km); without
+them the globes place visitors at their country's middle. Admins' own visits, crawlers and test
+browsers (`navigator.webdriver`) aren't counted. Rows are kept 400 days.
 
 | | |
 | --- | --- |
@@ -269,6 +341,13 @@ crawlers and test browsers (`navigator.webdriver`) aren't counted. Rows are kept
 | `POST /admin/users/:id/suspend` `{ suspended }` | admins; a suspended account is signed out, can't sign in, and is treated as signed out |
 | `DELETE /admin/users/:id` `{ email }` | admins; deletes the account as `DELETE /me` would, the email typed to confirm |
 | `GET`, `PUT /admin/settings` `{ welcomeCredit }` | admins; the credit each new account starts with (0 to 50) |
+| `GET /admin/live` | admins; `AdminLive`: visitors heard from in the last 3 minutes, the last hour, today, live sessions |
+| `GET /admin/geo?days=N` | admins; `AdminGeo`: visitors by country and by city |
+| `GET /admin/engagement?days=N` | admins; `AdminEngagement`: daily, weekly and monthly accounts, hours, visit lengths, the funnel, cohorts |
+| `GET /admin/revenue?days=N` | admins; `AdminRevenue`: Rodeo Plus, credit by day and by model, renders, top spenders |
+| `GET /admin/usage?days=N` | admins; `AdminUsage`: cloud drawings, the gallery, comments, merge requests, agents |
+| `GET /admin/system` | admins; `AdminSystem`: version, memory, storage, what is set up, admins |
+| `GET /admin/log?offset=N` | admins; `{ entries, total }`: the steps admins took, newest first, 50 a page |
 
 ## Live collaboration
 
@@ -277,15 +356,29 @@ reviewers receive changes and presence but cannot send changes). Messages are
 JSON, typed `ClientMessage` / `ServerMessage` in protocol.ts.
 
 - The client loads the head version (`GET content`, noting `X-Version-Id`), then
-  sends `hello` with it. The server answers `welcome` with the changes made since
-  that version (to apply in order) and who is there, or `reload` if the client
-  should fetch the content again.
-- A change is one splice of the record list (`core/splice.ts`). The client sends
-  one at a time (`op` with `base`, the last seq it applied) and waits for `ack`.
-  The server rewrites a change made against an older seq past the ones since, or
-  answers `reject` when they touch the same records; the client then turns its
-  change back. Every client applies the same changes in the same order, so all
-  hold the same bytes.
+  sends `hello` with it and the protocol it speaks (`proto`, `COLLAB_PROTOCOL`).
+  The server answers `welcome` with the changes made since that version (to apply
+  in order) and who is there, or `reload` if the client should fetch the content
+  again. A client older than the server's protocol is closed with 4003
+  "outdated" (it stops retrying; its page must be reloaded), as it would apply a
+  change of several runs wrongly.
+- A change is the runs of the record list it replaced (`core/splice.ts`): its
+  first run, then `more`, each at the positions the runs before it left. An edit
+  that adds a class at the top of the file and draws at its end goes as two
+  small runs, not one span over the whole drawing. The client sends one change at
+  a time (`op` with `base`, the last seq it applied) and waits for `ack`. The
+  server rewrites a change made against an older seq past the ones since, run by
+  run, or answers `reject` when a run of it touches the records of a run of one
+  of them; the client then turns its change back. Every client applies the same
+  changes in the same order, so all hold the same bytes.
+- A change of the name table (type 55: the names of classes, symbols, textures
+  and named objects) goes as a run of its own. When the only records a client's
+  change shares with one ordered before it are the name table, the client makes
+  its change again on top of the other and sends it anew (the server refuses the
+  first as usual): the table is merged entry by entry, a name index both took
+  moves to a fresh one for the later change (its records renumbered), a class
+  both added under one name becomes the earlier one, and another name both used
+  gets " (2)" (`features/collab/rebase.ts`). The server needs nothing for it.
 - Changes are kept in the database until a version holds them: the server sends
   `save-request` to one editor every 60 changes or 2 minutes (a drawing over
   100 MB: 15 minutes, however many changes); the editor saves (`PUT content`

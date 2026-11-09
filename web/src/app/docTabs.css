@@ -1,4 +1,4 @@
-/* ---- document tabs: the open drawings, over the drawing once two or more are open ---- */
+/* ---- document tabs: the open drawings, over the drawing while one is open ---- */
 
 .stage {
   --doc-tabs-h: 30px;
@@ -74,6 +74,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* a feature's mark before the name (an agent at work in the drawing) */
+.doc-tab-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  margin-left: -3px;
+  color: var(--text-3);
+}
+
+.doc-tab-mark svg {
+  width: 13px;
+  height: 13px;
 }
 
 .doc-tab-dot {

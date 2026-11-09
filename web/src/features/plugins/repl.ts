@@ -1,4 +1,4 @@
-// Window > Script Console…: a line-at-a-time REPL on the same API, in one persistent
+// Tools > Plug-ins > Script Console…: a line-at-a-time REPL on the same API, in one persistent
 // worker. A line that is an expression gives its value (printed as truncated JSON);
 // anything else runs as the body of an async function. Up and Down walk the history.
 // The panel floats and does not block the drawing, so a selection made in the
@@ -61,7 +61,7 @@ function restart(): void {
   write("system", "Restarted. Variables from before are gone.");
 }
 
-/** Window > Script Console…: opens the panel, or brings it forward. */
+/** Tools > Plug-ins > Script Console…: opens the panel, or brings it forward. */
 export function openConsole(): void {
   if (!panel) build();
   if (panel) panel.hidden = false;

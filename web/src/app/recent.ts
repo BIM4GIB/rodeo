@@ -132,7 +132,7 @@ export async function openRecentEntry(entry: RecentEntry): Promise<{ file: Blob;
 
 /** The Open Recent submenu: each listed drawing, newest first, then Clear Menu. */
 export function recentRows(open: (entry: RecentEntry) => void): Row[] {
-  if (recent.length === 0) return [{ label: "No recent drawings", enabled: () => false }];
+  if (recent.length === 0) return [{ label: "No recent drawings", why: () => "Open or save a drawing to list it here", enabled: () => false }];
   return [
     ...recent.map((r): Row => ({ label: r.name, run: () => open(r) })),
     "-",

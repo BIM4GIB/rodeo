@@ -9,7 +9,8 @@ import type { Pt } from "../core/index.ts";
 import type { ModelFormat } from "../export/model3d.ts";
 import type { MeshImportFormat } from "./meshImport.ts";
 import { h } from "./dom.ts";
-import { IS_MAC, menuButton, openContextMenu, shortcutText, type Item, type Row } from "./menu.ts";
+import { IS_MAC, menuButton, openContextMenu, setFallbackWhy, shortcutText, type Item, type Row } from "./menu.ts";
+import { NO_DRAWING, STEP, need, whyIn, whyNot } from "./menuReasons.ts";
 import { combinationOf, registerMenus, rowForKeys, withMenuKeys } from "./menuKeys.ts";
 import { arrangeMenus, registerMenuLayout } from "./menuLayout.ts";
 import { UI_ICON } from "./icons.ts";
@@ -18,6 +19,7 @@ import {
   alignToGrid,
   arrangeSelection,
   canFitToPage,
+  canPaste,
   copySelection,
   cutSelection,
   deleteObjects,
@@ -77,6 +79,7 @@ import { importWorksheetFile } from "./worksheetImport.ts";
 import { exportShapefileDialog } from "./shapefileExport.ts";
 import { set3dViewDialog } from "./set3dView.ts";
 import { rotate3dViewDialog } from "./rotate3dView.ts";
+import { planOnScreen, threeDOnScreen } from "./viewTargets.ts";
 import {
   canCompose,
   canConvertToGroup,
@@ -224,7 +227,7 @@ import { attachRecordDialog, canAttachRecord, canDetachRecord, detachRecordDialo
 import { canReplaceWithSymbol, replaceWithSymbolDialog } from "./replaceWithSymbol.ts";
 import { textureRows } from "./textureMapping.ts";
 import { canPreviousSelection, previousSelection } from "./selectionHistory.ts";
-import { canDeleteAllGuides, canHideGuides, canMakeGuide, canSelectGuides, canShowGuides, deleteAllGuides, makeGuide, selectGuides, showGuides } from "./guides.ts";
+import { canDeleteAllGuides, canMakeGuide, canSelectGuides, deleteAllGuides, guidesShown, hasGuidesClass, makeGuide, selectGuides, showGuides } from "./guides.ts";
 import { docTabsShown, setDocTabsShown } from "./docTabs.ts";
 import { annotatableViewport, editAnnotations, editSymbol, exitSymbol, selectedSymbol } from "./symbolEdit.ts";
 import { smartPointSettingsDialog, snapSettingsDialog } from "./panels/snapping.ts";
@@ -250,7 +253,7 @@ import { textMenuRows } from "./textMenu.ts";
 import { darkCanvas, setDarkCanvas, themeRows } from "./theme.ts";
 import { projectionRows, renderModeRows, standardViewRows, type View3dActions } from "./viewbar.ts";
 import { paneRows } from "./viewPanes.ts";
-import { lookAtPlane, workingPlaneMenuRows } from "./workingPlanes.ts";
+import { workingPlaneMenuRows } from "./workingPlanes.ts";
 import { exitGroupOptionRows } from "./exitGroup.ts";
 import { dataBarOptionRows } from "./databar.ts";
 import { savePalettePositions, workspaceRows } from "./workspaces.ts";
@@ -318,7 +321,7 @@ export interface MenuActions extends View3dActions {
   importPdf(): void;
   /** File > Import > Import Metafile… */
   importMetafile(): void;
-  /** File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, FBX…, Collada (SketchUp)…, Blender…, PLY… and SketchUp… */
+  /** File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, STEP…, IGES…, CAD Parts…, FBX…, Collada (SketchUp)…, Blender…, PLY… and SketchUp… */
   importMesh(format: MeshImportFormat): void;
   /** File > Import Shapefile… */
   importShapefile(): void;
@@ -440,7 +443,7 @@ export function runMenuCommand(path: string): boolean {
 
 /** Edit > Recent Commands: the commands run lately, latest first, each run again from here. */
 function recentCommandRows(): Row[] {
-  if (!recentCommands.length) return [{ label: "No Recent Commands", enabled: () => false }];
+  if (!recentCommands.length) return [{ label: "No Recent Commands", why: () => "Run a command to list it here", enabled: () => false }];
   // a label two menus share says which menu it is in
   const labels = recentCommands.map((p) => p.at(-1));
   return recentCommands.map((p): Item => ({
@@ -541,6 +544,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
   };
   const align = (label: string, edge: AlignEdge): Row => ({
     label,
+    why: need.twoOrMore,
     enabled: hasTwo,
     run: () => alignSelection(scene, edge),
   });
@@ -560,8 +564,8 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Save As…", keys: "⇧⌘S", enabled: hasDoc, run: () => actions.saveAs() },
         { label: "Save a Copy As…", enabled: hasDoc, run: () => actions.saveCopyAs() },
         { label: "Save as Template…", enabled: hasDoc, run: () => actions.saveAsTemplate() },
-        { label: "Save All", enabled: () => actions.anyUnsaved(), run: () => actions.saveAll() },
-        { label: "Revert", enabled: () => !!store.handle && !!store.session?.dirty, run: () => actions.revert() },
+        { label: "Save All", why: whyIn("Every open drawing is saved"), enabled: () => actions.anyUnsaved(), run: () => actions.saveAll() },
+        { label: "Revert", why: whyNot([() => !!store.handle, "Only a drawing kept in a file on this computer can revert"], [() => !!store.session?.dirty, "Nothing has changed since it was saved"]), enabled: () => !!store.handle && !!store.session?.dirty, run: () => actions.revert() },
         { label: "File Info…", enabled: hasDoc, run: () => actions.fileInfo() },
         "-",
         {
@@ -579,6 +583,9 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Import IFC…", enabled: hasLayer, run: () => actions.importMesh("ifc") },
             { label: "Import USD…", enabled: hasLayer, run: () => actions.importMesh("usd") },
             { label: "Import Rhino 3DM…", enabled: hasLayer, run: () => actions.importMesh("3dm") },
+            { label: "Import STEP…", enabled: hasLayer, run: () => actions.importMesh("step") },
+            { label: "Import IGES…", enabled: hasLayer, run: () => actions.importMesh("iges") },
+            { label: "Import CAD Parts…", enabled: hasLayer, run: () => actions.importMesh("native") },
             { label: "Import FBX…", enabled: hasLayer, run: () => actions.importMesh("fbx") },
             { label: "Import Collada (SketchUp)…", enabled: hasLayer, run: () => actions.importMesh("dae") },
             { label: "Import Blender…", enabled: hasLayer, run: () => actions.importMesh("blend") },
@@ -600,8 +607,8 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Export EPSF", enabled: hasDoc, run: () => actions.exportEps() },
             { label: "Export Metafile", enabled: hasDoc, run: () => actions.exportEmf() },
             { label: "Export DXF", enabled: hasDoc, run: () => actions.exportDxf() },
-            { label: "Export Worksheet…", enabled: canExportWorksheet, run: () => void exportWorksheetDialog() },
-            { label: "Export Database…", enabled: canExportDatabase, run: () => void exportDatabaseDialog() },
+            { label: "Export Worksheet…", why: need.worksheet, enabled: canExportWorksheet, run: () => void exportWorksheetDialog() },
+            { label: "Export Database…", why: need.recordFormat, enabled: canExportDatabase, run: () => void exportDatabaseDialog() },
             { label: "Export Lighting Device Data…", enabled: hasDoc, run: () => void import("../features/theatre/patch/deviceDataDialogs.ts").then((m) => m.exportDeviceDataDialog()) },
             { label: "Export ASCII Patch…", enabled: hasDoc, run: () => void import("../features/theatre/patch/exchange.ts").then((m) => m.exportAsciiPatch()) },
             "-",
@@ -624,7 +631,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         },
         "-",
         { label: "Publish…", enabled: hasDoc, run: () => actions.publish() },
-        { label: "Page Setup…", enabled: canSetUpPage, run: () => void pageSetup() },
+        { label: "Page Setup…", why: need.sheet, enabled: canSetUpPage, run: () => void pageSetup() },
         { label: "Title Block Manager…", enabled: hasDoc, run: () => void titleBlockManager() },
         {
           label: "Document Settings",
@@ -640,29 +647,29 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
     {
       title: "Edit",
       rows: [
-        { label: "Undo", keys: "⌘Z", enabled: () => store.session?.canUndo() ?? false, run: undo },
-        { label: "Redo", keys: "⇧⌘Z", enabled: () => store.session?.canRedo() ?? false, run: redo },
-        { label: "Repeat Last Command", enabled: () => canRunAt(recentCommands[0]), run: () => runAt(recentCommands[0]) },
+        { label: "Undo", why: whyIn("Nothing to undo"), keys: "⌘Z", enabled: () => store.session?.canUndo() ?? false, run: undo },
+        { label: "Redo", why: whyIn("Nothing to redo"), keys: "⇧⌘Z", enabled: () => store.session?.canRedo() ?? false, run: redo },
+        { label: "Repeat Last Command", why: whyNot([() => recentCommands.length > 0, "Run a command first"], [() => canRunAt(recentCommands[0]), "The last command doesn't apply now"]), enabled: () => canRunAt(recentCommands[0]), run: () => runAt(recentCommands[0]) },
         { label: "Recent Commands", items: recentCommandRows },
         "-",
-        { label: "Cut", keys: "⌘X", enabled: hasSelection, run: cutSelection },
-        { label: "Copy", keys: "⌘C", enabled: hasSelection, run: copySelection },
-        { label: "Paste", keys: "⌘V", enabled: hasLayer, run: () => void paste(view) },
-        { label: "Paste in Place", keys: "⌥⌘V", enabled: hasLayer, run: () => void pasteInPlace() },
+        { label: "Cut", why: need.selection, keys: "⌘X", enabled: hasSelection, run: cutSelection },
+        { label: "Copy", why: need.selection, keys: "⌘C", enabled: hasSelection, run: copySelection },
+        { label: "Paste", why: whyIn("Copy or cut objects first"), keys: "⌘V", enabled: () => hasLayer() && canPaste(), run: () => void paste(view) },
+        { label: "Paste in Place", why: whyIn("Copy or cut objects first"), keys: "⌥⌘V", enabled: () => hasLayer() && canPaste(), run: () => void pasteInPlace() },
         { label: "Paste as Bitmap", enabled: hasLayer, run: () => actions.pasteAsBitmap() },
-        { label: "Duplicate", keys: "⌘D", enabled: hasSelection, run: () => duplicateSelection(view) },
-        { label: "Duplicate Array…", enabled: hasSelection, run: () => actions.duplicateArray() },
-        { label: "Duplicate Along Path…", enabled: canDuplicateAlongPath, run: () => void duplicateAlongPathDialog(scene) },
-        { label: "Delete", keys: "⌫", enabled: hasSelection, run: () => deleteObjects([...store.selection]) },
+        { label: "Duplicate", why: need.selection, keys: "⌘D", enabled: hasSelection, run: () => duplicateSelection(view) },
+        { label: "Duplicate Array…", why: need.selection, enabled: hasSelection, run: () => actions.duplicateArray() },
+        { label: "Duplicate Along Path…", why: whyIn("Select the objects and one path to follow first"), enabled: canDuplicateAlongPath, run: () => void duplicateAlongPathDialog(scene) },
+        { label: "Delete", why: need.selection, keys: "⌫", enabled: hasSelection, run: () => deleteObjects([...store.selection]) },
         "-",
         { label: "Select All", keys: "⌘A", enabled: hasLayer, run: () => selectAll(scene) },
-        { label: "Select Similar", enabled: canSelectSimilar, run: selectSimilar },
-        { label: "Select Connected Objects", enabled: canSelectConnected, run: selectConnectedObjects },
-        { label: "Select None", keys: "Esc", enabled: hasSelection, run: () => setSelection([]) },
+        { label: "Select Similar", why: need.selection, enabled: canSelectSimilar, run: selectSimilar },
+        { label: "Select Connected Objects", why: whyIn("Select a line, open polyline or arc first"), enabled: canSelectConnected, run: selectConnectedObjects },
+        { label: "Select None", why: need.selection, keys: "Esc", enabled: hasSelection, run: () => setSelection([]) },
         { label: "Invert Selection", enabled: hasLayer, run: () => invertSelection(scene) },
-        { label: "Previous Selection", enabled: canPreviousSelection, run: previousSelection },
+        { label: "Previous Selection", why: whyIn("There's no earlier selection"), enabled: canPreviousSelection, run: previousSelection },
         "-",
-        { label: "Create Similar Object", enabled: canCreateSimilar, run: createSimilar },
+        { label: "Create Similar Object", why: need.one, enabled: canCreateSimilar, run: createSimilar },
         "-",
         { label: "Preferences…", keys: "⌘,", run: () => void preferencesDialog() },
       ],
@@ -674,50 +681,68 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Zoom Out", keys: "⌘-", enabled: hasDoc, run: () => zoomBy(view, 1 / ZOOM_STEP) },
         { label: "Fit to Window", keys: "⌘0", enabled: hasDoc, run: () => actions.fit() },
         { label: "Fit to Objects", keys: "⌘6", enabled: hasDoc, run: () => actions.fitObjects() },
-        { label: "Fit to Page Area", enabled: () => canFitToPage(scene), run: () => fitToPage(scene, view) },
-        { label: "Normal Scale", enabled: () => hasDoc() && !store.view3d, run: () => normalScale(scene, view) },
-        { label: "Zoom to Selection", enabled: hasSelection, run: () => zoomToSelection(scene, view) },
-        { label: "Previous View", enabled: hasPreviousView, run: () => previousView(view) },
-        { label: "Next View", enabled: hasNextView, run: () => nextView(view) },
+        { label: "Fit to Page Area", why: need.sheetActive, enabled: () => canFitToPage(scene), run: () => fitToPage(scene, view) },
+        {
+          label: "Normal Scale",
+          why: need.plan,
+          enabled: planOnScreen,
+          run: () => {
+            // with several panes, the live plan's pane made the active one
+            if (store.view3d) actions.topPlan();
+            normalScale(scene, view);
+          },
+        },
+        { label: "Zoom to Selection", why: need.selection, enabled: hasSelection, run: () => zoomToSelection(scene, view) },
+        { label: "Previous View", why: whyNot([() => !store.view3d, STEP.plan], [hasPreviousView, "There's no earlier view"]), enabled: hasPreviousView, run: () => previousView(view) },
+        { label: "Next View", why: whyNot([() => !store.view3d, STEP.plan], [hasNextView, "There's no later view"]), enabled: hasNextView, run: () => nextView(view) },
         { label: "Save View…", enabled: hasDoc, run: () => actions.saveView() },
         { label: "Zoom Line Thickness", checked: () => store.zoomLineThickness, run: () => setZoomLineThickness(!store.zoomLineThickness) },
         "-",
         { label: "3D View", keys: "3", enabled: hasDoc, checked: () => store.view3d, run: () => actions.toggle3d() },
-        { label: "Standard Views", enabled: hasDoc, items: standardViewRows(actions) },
+        // Rotated Top/Plan is the View menu's own row below, with ⌘5; the View bar's pop-up keeps it among the standard views
+        { label: "Standard Views", enabled: hasDoc, items: standardViewRows(actions).filter((r) => r === "-" || r.label !== "Rotated Top/Plan") },
         { label: "Rotate Plan", enabled: canRotatePlan, run: startRotatePlan },
         { label: "Rotated Top/Plan", keys: "⌘5", enabled: hasDoc, checked: () => !store.view3d && planRotated(), run: toggleRotatedPlan },
         { label: "Set 3D View…", enabled: hasDoc, run: () => void set3dViewDialog(scene, view) },
         { label: "Rotate 3D View…", enabled: hasDoc, run: () => void rotate3dViewDialog() },
-        { label: "Look at Working Plane", enabled: hasDoc, run: () => void lookAtPlane() },
         { label: "Onscreen View Control", items: viewControlRows },
         { label: "Multiple View Panes", items: () => paneRows(() => true) },
-        { label: "Rendering", enabled: () => store.view3d, items: renderModeRows(actions, false) },
-        { label: "Renderworks Style", enabled: () => store.view3d, items: () => renderStyleRows(actions) },
+        { label: "Rendering", why: need.threeD, enabled: threeDOnScreen, items: renderModeRows(actions, false) },
+        { label: "Renderworks Style", why: need.threeD, enabled: threeDOnScreen, items: () => renderStyleRows(actions) },
         { label: "Projection", enabled: hasDoc, items: () => projectionRows(actions) },
         {
           label: "Clip Cube",
-          enabled: () => store.view3d,
+          why: need.threeD,
+          enabled: threeDOnScreen,
           checked: () => store.viz3d.clip.on,
-          run: () => setViz({ clip: { ...store.viz3d.clip, on: !store.viz3d.clip.on } }),
+          run: () => {
+            // with several panes, the live 3D view's pane made the active one, to drag the cube in
+            if (!store.view3d) actions.toggle3d();
+            setViz({ clip: { ...store.viz3d.clip, on: !store.viz3d.clip.on } });
+          },
         },
         { label: "Create Viewport…", enabled: canCreateViewport, run: () => void createViewportDialog() },
         {
           label: "Create Detail Viewport…",
+          why: whyIn("Select one closed shape to crop the detail to first"),
           enabled: () => canCreateViewport() && store.selection.size === 1,
           run: () => void import("./detailViewport.ts").then((m) => m.createDetailViewportDialog()),
         },
         {
           label: "Create Section Viewport…",
+          why: whyIn("Select one section line or line first"),
           enabled: () => canCreateViewport() && store.selection.size === 1,
           run: () => void import("./sectionViewport.ts").then((m) => m.createSectionViewportDialog()),
         },
         {
           label: "Create Interior Elevation Viewport…",
+          why: whyIn("Select one interior elevation marker or closed shape first"),
           enabled: () => canCreateViewport() && store.selection.size === 1,
           run: () => void import("./interiorElevation.ts").then((m) => m.createInteriorElevationDialog()),
         },
         {
           label: "Create Horizontal Section Viewport…",
+          why: need.designLayer,
           enabled: () => canCreateViewport() && store.session?.doc.layers().find((l) => l.id === store.activeLayerId)?.kind === "design",
           run: () => void import("./sectionViewport.ts").then((m) => m.createHorizontalSectionDialog()),
         },
@@ -729,6 +754,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         },
         {
           label: "Update Selected Viewports",
+          why: whyIn("Select a viewport first"),
           enabled: () => {
             const doc = store.session?.doc;
             return !!doc && [...store.selection].some((id) => doc.viewport(id) !== null);
@@ -737,6 +763,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         },
         {
           label: "Update All Viewports",
+          why: whyIn("Make a viewport first: View › Create Viewport…"),
           enabled: () => {
             const doc = store.session?.doc;
             return !!doc && doc.layers().some((l) => l.kind === "sheet" && doc.viewportIds(l.id).length > 0);
@@ -749,29 +776,29 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Class Options", items: displayModeRows("classMode") },
         { label: "Layer Options", items: displayModeRows("layerMode") },
         "-",
-        { label: "Unhide Objects", enabled: canUnhide, run: unhideObjects },
-        { label: "Show Selected Objects Only", enabled: canHideSelected, run: () => showSelectedObjectsOnly(scene) },
-        { label: "Hide Selected Objects", enabled: canHideSelected, run: hideSelectedObjects },
+        { label: "Unhide Objects", why: whyIn("No objects are hidden"), enabled: canUnhide, run: unhideObjects },
+        { label: "Show Selected Objects Only", why: need.selection, enabled: canHideSelected, run: () => showSelectedObjectsOnly(scene) },
+        { label: "Hide Selected Objects", why: need.selection, enabled: canHideSelected, run: hideSelectedObjects },
         { label: "Object Visibility…", enabled: canHideObjects, run: () => void objectVisibilityDialog() },
-        { label: "Show or Hide Site Modifiers", enabled: hasSiteModifiers, checked: siteModifiersShown, run: toggleSiteModifiers },
+        { label: "Show or Hide Site Modifiers", why: whyIn("The drawing has no site modifiers"), enabled: hasSiteModifiers, checked: siteModifiersShown, run: toggleSiteModifiers },
         "-",
         { label: "Show Grid", keys: "⌘'", checked: () => store.showGrid, run: toggleGrid },
         { label: "Snap to Grid", keys: "⇧⌘'", checked: () => store.snapGrid, run: toggleSnapGrid },
         { label: "Snap to Objects", checked: () => store.snapObjects, run: toggleSnapObjects },
         { label: "Rulers", checked: rulersShown, run: toggleRulers },
         "-",
-        { label: "Theme", items: themeRows() },
-        { label: "Dark Canvas", checked: darkCanvas, run: () => setDarkCanvas(!darkCanvas()) },
+        { label: "Appearance", items: [...themeRows(), "-", { label: "Dark Canvas", checked: darkCanvas, run: () => setDarkCanvas(!darkCanvas()) }] },
       ],
     },
     {
       title: "Modify",
       rows: [
-        { label: "Group", keys: "⌘G", enabled: hasTwo, run: groupSelection },
-        { label: "Ungroup", keys: "⌘U", enabled: hasGroupSelected, run: ungroupSelection },
-        { label: "Edit Group", keys: "⌘[", enabled: () => selectedGroup() !== null, run: editSelectedGroup },
+        { label: "Group", why: need.twoOrMore, keys: "⌘G", enabled: hasTwo, run: groupSelection },
+        { label: "Ungroup", why: whyIn("Select a group first"), keys: "⌘U", enabled: hasGroupSelected, run: ungroupSelection },
+        { label: "Edit Group", why: whyIn("Select one group first"), keys: "⌘[", enabled: () => selectedGroup() !== null, run: editSelectedGroup },
         {
           label: "Exit Group",
+          why: whyIn("No group or symbol is open for editing"),
           keys: "⌘]",
           // with no group open it leaves the symbol being edited, as Vectorworks' shortcut does
           enabled: () => store.editGroupId !== null || store.symbolEdit !== null,
@@ -779,6 +806,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         },
         {
           label: "Top Level",
+          why: whyIn("No group or symbol is open for editing"),
           // out of every group open, and the symbol being edited, back to the drawing
           enabled: () => store.editGroupId !== null || store.symbolEdit !== null,
           run: () => {
@@ -786,58 +814,61 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             exitSymbol();
           },
         },
-        { label: "Edit Symbol", enabled: () => selectedSymbol() !== null, run: editSelectedSymbol },
-        { label: "Edit Auto Hybrid", enabled: () => selectedAutoHybrid() !== null, run: () => editAutoHybrid() },
-        { label: "Exit Symbol", enabled: () => store.symbolEdit !== null && !store.symbolEdit.viewport, run: exitSymbol },
+        { label: "Edit Symbol", why: whyIn("Select one symbol first"), enabled: () => selectedSymbol() !== null, run: editSelectedSymbol },
+        { label: "Edit Auto Hybrid", why: whyIn("Select one Auto Hybrid first"), enabled: () => selectedAutoHybrid() !== null, run: () => editAutoHybrid() },
+        { label: "Exit Symbol", why: whyIn("No symbol is open for editing"), enabled: () => store.symbolEdit !== null && !store.symbolEdit.viewport, run: exitSymbol },
         "-",
         {
           label: "Surfaces",
+          why: need.twoClosed,
           enabled: () => hasTwoClosed() || canClipSurface(),
           items: [
-            { label: "Add Surface", enabled: hasTwoClosed, run: addSurface },
-            { label: "Clip Surface", enabled: canClipSurface, run: clipSurface },
-            { label: "Intersect Surface", enabled: hasTwoClosed, run: intersectSurface },
+            { label: "Add Surface", why: need.twoClosed, enabled: hasTwoClosed, run: addSurface },
+            { label: "Clip Surface", why: need.twoClosed, enabled: canClipSurface, run: clipSurface },
+            { label: "Intersect Surface", why: need.twoClosed, enabled: hasTwoClosed, run: intersectSurface },
           ],
         },
-        { label: "Combine into Surface", enabled: canCombineIntoSurface, run: combineIntoSurface },
-        { label: "Compose", enabled: canCompose, run: composeSelection },
-        { label: "Decompose", enabled: canDecompose, run: decomposeSelection },
+        { label: "Combine into Surface", why: whyIn("Select lines or shapes that enclose an area first"), enabled: canCombineIntoSurface, run: combineIntoSurface },
+        { label: "Compose", why: whyIn("Select two or more lines or arcs that meet end to end first"), enabled: canCompose, run: composeSelection },
+        { label: "Decompose", why: whyIn("Select a rectangle, polygon or polyline first"), enabled: canDecompose, run: decomposeSelection },
         {
           label: "Join",
+          why: whyIn("Select two lines or two walls first"),
           enabled: () => canJoin() || canJoinFillet(),
           items: [
-            { label: "Join", keys: "⌘J", enabled: canJoin, run: () => joinSelection(true) },
-            { label: "Join (No Trim)", keys: "⇧⌘J", enabled: canJoin, run: () => joinSelection(false) },
-            { label: "Join and Fillet", keys: "⌥⌘J", enabled: canJoinFillet, run: () => void joinAndFillet() },
+            { label: "Join", why: whyIn("Select two lines or two walls first"), keys: "⌘J", enabled: canJoin, run: () => joinSelection(true) },
+            { label: "Join (No Trim)", why: whyIn("Select two lines or two walls first"), keys: "⇧⌘J", enabled: canJoin, run: () => joinSelection(false) },
+            { label: "Join and Fillet", why: whyIn("Select four lines that make two double lines first"), keys: "⌥⌘J", enabled: canJoinFillet, run: () => void joinAndFillet() },
           ],
         },
-        { label: "Hatch…", enabled: canHatch, run: () => actions.hatch() },
+        { label: "Hatch…", why: whyIn("Select one closed shape first"), enabled: canHatch, run: () => actions.hatch() },
         {
           label: "Convert",
+          why: need.selection,
           enabled: () =>
             canConvertToPolygons() || canConvertToLines() || canConvertToGroup() || canConvertToDimension() || canConvertTo3DPolygons() || canConvertToMesh() || canReplaceWithSymbol() || canStakesFromLoci(),
           items: [
-            { label: "Stake Object from 3D Locus…", enabled: canStakesFromLoci, run: () => void stakesFromLociDialog() },
-            { label: "Convert to Group", keys: "⌘K", enabled: canConvertToGroup, run: convertToGroupSelection },
-            { label: "Convert to Polygons", enabled: canConvertToPolygons, run: convertToPolygonsSelection },
-            { label: "Convert to Polylines", enabled: canConvertToPolylines, run: convertToPolylinesSelection },
-            { label: "Convert to Lines", enabled: canConvertToLines, run: convertToLinesSelection },
-            { label: "Convert Copy to Polygons", enabled: canConvertToPolygons, run: convertCopyToPolygonsSelection },
-            { label: "Convert Copy to Lines", enabled: canConvertToLines, run: convertCopyToLinesSelection },
-            { label: "Convert Object to Dimension", enabled: canConvertToDimension, run: convertToDimensionSelection },
-            { label: "Convert to 3D Polygons", enabled: canConvertTo3DPolygons, run: convertTo3DPolygonsSelection },
-            { label: "Convert to Mesh", enabled: canConvertToMesh, run: convertToMeshSelection },
-            { label: "Replace with Symbol…", enabled: canReplaceWithSymbol, run: () => void replaceWithSymbolDialog() },
+            { label: "Stake Object from 3D Locus…", why: whyIn("Select 3D loci first"), enabled: canStakesFromLoci, run: () => void stakesFromLociDialog() },
+            { label: "Convert to Group", why: whyIn("Select a symbol or plug-in object first"), keys: "⌘K", enabled: canConvertToGroup, run: convertToGroupSelection },
+            { label: "Convert to Polygons", why: whyIn("Select a rectangle, polyline, arc, circle or ellipse first"), enabled: canConvertToPolygons, run: convertToPolygonsSelection },
+            { label: "Convert to Polylines", why: whyIn("Select a rectangle, polygon, circle or arc first"), enabled: canConvertToPolylines, run: convertToPolylinesSelection },
+            { label: "Convert to Lines", why: whyIn("Select a rectangle, polygon, polyline, arc, circle or ellipse first"), enabled: canConvertToLines, run: convertToLinesSelection },
+            { label: "Convert Copy to Polygons", why: whyIn("Select a rectangle, polyline, arc, circle or ellipse first"), enabled: canConvertToPolygons, run: convertCopyToPolygonsSelection },
+            { label: "Convert Copy to Lines", why: whyIn("Select a rectangle, polygon, polyline, arc, circle or ellipse first"), enabled: canConvertToLines, run: convertCopyToLinesSelection },
+            { label: "Convert Object to Dimension", why: whyIn("Select lines or arcs first"), enabled: canConvertToDimension, run: convertToDimensionSelection },
+            { label: "Convert to 3D Polygons", why: need.threeDObjects, enabled: canConvertTo3DPolygons, run: convertTo3DPolygonsSelection },
+            { label: "Convert to Mesh", why: need.threeDObjects, enabled: canConvertToMesh, run: convertToMeshSelection },
+            { label: "Replace with Symbol…", why: whyNot([hasSelection, STEP.selection], [canReplaceWithSymbol, "Make a symbol first: Modify › Create Symbol…"]), enabled: canReplaceWithSymbol, run: () => void replaceWithSymbolDialog() },
           ],
         },
-        { label: "Simplify Mesh…", enabled: canSimplifyMesh, run: () => void simplifyMeshDialog() },
+        { label: "Simplify Mesh…", why: whyIn("Select meshes first"), enabled: canSimplifyMesh, run: () => void simplifyMeshDialog() },
         {
           label: "Attributes",
           enabled: () => canMakeAllByClass() || canRemoveByClass() || canSetDefaultAttributes() || canUseDefaultAttributes(),
           items: [
-            { label: "Make All Attributes by Class", enabled: canMakeAllByClass, run: () => setAllByClass(true) },
-            { label: "Remove by Class Settings", enabled: canRemoveByClass, run: () => setAllByClass(false) },
-            { label: "Use Default Attributes", enabled: canUseDefaultAttributes, run: useDefaultAttributes },
+            { label: "Make All Attributes by Class", why: whyIn("Select objects with attributes first"), enabled: canMakeAllByClass, run: () => setAllByClass(true) },
+            { label: "Remove by Class Settings", why: whyIn("Select objects with attributes first"), enabled: canRemoveByClass, run: () => setAllByClass(false) },
+            { label: "Use Default Attributes", why: whyIn("Set them first: Modify › Attributes › Set Default Attributes"), enabled: canUseDefaultAttributes, run: useDefaultAttributes },
             { label: "Set Default Attributes", enabled: canSetDefaultAttributes, run: setDefaultAttributes },
           ],
         },
@@ -845,62 +876,64 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           label: "Guides",
           enabled: hasDoc,
           items: [
-            { label: "Make Guide", enabled: canMakeGuide, run: makeGuide },
-            { label: "Show Guides", enabled: canShowGuides, run: () => showGuides(true) },
-            { label: "Hide Guides", enabled: canHideGuides, run: () => showGuides(false) },
-            { label: "Select Guides", enabled: () => canSelectGuides(scene), run: () => selectGuides(scene) },
-            { label: "Delete All Guides", enabled: canDeleteAllGuides, run: deleteAllGuides },
+            { label: "Make Guide", why: whyIn("Select objects that aren't guides first"), enabled: canMakeGuide, run: makeGuide },
+            { label: "Show Guides", why: whyIn("Make a guide first: Modify › Guides › Make Guide"), enabled: hasGuidesClass, checked: guidesShown, run: () => showGuides(!guidesShown()) },
+            { label: "Select Guides", why: whyIn("There are no guides on the active layer"), enabled: () => canSelectGuides(scene), run: () => selectGuides(scene) },
+            { label: "Delete All Guides", why: whyIn("The drawing has no guides"), enabled: canDeleteAllGuides, run: deleteAllGuides },
           ],
         },
         { label: "Working Plane", enabled: hasDoc, items: workingPlaneMenuRows },
-        { label: "Edit Crop…", enabled: () => canEditCrop() || siteModelSelected(), run: () => (siteModelSelected() ? editSiteCrop() : void editCropDialog()) },
-        { label: "Trace Bitmap…", enabled: canTraceBitmap, run: () => void traceBitmapDialog() },
+        { label: "Edit Crop…", why: whyIn("Select an image or a site model first"), enabled: () => canEditCrop() || siteModelSelected(), run: () => (siteModelSelected() ? editSiteCrop() : void editCropDialog()) },
+        { label: "Trace Bitmap…", why: whyIn("Select one image first"), enabled: canTraceBitmap, run: () => void traceBitmapDialog() },
         {
           label: "Poly Smoothing",
+          why: need.polyline,
           enabled: canSmooth,
           items: [
-            { label: "No Smoothing", enabled: canSmooth, checked: () => isSmoothed("corner"), run: () => smoothSelection("corner") },
-            { label: "Bezier Spline Smoothing", enabled: canSmooth, checked: () => isSmoothed("bezier"), run: () => smoothSelection("bezier") },
-            { label: "Cubic Spline Smoothing", enabled: canSmooth, checked: () => isSmoothed("cubic"), run: () => smoothSelection("cubic") },
-            { label: "Arc Smoothing", enabled: canSmooth, checked: () => isSmoothed("arc"), run: () => smoothSelection("arc") },
-            { label: "Radius Smoothing", enabled: canSmooth, checked: () => isSmoothed("radius"), run: () => smoothSelection("radius") },
+            { label: "No Smoothing", why: need.polyline, enabled: canSmooth, checked: () => isSmoothed("corner"), run: () => smoothSelection("corner") },
+            { label: "Bezier Spline Smoothing", why: need.polyline, enabled: canSmooth, checked: () => isSmoothed("bezier"), run: () => smoothSelection("bezier") },
+            { label: "Cubic Spline Smoothing", why: need.polyline, enabled: canSmooth, checked: () => isSmoothed("cubic"), run: () => smoothSelection("cubic") },
+            { label: "Arc Smoothing", why: need.polyline, enabled: canSmooth, checked: () => isSmoothed("arc"), run: () => smoothSelection("arc") },
+            { label: "Radius Smoothing", why: need.polyline, enabled: canSmooth, checked: () => isSmoothed("radius"), run: () => smoothSelection("radius") },
           ],
         },
         {
           label: "Drafting Aids",
+          why: need.selection,
           enabled: () => canArcIntoSegments() || canCreateDividingLines() || canEvenDivide() || canLineIntoSegments() || canSimplifyPolys(),
           items: [
-            { label: "Arc into Segments…", enabled: canArcIntoSegments, run: () => void arcIntoSegmentsDialog() },
-            { label: "Create Dividing Lines…", enabled: canCreateDividingLines, run: () => actions.dividingLines() },
-            { label: "Even Divide…", enabled: canEvenDivide, run: () => void evenDivideDialog() },
-            { label: "Line into Segments…", enabled: canLineIntoSegments, run: () => void lineIntoSegmentsDialog() },
-            { label: "Simplify Polys…", enabled: canSimplifyPolys, run: () => void simplifyPolysDialog() },
+            { label: "Arc into Segments…", why: whyIn("Select arcs first"), enabled: canArcIntoSegments, run: () => void arcIntoSegmentsDialog() },
+            { label: "Create Dividing Lines…", why: whyIn("Select two lines first"), enabled: canCreateDividingLines, run: () => actions.dividingLines() },
+            { label: "Even Divide…", why: whyIn("Select a line, arc, circle or rectangle first"), enabled: canEvenDivide, run: () => void evenDivideDialog() },
+            { label: "Line into Segments…", why: whyIn("Select lines first"), enabled: canLineIntoSegments, run: () => void lineIntoSegmentsDialog() },
+            { label: "Simplify Polys…", why: whyIn("Select polygons, polylines or 3D polygons first"), enabled: canSimplifyPolys, run: () => void simplifyPolysDialog() },
           ],
         },
-        { label: "Create Symbol…", enabled: hasSelection, run: () => actions.createSymbol() },
+        { label: "Create Symbol…", why: need.selection, enabled: hasSelection, run: () => actions.createSymbol() },
         "-",
-        { label: "Send to Front", keys: "⌘F", enabled: hasSelection, run: () => arrangeSelection("front") },
-        { label: "Send Forward", keys: "⌥⌘F", enabled: hasSelection, run: () => arrangeSelection("forward") },
-        { label: "Send Backward", keys: "⌥⌘B", enabled: hasSelection, run: () => arrangeSelection("backward") },
-        { label: "Send to Back", keys: "⌘B", enabled: hasSelection, run: () => arrangeSelection("back") },
+        { label: "Send to Front", why: need.selection, keys: "⌘F", enabled: hasSelection, run: () => arrangeSelection("front") },
+        { label: "Send Forward", why: need.selection, keys: "⌥⌘F", enabled: hasSelection, run: () => arrangeSelection("forward") },
+        { label: "Send Backward", why: need.selection, keys: "⌥⌘B", enabled: hasSelection, run: () => arrangeSelection("backward") },
+        { label: "Send to Back", why: need.selection, keys: "⌘B", enabled: hasSelection, run: () => arrangeSelection("back") },
         "-",
-        { label: "Rotate Left 90°", keys: "⌘L", enabled: hasSelection, run: () => rotateBy(scene, 90) },
-        { label: "Rotate Right 90°", keys: "⇧⌘L", enabled: hasSelection, run: () => rotateBy(scene, -90) },
-        { label: "Rotate Each Left 90°", enabled: hasSelection, run: () => rotateEachBy(scene, 90) },
-        { label: "Rotate Each Right 90°", enabled: hasSelection, run: () => rotateEachBy(scene, -90) },
-        { label: "Rotate…", enabled: hasSelection, run: () => void rotateDialog(scene) },
-        { label: "Rotate 3D…", enabled: hasSelection, run: () => actions.rotate3D() },
-        { label: "Flip Horizontal", enabled: hasSelection, run: () => flipSelection(scene, "horizontal") },
-        { label: "Flip Vertical", enabled: hasSelection, run: () => flipSelection(scene, "vertical") },
-        { label: "Unrotate 3D Objects", keys: "⇧⌘0", enabled: hasSelection, run: unrotate3D },
+        { label: "Rotate Left 90°", why: need.selection, keys: "⌘L", enabled: hasSelection, run: () => rotateBy(scene, 90) },
+        { label: "Rotate Right 90°", why: need.selection, keys: "⇧⌘L", enabled: hasSelection, run: () => rotateBy(scene, -90) },
+        { label: "Rotate Each Left 90°", why: need.selection, enabled: hasSelection, run: () => rotateEachBy(scene, 90) },
+        { label: "Rotate Each Right 90°", why: need.selection, enabled: hasSelection, run: () => rotateEachBy(scene, -90) },
+        { label: "Rotate…", why: need.selection, enabled: hasSelection, run: () => void rotateDialog(scene) },
+        { label: "Rotate 3D…", why: need.selection, enabled: hasSelection, run: () => actions.rotate3D() },
+        { label: "Flip Horizontal", why: need.selection, enabled: hasSelection, run: () => flipSelection(scene, "horizontal") },
+        { label: "Flip Vertical", why: need.selection, enabled: hasSelection, run: () => flipSelection(scene, "vertical") },
+        { label: "Unrotate 3D Objects", why: need.selection, keys: "⇧⌘0", enabled: hasSelection, run: unrotate3D },
         "-",
         {
           label: "Align",
+          why: need.selection,
           enabled: hasSelection,
           items: [
-            { label: "Align/Distribute…", enabled: hasTwo, run: () => void alignDistributeDialog(scene) },
-            { label: "Align/Distribute 3D…", keys: "⇧⌘=", enabled: hasTwo, run: () => void alignDistribute3dDialog() },
-            { label: "Align/Distribute Leader Lines…", enabled: canAlignLeaders, run: () => actions.alignLeaders() },
+            { label: "Align/Distribute…", why: need.twoOrMore, enabled: hasTwo, run: () => void alignDistributeDialog(scene) },
+            { label: "Align/Distribute 3D…", why: need.twoOrMore, keys: "⇧⌘=", enabled: hasTwo, run: () => void alignDistribute3dDialog() },
+            { label: "Align/Distribute Leader Lines…", why: need.selection, enabled: canAlignLeaders, run: () => actions.alignLeaders() },
             "-",
             align("Left", "left"),
             align("Centre", "centre"),
@@ -909,61 +942,62 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             align("Middle", "middle"),
             align("Bottom", "bottom"),
             "-",
-            { label: "Align to Grid", enabled: hasSelection, run: () => alignToGrid(scene, view) },
-            { label: "Align by Increment…", enabled: hasSelection, run: () => void alignByIncrementCommand(scene, view.scale) },
+            { label: "Align to Grid", why: need.selection, enabled: hasSelection, run: () => alignToGrid(scene, view) },
+            { label: "Align by Increment…", why: need.selection, enabled: hasSelection, run: () => void alignByIncrementCommand(scene, view.scale) },
           ],
         },
         {
           label: "Distribute",
+          why: need.threeOrMore,
           enabled: hasThree,
           items: [
-            { label: "Horizontally", enabled: hasThree, run: () => distributeSelection(scene, "horizontal") },
-            { label: "Vertically", enabled: hasThree, run: () => distributeSelection(scene, "vertical") },
+            { label: "Horizontally", why: need.threeOrMore, enabled: hasThree, run: () => distributeSelection(scene, "horizontal") },
+            { label: "Vertically", why: need.threeOrMore, enabled: hasThree, run: () => distributeSelection(scene, "vertical") },
           ],
         },
         "-",
-        { label: "Scale Objects…", enabled: hasSelection, run: () => void scaleDialog(scene) },
-        { label: "Move…", enabled: hasSelection, run: () => void moveDialog() },
-        { label: "Move 3D…", enabled: hasSelection, run: () => void moveDialog(true) },
-        { label: "Move Geographic…", enabled: () => canMoveGeographic(scene), run: () => void moveGeographicDialog(scene) },
+        { label: "Scale Objects…", why: need.selection, enabled: hasSelection, run: () => void scaleDialog(scene) },
+        { label: "Move…", why: need.selection, enabled: hasSelection, run: () => void moveDialog() },
+        { label: "Move 3D…", why: need.selection, enabled: hasSelection, run: () => void moveDialog(true) },
+        { label: "Move Geographic…", why: need.selection, enabled: () => canMoveGeographic(scene), run: () => void moveGeographicDialog(scene) },
       ],
     },
     {
       title: "Model",
       rows: [
-        { label: "Extrude…", keys: "⌘E", enabled: canExtrude, run: () => void extrudeDialog("Create Extrude", extrudeSelection) },
-        { label: "Multiple Extrude…", keys: "⌥⌘E", enabled: canMultiExtrude, run: () => void extrudeDialog("Create Multiple Extrude", multiExtrudeSelection) },
-        { label: "Tapered Extrude…", keys: "⌥⌘U", enabled: canExtrude, run: () => void taperedExtrudeDialog() },
-        { label: "Sweep…", enabled: canExtrude, run: () => void sweepDialog() },
-        { label: "Extrude Along Path…", keys: "⌥⌘X", enabled: canExtrudeAlongPath, run: () => void extrudeAlongPathDialog() },
+        { label: "Extrude…", why: whyIn("Select a closed 2D shape first"), keys: "⌘E", enabled: canExtrude, run: () => void extrudeDialog("Create Extrude", extrudeSelection) },
+        { label: "Multiple Extrude…", why: whyIn("Select two or more closed 2D shapes first"), keys: "⌥⌘E", enabled: canMultiExtrude, run: () => void extrudeDialog("Create Multiple Extrude", multiExtrudeSelection) },
+        { label: "Tapered Extrude…", why: whyIn("Select a closed 2D shape first"), keys: "⌥⌘U", enabled: canExtrude, run: () => void taperedExtrudeDialog() },
+        { label: "Sweep…", why: whyIn("Select a closed 2D shape first"), enabled: canExtrude, run: () => void sweepDialog() },
+        { label: "Extrude Along Path…", why: whyIn("Select a profile and a path first"), keys: "⌥⌘X", enabled: canExtrudeAlongPath, run: () => void extrudeAlongPathDialog() },
         "-",
-        { label: "Add Solids", enabled: canAddSolids, run: () => combineSolidsSelection(false) },
-        { label: "Subtract Solids", enabled: canCombineSolids, run: () => combineSolidsSelection(true) },
-        { label: "Intersect Solids", keys: "⌥⌘I", enabled: canCombineSolids, run: intersectSolidsSelection },
-        { label: "Section Solids…", keys: "⌥⌘T", enabled: canSectionSolids, run: () => void sectionSolidsDialog() },
+        { label: "Add Solids", why: whyIn("Select two or more solids first"), enabled: canAddSolids, run: () => combineSolidsSelection(false) },
+        { label: "Subtract Solids", why: whyIn("Select two or more solids first"), enabled: canCombineSolids, run: () => combineSolidsSelection(true) },
+        { label: "Intersect Solids", why: whyIn("Select two or more solids first"), keys: "⌥⌘I", enabled: canCombineSolids, run: intersectSolidsSelection },
+        { label: "Section Solids…", why: whyIn("Select a solid and an object to cut it with first"), keys: "⌥⌘T", enabled: canSectionSolids, run: () => void sectionSolidsDialog() },
         "-",
-        { label: "Create Contours…", enabled: canCreateContours, run: () => void contoursDialog() },
-        { label: "Create Surface Array…", enabled: canCreateSurfaceArray, run: () => void surfaceArrayDialog() },
-        { label: "Cut 2D Section", enabled: canCut2DSection, run: () => actions.cutSection("2d") },
-        { label: "Cut 3D Section", enabled: canCut3DSection, run: () => actions.cutSection("3d") },
+        { label: "Create Contours…", why: need.threeDObjects, enabled: canCreateContours, run: () => void contoursDialog() },
+        { label: "Create Surface Array…", why: need.twoOrMore, enabled: canCreateSurfaceArray, run: () => void surfaceArrayDialog() },
+        { label: "Cut 2D Section", why: need.threeDObjects, enabled: canCut2DSection, run: () => actions.cutSection("2d") },
+        { label: "Cut 3D Section", why: need.threeDObjects, enabled: canCut3DSection, run: () => actions.cutSection("3d") },
         "-",
-        { label: "Engineering Properties…", enabled: canEngineeringProperties, run: () => void engineeringPropertiesDialog() },
-        { label: "Volumetric Properties…", enabled: canVolumetricProperties, run: () => void volumetricPropertiesDialog() },
+        { label: "Engineering Properties…", why: whyIn("Select one closed 2D shape first"), enabled: canEngineeringProperties, run: () => void engineeringPropertiesDialog() },
+        { label: "Volumetric Properties…", why: need.threeDObjects, enabled: canVolumetricProperties, run: () => void volumetricPropertiesDialog() },
         "-",
         {
           label: "3D Power Pack",
           enabled: hasDoc,
           items: [
-            { label: "Create Helix-Spiral…", enabled: canCreateHelixSpiral, run: () => void helixSpiralDialog() },
-            { label: "Create Planar Caps", keys: "⌥⌘Q", enabled: canPlanarCaps, run: planarCapsSelection },
-            { label: "Create Surface from Curves", keys: "⌥⌘K", enabled: canSurfaceFromCurves, run: surfaceFromCurvesSelection },
-            { label: "Create Drape Surface…", enabled: canDrapeSurface, run: () => void drapeSurfaceDialog() },
-            { label: "Revolve with Rail", enabled: canRevolveWithRail, run: revolveWithRailSelection },
-            { label: "Unfold Surfaces", enabled: canUnfoldSurfaces, run: unfoldSurfacesSelection },
-            { label: "Create Fillet Surface…", keys: "⌥⌘Y", enabled: canFilletSurface, run: () => void filletSurfaceDialog() },
-            { label: "Stitch and Trim Surfaces", enabled: canStitchAndTrim, run: stitchAndTrimSelection },
-            { label: "Extend NURBS…", enabled: canExtendNurbs, run: () => void extendNurbsDialog() },
-            { label: "Rebuild NURBS…", enabled: canRebuildNurbs, run: () => void rebuildNurbsDialog() },
+            { label: "Create Helix-Spiral…", why: whyIn("Select a path first"), enabled: canCreateHelixSpiral, run: () => void helixSpiralDialog() },
+            { label: "Create Planar Caps", why: whyIn("Select a solid or mesh first"), keys: "⌥⌘Q", enabled: canPlanarCaps, run: planarCapsSelection },
+            { label: "Create Surface from Curves", why: whyIn("Select curves first"), keys: "⌥⌘K", enabled: canSurfaceFromCurves, run: surfaceFromCurvesSelection },
+            { label: "Create Drape Surface…", why: need.selection, enabled: canDrapeSurface, run: () => void drapeSurfaceDialog() },
+            { label: "Revolve with Rail", why: whyIn("Select three curves first"), enabled: canRevolveWithRail, run: revolveWithRailSelection },
+            { label: "Unfold Surfaces", why: whyIn("Select a solid or mesh first"), enabled: canUnfoldSurfaces, run: unfoldSurfacesSelection },
+            { label: "Create Fillet Surface…", why: whyIn("Select two meshes first"), keys: "⌥⌘Y", enabled: canFilletSurface, run: () => void filletSurfaceDialog() },
+            { label: "Stitch and Trim Surfaces", why: whyIn("Select two or more solids first"), enabled: canStitchAndTrim, run: stitchAndTrimSelection },
+            { label: "Extend NURBS…", why: whyIn("Select one open 3D polygon or mesh first"), enabled: canExtendNurbs, run: () => void extendNurbsDialog() },
+            { label: "Rebuild NURBS…", why: whyIn("Select 3D polygons or meshes first"), enabled: canRebuildNurbs, run: () => void rebuildNurbsDialog() },
           ],
         },
       ],
@@ -971,86 +1005,72 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
     {
       title: "AEC",
       rows: [
-        { label: "Create Auto Hybrid", enabled: canCreateAutoHybrid, run: () => void createAutoHybrid() },
-        { label: "Create Objects from Shapes…", enabled: canCreateObjectsFromShapes, run: () => void createObjectsFromShapesDialog() },
-        { label: "Create Polys from Walls…", enabled: canCreatePolysFromWalls, run: () => void createPolysFromWallsDialog() },
-        { label: "Dimension Exterior Walls…", enabled: canDimensionExteriorWalls, run: () => void dimensionExteriorWalls() },
-        { label: "Create Roof…", enabled: canCreateRoof, run: () => void createRoofDialog() },
-        { label: "Roof Face…", enabled: canMakeRoofFace, run: () => actions.roofFace() },
-        { label: "Pillar…", enabled: canMakePillar, run: () => void pillarDialog() },
+        { label: "Create Auto Hybrid", why: need.selection, enabled: canCreateAutoHybrid, run: () => void createAutoHybrid() },
+        { label: "Create Objects from Shapes…", why: whyIn("Select lines, rectangles, polygons or polylines first"), enabled: canCreateObjectsFromShapes, run: () => void createObjectsFromShapesDialog() },
+        { label: "Create Polys from Walls…", why: whyIn("Select walls first"), enabled: canCreatePolysFromWalls, run: () => void createPolysFromWallsDialog() },
+        { label: "Dimension Exterior Walls…", why: whyIn("Draw walls first"), enabled: canDimensionExteriorWalls, run: () => void dimensionExteriorWalls() },
+        { label: "Create Roof…", why: whyIn("Select walls or a closed shape first"), enabled: canCreateRoof, run: () => void createRoofDialog() },
+        { label: "Roof Face…", why: whyNot([() => !store.view3d, STEP.plan], [canMakeRoofFace, STEP.closed]), enabled: canMakeRoofFace, run: () => actions.roofFace() },
+        { label: "Pillar…", why: whyIn("Select a shape first"), enabled: canMakePillar, run: () => void pillarDialog() },
         "-",
         {
           label: "Framing",
           enabled: hasDoc,
           items: [
-            { label: "Create Joists…", enabled: canCreateJoists, run: () => void createJoistsDialog() },
-            { label: "Roof Framer…", enabled: canFrameRoof, run: () => void roofFramerDialog() },
+            { label: "Create Joists…", why: need.closed, enabled: canCreateJoists, run: () => void createJoistsDialog() },
+            { label: "Roof Framer…", why: need.selection, enabled: canFrameRoof, run: () => void roofFramerDialog() },
             { label: "Simple Beam Calculator…", enabled: hasDoc, run: () => void simpleBeamDialog() },
-            { label: "Wall Framer…", enabled: canFrameWalls, run: () => void wallFramerDialog() },
+            { label: "Wall Framer…", why: whyIn("Draw walls first"), enabled: canFrameWalls, run: () => void wallFramerDialog() },
           ],
         },
         {
-          label: "Machine Design",
-          enabled: hasDoc,
-          items: [
-            { label: "3D Properties…", enabled: canVolumetricProperties, run: () => void threeDPropertiesDialog() },
-            { label: "Belt Length Calculator…", enabled: hasDoc, run: () => void beltLengthDialog() },
-            { label: "Centroid…", enabled: canCentroid, run: () => void centroidDialog() },
-            { label: "Chain Length Calculator…", enabled: hasDoc, run: () => void chainLengthDialog() },
-            { label: "Conversion Factors…", enabled: hasDoc, run: () => void conversionFactorsDialog() },
-            { label: "Create 3D Object From 2D", enabled: canCreate3DFrom2D, run: create3DObjectFrom2D },
-            { label: "Solution of Triangles…", enabled: hasDoc, run: () => void solutionOfTrianglesDialog() },
-            { label: "Spring Calculator…", enabled: hasDoc, run: () => void springCalculatorDialog() },
-          ],
-        },
-        {
-          label: "Electrical",
+          label: "MEP",
           enabled: hasDoc,
           items: [
             { label: "Conductor Sizing Calc…", enabled: hasDoc, run: () => void conductorSizingDialog() },
             { label: "Conduit Sizing Calc…", enabled: hasDoc, run: () => void conduitSizingDialog() },
-            { label: "Create Piping Runs…", enabled: canCreatePipingRuns, run: () => void createPipingRuns() },
+            { label: "Create Piping Runs…", why: whyIn("Select polygons or polylines first"), enabled: canCreatePipingRuns, run: () => void createPipingRuns() },
           ],
         },
-        { label: "Existing Trees", enabled: hasDoc, items: [{ label: "Create Existing Trees from Loci…", enabled: canCreateTreesFromLoci, run: () => void treesFromLociDialog() }, { label: "Import Tree Survey File…", enabled: hasDoc, run: () => void importTreeSurveyDialog() }] },
-        { label: "Plants", enabled: hasDoc, items: [{ label: "Vegetation Line…", enabled: canMakeVegetationLine, run: () => void vegetationLineDialog() }] },
+        { label: "Existing Trees", enabled: hasDoc, items: [{ label: "Create Existing Trees from Loci…", why: whyIn("Select loci or symbols first"), enabled: canCreateTreesFromLoci, run: () => void treesFromLociDialog() }, { label: "Import Tree Survey File…", enabled: hasDoc, run: () => void importTreeSurveyDialog() }] },
+        { label: "Plants", enabled: hasDoc, items: [{ label: "Vegetation Line…", why: whyIn("Select the shapes to outline first"), enabled: canMakeVegetationLine, run: () => void vegetationLineDialog() }] },
         {
           label: "Space Planning",
           enabled: hasDoc,
           items: [
-            { label: "Create Spaces from Polys", enabled: canCreateSpacesFromPolys, run: () => createSpacesFromPolys() },
+            { label: "Create Spaces from Polys", why: whyIn("Select closed shapes first"), enabled: canCreateSpacesFromPolys, run: () => createSpacesFromPolys() },
             { label: "Create Spaces from Walls…", enabled: hasDoc, run: () => void createSpacesFromWallsDialog() },
-            { label: "Create Walls from Spaces…", enabled: hasSpaces, run: () => void createWallsFromSpacesDialog() },
-            { label: "Update Spaces…", enabled: hasSpaces, run: () => void updateSpacesDialog() },
+            { label: "Create Walls from Spaces…", why: whyIn("Make spaces first: AEC › Space Planning › Create Spaces from Polys"), enabled: hasSpaces, run: () => void createWallsFromSpacesDialog() },
+            { label: "Update Spaces…", why: whyIn("Make spaces first: AEC › Space Planning › Create Spaces from Polys"), enabled: hasSpaces, run: () => void updateSpacesDialog() },
             { label: "Import Adjacency Matrix…", enabled: hasDoc, run: () => void importAdjacencyMatrixDialog() },
           ],
         },
-        { label: "Roads", enabled: hasDoc, items: [{ label: "Station on Polyline…", enabled: canPlaceStations, run: () => void stationOnPolylineDialog() }] },
-        { label: "Survey Input", enabled: hasDoc, items: [{ label: "2D Polys to 3D Source Data…", enabled: canMakeSourceData, run: () => void polysTo3DSourceDataDialog() }, { label: "3D Polygons to 3D Loci…", enabled: canPolygonsToLoci, run: () => void polygonsToLociDialog() }, { label: "Grid Method Entry…", enabled: hasDoc, run: gridMethodEntry }, { label: "Import Survey File…", enabled: hasDoc, run: () => void importSurveyFileDialog() }] },
+        { label: "Roads", enabled: hasDoc, items: [{ label: "Station on Polyline…", why: whyIn("Select a line, polyline or polygon on a design layer first"), enabled: canPlaceStations, run: () => void stationOnPolylineDialog() }] },
+        { label: "Survey Input", enabled: hasDoc, items: [{ label: "2D Polys to 3D Source Data…", why: whyIn("Select the 2D contour polygons or polylines first"), enabled: canMakeSourceData, run: () => void polysTo3DSourceDataDialog() }, { label: "3D Polygons to 3D Loci…", why: whyIn("Select 3D polygons first"), enabled: canPolygonsToLoci, run: () => void polygonsToLociDialog() }, { label: "Grid Method Entry…", enabled: hasDoc, run: gridMethodEntry }, { label: "Import Survey File…", enabled: hasDoc, run: () => void importSurveyFileDialog() }] },
         {
           label: "Terrain",
           enabled: hasDoc,
           items: [
-            { label: "Create 3D Loci at Grade Points", enabled: canMakeGradeLoci, run: gradeLociCommand },
-            { label: "Create Grade Limits from Planar Pad…", enabled: canMakeLimits, run: () => void gradeLimitsFromPadDialog() },
-            { label: "Create Retaining Wall Site Modifier…", enabled: retainingSelected, run: () => void createRetainingWall() },
-            { label: "Create Planar Pad from Grade Limits…", enabled: canMakePad, run: () => void padFromGradeLimitsDialog() },
-            { label: "Create Site Model Volume List…", enabled: canListVolumes, run: () => void siteVolumeListDialog() },
-            { label: "Send to Surface", enabled: canSendToSurface, run: () => void sendToSurface() },
-            { label: "Simplify 3D Polygons…", enabled: canSimplify3DPolygons, run: () => void simplify3DPolygonsDialog() },
-            { label: "Site Model Section…", enabled: canMakeSection, run: () => void siteModelSectionDialog() },
-            { label: "Site Model from Boundary…", enabled: canMakeBoundaryModel, run: () => void siteModelFromBoundaryDialog() },
-            { label: "Site Model from Source Data…", enabled: canMakeSiteModel, run: () => void siteModelFromSourceDialog() },
-            { label: "Update Site Model", enabled: hasSiteModel, run: () => updateSiteModels() },
-            { label: "Edit Site Model Crop", enabled: hasSiteModel, run: () => editSiteCrop() },
-            { label: "Edit Existing Contours", enabled: hasSiteModel, run: () => startSiteEdit("sitecontour", true) },
-            { label: "Edit Proposed Contours", enabled: hasSiteModel, run: () => startSiteEdit("sitecontour", false) },
-            { label: "Edit Existing Surface", enabled: hasSiteModel, run: () => startSiteEdit("sitesculpt", true) },
-            { label: "Edit Proposed Surface", enabled: hasSiteModel, run: () => startSiteEdit("sitesculpt", false) },
-            { label: "Add Contour Labels", enabled: hasSiteModel, run: () => startLabelEdit(true) },
-            { label: "Edit Contour Labels", enabled: hasSiteModel, run: () => startLabelEdit(false) },
-            { label: "Validate 3D Data", enabled: canValidate3DData, run: () => void validate3DDataDialog() },
-            { label: "Zone of Visual Influence…", enabled: canAnalyseView, run: () => void zoneOfVisualInfluenceDialog() },
+            { label: "Create 3D Loci at Grade Points", why: whyIn("Select grade objects first"), enabled: canMakeGradeLoci, run: gradeLociCommand },
+            { label: "Create Grade Limits from Planar Pad…", why: whyIn("Select a planar pad first"), enabled: canMakeLimits, run: () => void gradeLimitsFromPadDialog() },
+            { label: "Create Retaining Wall Site Modifier…", why: whyIn("Select a wall or extrude first"), enabled: retainingSelected, run: () => void createRetainingWall() },
+            { label: "Create Planar Pad from Grade Limits…", why: whyIn("Select grade limits first"), enabled: canMakePad, run: () => void padFromGradeLimitsDialog() },
+            { label: "Create Site Model Volume List…", why: whyIn("Select one site model first"), enabled: canListVolumes, run: () => void siteVolumeListDialog() },
+            { label: "Send to Surface", why: whyNot([hasSiteModel, STEP.siteModel], [canSendToSurface, STEP.selection]), enabled: canSendToSurface, run: () => void sendToSurface() },
+            { label: "Simplify 3D Polygons…", why: whyIn("Select 3D polygons first"), enabled: canSimplify3DPolygons, run: () => void simplify3DPolygonsDialog() },
+            { label: "Site Model Section…", why: whyNot([hasSiteModel, STEP.siteModel], [canMakeSection, "Select one line or shape to cut along first"]), enabled: canMakeSection, run: () => void siteModelSectionDialog() },
+            { label: "Site Model from Boundary…", why: whyIn("Select one closed shape for the boundary first"), enabled: canMakeBoundaryModel, run: () => void siteModelFromBoundaryDialog() },
+            { label: "Site Model from Source Data…", why: whyIn("Select 3D loci, 3D polygons or groups of them first"), enabled: canMakeSiteModel, run: () => void siteModelFromSourceDialog() },
+            { label: "Update Site Model", why: need.siteModel, enabled: hasSiteModel, run: () => updateSiteModels() },
+            { label: "Edit Site Model Crop", why: need.siteModel, enabled: hasSiteModel, run: () => editSiteCrop() },
+            { label: "Edit Existing Contours", why: need.siteModel, enabled: hasSiteModel, run: () => startSiteEdit("sitecontour", true) },
+            { label: "Edit Proposed Contours", why: need.siteModel, enabled: hasSiteModel, run: () => startSiteEdit("sitecontour", false) },
+            { label: "Edit Existing Surface", why: need.siteModel, enabled: hasSiteModel, run: () => startSiteEdit("sitesculpt", true) },
+            { label: "Edit Proposed Surface", why: need.siteModel, enabled: hasSiteModel, run: () => startSiteEdit("sitesculpt", false) },
+            { label: "Add Contour Labels", why: need.siteModel, enabled: hasSiteModel, run: () => startLabelEdit(true) },
+            { label: "Edit Contour Labels", why: need.siteModel, enabled: hasSiteModel, run: () => startLabelEdit(false) },
+            { label: "Validate 3D Data", why: need.selection, enabled: canValidate3DData, run: () => void validate3DDataDialog() },
+            { label: "Zone of Visual Influence…", why: need.siteModel, enabled: canAnalyseView, run: () => void zoneOfVisualInfluenceDialog() },
           ],
         },
       ],
@@ -1071,16 +1091,17 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "New Record Format…", enabled: canCreateRecordFormat, run: () => void newRecordFormat() },
             { label: "Edit Record Format", enabled: canCreateRecordFormat, items: editRecordFormatRows },
-            { label: "Attach Record…", enabled: canAttachRecord, run: () => void attachRecordDialog() },
-            { label: "Detach Record…", enabled: canDetachRecord, run: () => void detachRecordDialog() },
+            { label: "Attach Record…", why: whyNot([() => (store.session?.doc.recordFormats().length ?? 0) > 0, STEP.recordFormat], [canAttachRecord, STEP.selection]), enabled: canAttachRecord, run: () => void attachRecordDialog() },
+            { label: "Detach Record…", why: whyIn("Select objects with records first"), enabled: canDetachRecord, run: () => void detachRecordDialog() },
             "-",
-            { label: "Change One Field…", enabled: canChangeSymbolFields, run: () => void changeOneFieldDialog() },
-            { label: "Change All Fields…", enabled: canChangeSymbolFields, run: () => void changeAllFieldsDialog() },
-            { label: "Merge Record Formats…", enabled: canMergeRecordFormats, run: () => void mergeRecordFormatsDialog() },
-            { label: "Split Record Format…", enabled: canSplitRecordFormat, run: () => void splitRecordFormatDialog() },
+            { label: "Change One Field…", why: whyIn("Attach a record to a symbol first"), enabled: canChangeSymbolFields, run: () => void changeOneFieldDialog() },
+            { label: "Change All Fields…", why: whyIn("Attach a record to a symbol first"), enabled: canChangeSymbolFields, run: () => void changeAllFieldsDialog() },
+            { label: "Merge Record Formats…", why: whyIn("Make two or more record formats first"), enabled: canMergeRecordFormats, run: () => void mergeRecordFormatsDialog() },
+            { label: "Split Record Format…", why: whyIn("Make a record format with two or more fields first"), enabled: canSplitRecordFormat, run: () => void splitRecordFormatDialog() },
             "-",
             {
               label: "Modify by Record…",
+              why: need.recordFormat,
               enabled: () => (store.session?.doc.recordFormats().length ?? 0) > 0,
               run: () => void import("./modifyByRecord.ts").then((m) => m.modifyByRecordDialog()),
             },
@@ -1092,7 +1113,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Create Report…", enabled: hasDoc, run: () => void createReportDialog() },
             { label: "Create Sheet List…", enabled: canCreateSheetList, run: () => void createSheetList() },
-            { label: "Edit Worksheet…", enabled: canEditWorksheet, run: () => void editWorksheet() },
+            { label: "Edit Worksheet…", why: need.worksheet, enabled: canEditWorksheet, run: () => void editWorksheet() },
           ],
         },
         {
@@ -1110,11 +1131,25 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           ],
         },
         {
+          label: "Machine Design",
+          enabled: hasDoc,
+          items: [
+            { label: "3D Properties…", why: need.threeDObjects, enabled: canVolumetricProperties, run: () => void threeDPropertiesDialog() },
+            { label: "Belt Length Calculator…", enabled: hasDoc, run: () => void beltLengthDialog() },
+            { label: "Centroid…", why: whyIn("Select one closed 2D shape first"), enabled: canCentroid, run: () => void centroidDialog() },
+            { label: "Chain Length Calculator…", enabled: hasDoc, run: () => void chainLengthDialog() },
+            { label: "Conversion Factors…", enabled: hasDoc, run: () => void conversionFactorsDialog() },
+            { label: "Create 3D Object From 2D", why: need.selection, enabled: canCreate3DFrom2D, run: create3DObjectFrom2D },
+            { label: "Solution of Triangles…", enabled: hasDoc, run: () => void solutionOfTrianglesDialog() },
+            { label: "Spring Calculator…", enabled: hasDoc, run: () => void springCalculatorDialog() },
+          ],
+        },
+        {
           label: "Origin",
           enabled: hasDoc,
           items: [
             { label: "Locate Internal Origin", enabled: () => canLocateOrigin(scene), run: () => locateInternalOrigin(scene, view) },
-            { label: "Center Drawing on Internal Origin…", enabled: () => canCenterDrawing(scene), run: () => void centerDrawingOnOrigin(scene, view) },
+            { label: "Center Drawing on Internal Origin…", why: whyIn("Draw something on a design layer first"), enabled: () => canCenterDrawing(scene), run: () => void centerDrawingOnOrigin(scene, view) },
           ],
         },
         { label: "Check File Health…", enabled: hasDoc, run: () => void import("./fileHealth.ts").then((m) => m.fileHealthDialog(scene, view)) },
@@ -1125,7 +1160,6 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Edit Marker List…", run: () => void editMarkerListDialog() },
             { label: "Line Thickness…", run: () => void lineThicknessDialog() },
-            { label: "Preferences…", run: () => void preferencesDialog() },
           ],
         },
         { label: "Snap Settings…", run: () => void snapSettingsDialog() },
@@ -1145,7 +1179,8 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
           items: [
             { label: "Activate Object Info Palette", run: () => actions.activateObjectInfo() },
             "-",
-            ...palettes.menuRows(),
+            // ⌘I shows or hides Object Info, as Vectorworks' Window › Palettes › Object Info does
+            ...palettes.menuRows().map((r): Row => (r !== "-" && r.label === "Object Info" ? { ...r, keys: "⌘I" } : r)),
             "-",
             { label: "Hide Enabled Palettes", keys: "⇧⌘P", checked: () => palettes.away, run: () => palettes.toggleAway() },
             { label: "Save Palette Positions", run: () => savePalettePositions(palettes) },
@@ -1159,7 +1194,6 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Floating Palettes Can Dock to Each Other", checked: () => palettes.floatDocking, run: () => palettes.toggleFloatDocking() },
           ],
         },
-        { label: "Object Info", keys: "⌘I", checked: () => palettes.isShown("objectInfo"), run: () => palettes.show("objectInfo") },
         { label: "Smart Options", keys: "`", enabled: () => !!store.session, run: () => openSmartOptions() },
         { label: "Notification Center", run: openNotificationCenter },
         { label: "Roll Up All Palettes", run: () => palettes.collapseAll(true) },
@@ -1172,7 +1206,6 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         { label: "Use Full Screen", checked: () => !!document.fullscreenElement, run: toggleFullScreen },
         { label: "Edit Group and Object Visibility Options", items: exitGroupOptionRows },
         { label: "Data Bar Options", items: dataBarOptionRows },
-        { label: "View Panes", items: () => paneRows(() => true) },
         "-",
         { label: "View Bar", checked: () => palettes.barShown("viewbar"), run: () => palettes.toggleBar("viewbar") },
         {
@@ -1187,7 +1220,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
         },
         { label: "Mode Bar", checked: () => palettes.barShown("modebar"), run: () => palettes.toggleBar("modebar") },
         { label: "Snapping Bar", checked: () => palettes.barShown("snapbar"), run: () => palettes.toggleBar("snapbar") },
-        { label: "Reset Bars", enabled: () => palettes.barsMoved(), run: () => palettes.resetBars() },
+        { label: "Reset Bars", why: () => "The bars are where they started", enabled: () => palettes.barsMoved(), run: () => palettes.resetBars() },
         { label: "Top Bar", items: () => palettes.topRows() },
         "-",
         { label: "Reset Palette Layout", run: () => palettes.reset() },
@@ -1199,6 +1232,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
     {
       title: "Help",
       rows: [
+        { label: "User Guide", run: () => void window.open(GUIDE_URL, "_blank", "noopener") },
         { label: "Keyboard Shortcuts…", run: () => void shortcutsDialog() },
         { label: "About Rodeo…", run: () => void aboutDialog() },
       ],
@@ -1246,6 +1280,9 @@ async function shortcutsDialog(): Promise<void> {
 
 /** Where this build's source is published. A modified copy offered over a network must point at its own source (AGPL-3.0 §13). */
 const SOURCE_URL = "https://github.com/rodeobuild/rodeo";
+
+/** The user guide, published with the source: Help > User Guide. */
+const GUIDE_URL = "https://github.com/rodeobuild/rodeo/blob/main/docs/guide/README.md";
 
 /** Help > About Rodeo… */
 async function aboutDialog(): Promise<void> {
@@ -1766,6 +1803,7 @@ function drawingRows(
           { label: "Force Select", run: () => behind.select() },
           {
             label: "Activate Layer",
+            why: () => "Its layer is already active",
             enabled: () => {
               const o = store.session?.doc.object(behind.id);
               return !!o && o.layerId !== store.activeLayerId;
@@ -1775,7 +1813,7 @@ function drawingRows(
               if (o) setActiveLayer(o.layerId);
             },
           },
-          { label: "Activate Class", enabled: () => canActivateClassOf(behind.id), run: () => activateClassOf(behind.id) },
+          { label: "Activate Class", why: () => "Its class is already active", enabled: () => canActivateClassOf(behind.id), run: () => activateClassOf(behind.id) },
           "-",
         ]
       : [];
@@ -1801,7 +1839,7 @@ function drawingRows(
       "-",
       row("View", "Class Options"),
       row("View", "Layer Options"),
-      { label: "Active Layer Scale…", enabled: canSetActiveLayerScale, run: () => void activeLayerScaleDialog() },
+      { label: "Active Layer Scale…", why: need.designLayer, enabled: canSetActiveLayerScale, run: () => void activeLayerScaleDialog() },
       "-",
       row("View", "Show Grid"),
       row("View", "Snap to Grid"),
@@ -1812,6 +1850,7 @@ function drawingRows(
   }
   const sub = (label: string, title: string, labels: readonly string[]): Item => ({
     label,
+    why: need.selection,
     enabled: hasSelection,
     items: labels.map((l) => row(title, l)),
   });
@@ -1827,12 +1866,12 @@ function drawingRows(
     ? []
     : "witness" in part
       ? [
-          { label: "Split Dimension", enabled: () => canSplitDimension(part), run: () => splitDimension(part) },
+          { label: "Split Dimension", why: () => "Right-click a witness line between two dimensions", enabled: () => canSplitDimension(part), run: () => splitDimension(part) },
           { label: "Delete Witness Line", run: () => deleteWitnessLine(part) },
         ]
       : [
           { label: "Delete Dimension", run: () => deleteDimension(part) },
-          { label: "Split Dimension", run: () => splitDimension(part) },
+          { label: "Split Dimension", why: () => "Right-click a witness line between two dimensions", run: () => splitDimension(part) },
           {
             label: "Edit Dimension",
             run: () => {
@@ -1869,7 +1908,7 @@ function drawingRows(
       : []),
     ...(light && light.kind !== "point"
       ? [
-          { label: "Set Light to View", enabled: () => canAimLight(under), run: () => setLightToView(under) },
+          { label: "Set Light to View", why: () => "Only a spot or directional light can be aimed", enabled: () => canAimLight(under), run: () => setLightToView(under) },
           { label: "Set View to Light", run: () => void setViewToLight(under) },
         ]
       : []),
@@ -1906,17 +1945,17 @@ function drawingRows(
     "-",
     sub("Arrange", "Modify", ["Send to Front", "Send Forward", "Send Backward", "Send to Back"]),
     sub("Rotate and Flip", "Modify", ["Rotate Left 90°", "Rotate Right 90°", "Rotate Each Left 90°", "Rotate Each Right 90°", "Rotate…", "Flip Horizontal", "Flip Vertical"]),
-    { label: "Align/Distribute", enabled: () => store.selection.size >= 2, items: alignDistributeRows(scene, under) },
+    { label: "Align/Distribute", why: need.twoOrMore, enabled: () => store.selection.size >= 2, items: alignDistributeRows(scene, under) },
     "-",
     row("Edit", "Select Similar"),
-    { label: "Select Coincident Objects…", enabled: () => coincident.length > 1, run: () => void selectCoincidentDialog(coincident) },
+    { label: "Select Coincident Objects…", why: () => "Nothing else lies exactly here", enabled: () => coincident.length > 1, run: () => void selectCoincidentDialog(coincident) },
     row("Edit", "Create Similar Object"),
     row("View", "Zoom to Selection"),
     row("Modify", "Create Symbol…"),
     "-",
-    { label: "Activate Class", enabled: () => canActivateClassOf(under), run: () => activateClassOf(under) },
+    { label: "Activate Class", why: () => "Its class is already active", enabled: () => canActivateClassOf(under), run: () => activateClassOf(under) },
     { label: "Create Class Using Object Attributes…", enabled: () => canCreateClassFrom(under), run: () => void createClassFrom(under) },
-    { label: "Update Class Attributes from Object…", enabled: () => canUpdateClassFrom(under), run: () => void updateClassFrom(under) },
+    { label: "Update Class Attributes from Object…", why: () => "This object has no attributes of its own", enabled: () => canUpdateClassFrom(under), run: () => void updateClassFrom(under) },
     "-",
     row("Window", "Object Info"),
   ];
@@ -1930,11 +1969,13 @@ function editSelectedSymbol(): void {
 
 /** Puts the menus behind the top bar's Menu button, as Spline does: each menu is a submenu of the panel it drops. */
 export function mountMenuBar(button: HTMLButtonElement, deps: MenuDeps): MenuBar {
+  // a row off only for want of a drawing needs no reason of its own
+  setFallbackWhy(() => (store.session ? null : NO_DRAWING));
   builtMenus = menuDefinitions(deps);
   registerMenus(builtMenus);
   registerMenuLayout(builtMenus);
   button.innerHTML = UI_ICON.menu;
-  menuButton(button, () => arrangeMenus(keyedMenus()).map((def): Row => ({ label: def.title, items: def.rows })));
+  menuButton(button, () => arrangeMenus(keyedMenus()).map((def): Row => ({ label: def.title, items: def.rows, i18n: `Menu › ${def.title}` })));
   return {
     menus: () => arrangeMenus(keyedMenus()),
     drawing(x, y, under, behind = null, coincident = [], pick): void {

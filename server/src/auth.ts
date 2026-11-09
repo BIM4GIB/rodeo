@@ -51,12 +51,12 @@ export function limitsOf(row: { supporter_until: string | null }): Limits {
   return limitsFor(planOf(row));
 }
 
-/** Drawings the user owns, and the bytes of every version of them. */
+/** Drawings the user owns, and the bytes of every version of them (a branch's count, though it isn't a drawing of its own: files.ts countOwned). */
 export function usageOf(userId: string): { files: number; bytes: number } {
   const row = get<{ files: number; bytes: number }>(
     `SELECT COUNT(*) AS files,
        COALESCE((SELECT SUM(v.size) FROM versions v JOIN files f ON f.id = v.file_id WHERE f.owner_id = ?), 0) AS bytes
-     FROM files WHERE owner_id = ?`,
+     FROM files WHERE owner_id = ? AND lineage IS NOT 'branch'`,
     userId,
     userId,
   );

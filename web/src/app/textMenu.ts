@@ -13,6 +13,7 @@ import { attempt } from "./commands.ts";
 import { pathOf } from "./cutting.ts";
 import { findReplaceDialog } from "./findReplace.ts";
 import type { Row } from "./menu.ts";
+import { STEP, need, whyIn, whyNot } from "./menuReasons.ts";
 import { isDerivedId } from "./scene.ts";
 import { layerInfo, store } from "./state.ts";
 
@@ -161,10 +162,11 @@ export function textMenuRows(): Row[] {
     run: () => restyle("Text font", () => ({ font })),
   });
   return [
-    { label: "Format Text…", enabled: hasText, run: () => void import("./formatText.ts").then((m) => m.formatTextDialog()) },
+    { label: "Format Text…", why: need.text, enabled: hasText, run: () => void import("./formatText.ts").then((m) => m.formatTextDialog()) },
     "-",
     {
       label: "Font",
+      why: need.text,
       enabled: hasText,
       items: () => {
         const { own, common } = fontChoices();
@@ -173,6 +175,7 @@ export function textMenuRows(): Row[] {
     },
     {
       label: "Size",
+      why: need.text,
       enabled: hasText,
       items: [
         ...SIZES.map((pt) => ({
@@ -186,6 +189,7 @@ export function textMenuRows(): Row[] {
     },
     {
       label: "Style",
+      why: need.text,
       enabled: hasText,
       items: [
         {
@@ -206,6 +210,7 @@ export function textMenuRows(): Row[] {
     },
     {
       label: "Justification",
+      why: need.text,
       enabled: hasText,
       items: H_ALIGN.map((a) => ({
         label: a.label,
@@ -215,6 +220,7 @@ export function textMenuRows(): Row[] {
     },
     {
       label: "Vertical Alignment",
+      why: need.text,
       enabled: hasText,
       items: V_ALIGN.map((a) => ({
         label: a.label,
@@ -224,11 +230,13 @@ export function textMenuRows(): Row[] {
     },
     {
       label: "Text Style",
+      why: whyNot([hasText, STEP.text], [() => textStyles().length > 0, "Make a text style first in the Resources palette"]),
       enabled: () => hasText() && textStyles().length > 0,
       items: () => [
         { label: "Unstyled", checked: () => all((o) => !o.shape?.textStyle), run: () => restyle("Unstyle text", () => ({ textStyle: 0 })) },
         {
           label: "Class Text Style",
+          why: whyIn("The text's class has no text style"),
           enabled: () => all((o) => !!classTextStyle(o)),
           checked: () => all((o) => o.shape?.textStyle === TEXT_STYLE_BY_CLASS),
           run: () => restyle("Text style", (texts) => followClassStyle(texts[0]) ?? {}, (o) => o.classIndex),
@@ -245,11 +253,12 @@ export function textMenuRows(): Row[] {
     },
     {
       label: "Capitalization",
+      why: need.text,
       enabled: hasText,
       items: [
-        { label: "UPPER CASE", enabled: hasText, run: () => recase("UPPER CASE", (t) => t.toUpperCase()) },
-        { label: "lower case", enabled: hasText, run: () => recase("lower case", (t) => t.toLowerCase()) },
-        { label: "Title Caps", enabled: hasText, run: () => recase("Title Caps", titleCaps) },
+        { label: "UPPER CASE", why: need.text, enabled: hasText, run: () => recase("UPPER CASE", (t) => t.toUpperCase()) },
+        { label: "lower case", why: need.text, enabled: hasText, run: () => recase("lower case", (t) => t.toLowerCase()) },
+        { label: "Title Caps", why: need.text, enabled: hasText, run: () => recase("Title Caps", titleCaps) },
       ],
     },
     "-",
@@ -261,15 +270,16 @@ export function textMenuRows(): Row[] {
       enabled: () => !!store.session,
       items: [
         { label: "Create Redline Status WS", enabled: () => !!store.session, run: () => void redlineStatusWorksheet() },
-        { label: "Pick up Redline", enabled: canPickUpRedline, run: pickUpRedlines },
-        { label: "Restore Redline", enabled: canRestoreRedline, run: restoreRedlines },
-        { label: "Show or Hide Redlines", enabled: hasRedlineClass, run: toggleRedlines },
+        { label: "Pick up Redline", why: whyIn("Select a redline that isn't picked up first"), enabled: canPickUpRedline, run: pickUpRedlines },
+        { label: "Restore Redline", why: whyIn("Select a picked-up redline first"), enabled: canRestoreRedline, run: restoreRedlines },
+        { label: "Show or Hide Redlines", why: whyIn("The drawing has no redlines"), enabled: hasRedlineClass, run: toggleRedlines },
       ],
     },
     "-",
-    { label: "Convert Text to Polylines", enabled: hasText, run: () => void import("./textToPolylines.ts").then((m) => m.convertTextToPolylines()) },
+    { label: "Convert Text to Polylines", why: need.text, enabled: hasText, run: () => void import("./textToPolylines.ts").then((m) => m.convertTextToPolylines()) },
     {
       label: "Text Along Path…",
+      why: whyIn("Select one text and one line or curve first"),
       enabled: textAndPath,
       run: () => void import("./textAlongPath.ts").then((m) => m.textAlongPathDialog()),
     },

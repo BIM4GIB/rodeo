@@ -6,12 +6,14 @@
 // fetches parts of it later (the 3D view, rendering, exporters) by their old hashed names. So
 // every build's assets (not its source maps) are also copied to DATA_DIR/assets, which outlives
 // deploys, and an asset missing from the build is served from there. One that no build has had
-// for a week goes.
+// for a week goes. A share or embed link's page gets its link preview and an embed its poster put
+// in (page.ts).
 
-import { copyFile, mkdir, readdir, rm, stat, utimes } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, stat, utimes } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import type { Hono } from "hono";
 import { config } from "./config.ts";
+import { injectPage, pageExtrasFor } from "./page.ts";
 import { DAY, fileStream } from "./util.ts";
 
 const ARCHIVE = join(config.dataDir, "assets");
@@ -143,6 +145,15 @@ export function registerStatic(app: Hono): void {
     if (isIndex || isAdmin || rel.endsWith("/sw.js")) c.header("Cache-Control", "no-cache");
     else if (rel.startsWith("/assets/")) c.header("Cache-Control", "public, max-age=31536000, immutable");
     else c.header("Cache-Control", "public, max-age=3600");
+    // a share or embed link's page carries its preview (Open Graph, oEmbed) and an embed its poster (page.ts)
+    const extras = isIndex ? pageExtrasFor(new URL(c.req.url)) : null;
+    if (extras) {
+      const html = injectPage(await readFile(target, "utf8"), extras);
+      c.header("Content-Length", String(Buffer.byteLength(html)));
+      // the service worker keeps only the plain page as its offline copy (public/sw.js)
+      c.header("X-Openvwx-Page", "extras");
+      return c.body(html);
+    }
     return c.body(fileStream(target));
   });
 }

@@ -1,6 +1,6 @@
 # Detailing, machine parts and fasteners
 
-This page covers the Detailing tool set's drafting tools and the Machine Components and Fasteners tool sets: gears, chains and pulleys, bearings and shafts, springs, fasteners and holes, and the AEC menu's Machine Design calculators. Machine components in 3D, like fasteners and holes, have "- 3D" tools beside the 2D ones, described at the end of each group.
+This page covers the Detailing tool set's drafting tools and the Machine Components and Fasteners tool sets: gears, chains and pulleys, bearings and shafts, springs, fasteners and holes, and the Tools menu's Machine Design calculators. Machine components in 3D, like fasteners and holes, have "- 3D" tools beside the 2D ones, described at the end of each group.
 
 ## Detailing
 
@@ -349,7 +349,7 @@ Hole - Drilled and Hole - Tapped (Metric, Inch) - 3D place a real sweep of the h
 
 ## Machine Design calculators
 
-These are in **AEC › Machine Design**.
+These are in **Tools › Machine Design**.
 
 ### Belt Length and Chain Length
 

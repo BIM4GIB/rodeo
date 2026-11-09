@@ -123,7 +123,7 @@ export function visualizationPalette(): HTMLElement {
         const row = h(
           "div",
           { cls: "row", attrs: { role: "button", tabindex: "0" }, title: "Look through this camera in the 3D view" },
-          h("div", { cls: "names" }, h("div", { cls: "name", text: c.name }), h("div", { cls: "sub", text: cameraPlace(c) })),
+          h("div", { cls: "names" }, h("div", { cls: "name", text: c.name, attrs: { translate: "no" } }), h("div", { cls: "sub", text: cameraPlace(c) })),
           h("span", { cls: "badge", text: c.perspective ? `${Math.round(c.viewAngle)}°` : "Ortho" }),
         );
         // with the 3D view open, the camera can take the view it shows
@@ -205,7 +205,7 @@ export function visualizationPalette(): HTMLElement {
           "div",
           { cls: l.on ? "row" : "row viz-off-light", attrs: { role: "button", tabindex: "0" }, title: "Select what holds this light" },
           h("span", { cls: "viz-swatch", attrs: { style: `background:${l.color}`, "aria-hidden": "true" } }),
-          h("div", { cls: "names" }, h("div", { cls: "name", text: l.name || LIGHT_KIND[l.kind] }), h("div", { cls: "sub", text: lightPlace(l, symbolName) })),
+          h("div", { cls: "names" }, h("div", { cls: "name", text: l.name || LIGHT_KIND[l.kind], attrs: l.name ? { translate: "no" } : undefined }), h("div", { cls: "sub", text: lightPlace(l, symbolName) })),
           h("span", { cls: "badge", text: l.on ? `${Math.round(l.brightness * 100)} %` : "Off" }),
         );
         // a light the drawing or a lighting device places turns on and off here (a symbol's in Edit Symbol, Object Info)

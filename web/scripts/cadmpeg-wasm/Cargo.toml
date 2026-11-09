@@ -1,0 +1,70 @@
+# The cadmpeg WebAssembly bridge. Built by web/scripts/cadmpeg-wasm.sh, which copies this
+# crate next to a clone of cadmpeg at the pinned commit and points the paths below at it.
+[package]
+name = "cadmpeg-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WebAssembly bridge from cadmpeg to Rodeo: Parasolid meshes and STEP export"
+license = "AGPL-3.0-only"
+publish = false
+
+# Its own workspace root, so that Cargo never looks for a parent one.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# Parasolid B-rep of a bare transmit stream, tessellated to triangles. Only the SolidWorks codec
+# (the Parasolid reader) is compiled in.
+xt = [
+  "dep:cadmpeg-codec-sldprt",
+  "dep:cadmpeg-ir",
+  "dep:cadmpeg-tessellate",
+  "dep:js-sys",
+  "dep:serde_json",
+]
+# Conversion to STEP in memory. Alone it registers the STEP reader and writer and no other codec;
+# each format feature below adds one native codec to it.
+native = [
+  "dep:cadmpeg-container",
+  "dep:cadmpeg-core",
+  "dep:cadmpeg-ir",
+  "dep:cadmpeg-measure",
+  "dep:cadmpeg-registry",
+  "dep:serde_json",
+  "cadmpeg-registry/step",
+]
+# One build per format: the codec's reader, plus the STEP writer from `native`.
+sldprt = ["native", "cadmpeg-registry/sldprt"]
+inventor = ["native", "cadmpeg-registry/inventor"]
+fcstd = ["native", "cadmpeg-registry/fcstd"]
+f3d = ["native", "cadmpeg-registry/f3d"]
+nx = ["native", "cadmpeg-registry/nx"]
+creo = ["native", "cadmpeg-registry/creo"]
+
+[dependencies]
+# Pinned to the version the generated JavaScript glue is built against.
+wasm-bindgen = "=0.2.118"
+js-sys = { version = "0.3", optional = true }
+serde_json = { version = "1", optional = true }
+cadmpeg-codec-sldprt = { path = "../cadmpeg/crates/cadmpeg-codec-sldprt", optional = true }
+cadmpeg-container = { path = "../cadmpeg/crates/cadmpeg-container", optional = true }
+cadmpeg-core = { path = "../cadmpeg/crates/cadmpeg-core", optional = true }
+cadmpeg-ir = { path = "../cadmpeg/crates/cadmpeg-ir", optional = true }
+cadmpeg-measure = { path = "../cadmpeg/crates/cadmpeg-measure", optional = true }
+cadmpeg-tessellate = { path = "../cadmpeg/crates/cadmpeg-tessellate", optional = true }
+# No default codecs: each format feature above names the one codec it compiles in.
+cadmpeg-registry = { path = "../cadmpeg/crates/cadmpeg-registry", default-features = false, optional = true }
+
+# Size over speed: the module is downloaded before it runs. Full LTO and one codegen unit are what
+# let the optimiser drop the unused codec code. Overflow checks stay on because cadmpeg parses
+# untrusted files and wants a trapped overflow rather than a wrapped offset. A panic aborts, which
+# is a trap in the browser either way.
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = true
+strip = "symbols"

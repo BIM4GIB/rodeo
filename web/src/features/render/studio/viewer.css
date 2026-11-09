@@ -1,0 +1,425 @@
+/* The render viewer (viewer.ts): a full-window lightbox over the editor. It stays dark in both themes,
+   so its root sets the dark tokens, and the kit's buttons (studio/ui.ts, styles.css's .btn) follow
+   them. Solid panels, no glass or blur. */
+
+.render-viewer-backdrop {
+  --chrome: #151517;
+  --chrome-border: #2a2a2e;
+  --divider: rgba(255, 255, 255, 0.07);
+  --text: rgba(255, 255, 255, 0.95);
+  --text-soft: rgba(255, 255, 255, 0.7);
+  --text-2: rgba(255, 255, 255, 0.6);
+  --text-3: rgba(255, 255, 255, 0.42);
+  --fill: rgba(255, 255, 255, 0.05);
+  --fill-hover: rgba(255, 255, 255, 0.09);
+  --fill-strong: rgba(255, 255, 255, 0.13);
+  --ring: rgba(255, 255, 255, 0.08);
+  --btn: rgba(255, 255, 255, 0.1);
+  --select: rgba(142, 178, 242, 0.24);
+  --accent: #5ea8ff;
+  --accent-text: #0b0b0c;
+
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top top"
+    "stage info"
+    "strip info";
+  background: #0b0b0c;
+  color: var(--text);
+  color-scheme: dark;
+  outline: none;
+}
+
+/* the info panel shown by the Info button, or from a wide window: the stage takes the whole width without it */
+.render-viewer-backdrop:not(.is-info) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "top"
+    "stage"
+    "strip";
+}
+
+.render-viewer-backdrop:not(.is-info) .render-viewer-info-panel {
+  display: none;
+}
+
+.render-viewer-backdrop .btn:focus-visible,
+.render-viewer-backdrop .render-viewer-thumb:focus-visible,
+.render-viewer-backdrop .render-viewer-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- the top bar: the name on the left, the zoom in the middle, the actions on the right ---- */
+
+.render-viewer-top {
+  grid-area: top;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.render-viewer-id {
+  min-width: 0;
+}
+
+.render-viewer-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.render-viewer-sub {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.render-viewer-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.render-viewer-readout {
+  min-width: 52px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.render-viewer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.render-viewer-actions .btn {
+  height: 30px;
+}
+
+.render-viewer-actions .btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* ---- the stage: the picture fitted and centred, zoomed and panned as one view ---- */
+
+.render-viewer-stage {
+  grid-area: stage;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #0b0b0c;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.render-viewer-stage.is-pannable {
+  cursor: grab;
+}
+
+.render-viewer-stage.is-dragging {
+  cursor: grabbing;
+}
+
+/* each picture is its own size (set by viewer.ts); a transform (set by viewer.ts, the same for both) moves and scales it */
+.render-viewer-picture,
+.render-viewer-before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  max-width: none;
+  transform-origin: 0 0;
+  -webkit-user-drag: none;
+}
+
+.render-viewer-picture {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Compare: the earlier picture over this one, cut off at the wipe (the clip-path is set by viewer.ts) */
+.render-viewer-before[hidden] {
+  display: none;
+}
+
+.render-viewer-tags {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.render-viewer-tag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 3px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: #0b0b0c;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.render-viewer-tag.is-after {
+  right: 12px;
+  left: auto;
+}
+
+/* the divider sits at the wipe in the stage's own space, so it stays the same width at any zoom */
+.render-viewer-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.render-viewer-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.render-viewer-handle {
+  position: absolute;
+  top: 50%;
+  left: -17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  margin-top: -17px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #111111;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* the stage's arrows: round, at the middle of each side */
+.render-viewer-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  margin-top: -18px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid #2c2c31;
+  border-radius: 50%;
+  background: #1b1b1e;
+  color: var(--text);
+}
+
+.render-viewer-nav:hover:not(:disabled) {
+  background: #26262b;
+  box-shadow: none;
+}
+
+.render-viewer-prev {
+  left: 12px;
+}
+
+.render-viewer-next {
+  right: 12px;
+}
+
+.render-viewer-prev .rs-icon {
+  transform: scaleX(-1);
+}
+
+/* a line of progress or a result, over the bottom of the stage; hidden while it is empty */
+.render-viewer-status {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 2;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 6px 12px;
+  overflow: hidden;
+  border: 1px solid #2c2c31;
+  border-radius: 999px;
+  background: #1b1b1e;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.render-viewer-status:empty {
+  display: none;
+}
+
+/* ---- the strip of pictures at the bottom ---- */
+
+.render-viewer-strip {
+  grid-area: strip;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 14px;
+  overflow-x: auto;
+  border-top: 1px solid var(--divider);
+  background: #0b0b0c;
+  justify-content: safe center;
+}
+
+.render-viewer-thumb {
+  flex: none;
+  box-sizing: border-box;
+  height: 60px;
+  margin: 0;
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: #1b1b1e;
+  cursor: default;
+}
+
+.render-viewer-thumb canvas {
+  display: block;
+  width: auto;
+  height: 52px;
+  border-radius: 3px;
+}
+
+.render-viewer-thumb[aria-current="true"] {
+  border-color: var(--accent);
+}
+
+/* ---- the info panel on the right ---- */
+
+.render-viewer-info-panel {
+  grid-area: info;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+  border-left: 1px solid #26262a;
+  background: #151517;
+}
+
+.render-viewer-facts {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+
+.render-viewer-facts dt {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.render-viewer-facts dd {
+  margin: 2px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.render-viewer-fact-sub {
+  display: block;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+/* ---- narrow windows: the action labels go, the icons stay; the zoom sits on its own row ---- */
+
+@media (max-width: 899px) {
+  .render-viewer-actions .btn:not(.render-viewer-keep) {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  /* the label is the button's span that is not its icon (button() puts the icon first and the label last) */
+  .render-viewer-actions .btn:not(.render-viewer-keep) > span:not(.rs-icon) {
+    display: none;
+  }
+}
+
+/* a phone: the top bar wraps, the info panel lays over the picture rather than beside it */
+@media (max-width: 599px) {
+  .render-viewer-backdrop,
+  .render-viewer-backdrop.is-info {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "stage"
+      "strip";
+  }
+
+  .render-viewer-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .render-viewer-id {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .render-viewer-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .render-viewer-zoom {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  .render-viewer-strip {
+    padding: 8px 10px;
+  }
+
+  .render-viewer-info-panel {
+    grid-area: stage;
+    z-index: 3;
+    align-self: stretch;
+    justify-self: end;
+    width: min(260px, 80%);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5);
+  }
+}

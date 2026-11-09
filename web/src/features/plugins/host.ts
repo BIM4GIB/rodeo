@@ -1,5 +1,5 @@
 // The plug-in host on the main thread: keeps the installed plug-ins, runs them
-// (from the editor, or kept alive for their menu items), answers their calls
+// (from the editor, or kept alive for their menu items and render engines), answers their calls
 // (the pure ones through dispatch.ts; the window's, fetch and dialogs here), and
 // keeps the Plug-ins menu's items. Nothing a plug-in sends is trusted: every call
 // is checked against the API before it touches the drawing.
@@ -17,6 +17,8 @@ import { parseHeader, UNTITLED } from "./header.ts";
 import { dispatch, type CallEnv, type Effects } from "./dispatch.ts";
 import { deletePlugin, getMeta, listPlugins, newId, type PluginRecord, savePlugin, setMeta } from "./store.ts";
 import { PluginWorker, type LogLevel, type Outcome, type PluginError } from "./worker.ts";
+import { pluginEngine } from "./renderEngine.ts";
+import { registerRenderEngine } from "../render/engines.ts";
 import { progress, promptValues, showAlert } from "./ui.ts";
 
 // ---- the editor, as the host reaches it -----------------------------------------
@@ -219,6 +221,11 @@ export function runPlugin(opts: { name: string; code: string; grants: Grants; si
     menu: (id, label) => {
       menus.push({ id, label });
     },
+    // a run from the editor ends with its worker: Render Image takes an engine from a plug-in that is turned on
+    engine: (_id, spec) => {
+      const name = spec && typeof spec === "object" && typeof (spec as { name?: unknown }).name === "string" ? (spec as { name: string }).name : "a render engine";
+      opts.sink.log("log", `Added ${name}: Render Image lists it while the plug-in is turned on.`, null);
+    },
     uncaught: (err) => opts.sink.log("error", describe(err), err.line),
   });
   const finished = (async (): Promise<RunResult> => {
@@ -270,6 +277,8 @@ interface Active {
   readonly code: string;
   readonly worker: PluginWorker;
   readonly menus: MenuItem[];
+  /** takes each render engine it added out of Render Image */
+  readonly engines: (() => void)[];
   /** why it did not load, when it did not */
   error: PluginError | null;
 }
@@ -300,12 +309,13 @@ export function activeState(id: string): { readonly menus: readonly MenuItem[]; 
 }
 
 /**
- * Starts an enabled plug-in's code in its own worker, to collect the menu items it adds. A worker
- * with menu items is kept alive; one without is stopped at once.
+ * Starts an enabled plug-in's code in its own worker, to collect the menu items and render engines
+ * it adds. A worker with either is kept alive; one without is stopped at once.
  */
 async function activate(rec: PluginRecord): Promise<void> {
   deactivate(rec.id);
   const menus: MenuItem[] = [];
+  const engines: (() => void)[] = [];
   const grants = grantsFor(rec);
   const worker = new PluginWorker(rec.code, {
     call: (method, args) => answer(rec.name, grants, method, args),
@@ -319,12 +329,21 @@ async function activate(rec: PluginRecord): Promise<void> {
       if (!menus.some((m) => m.id === id)) menus.push({ id, label });
       changed();
     },
+    engine: (id, spec) => {
+      const engine = pluginEngine(rec.id, rec.name, id, spec, () => (active.get(rec.id) === entry ? worker : null));
+      if (typeof engine === "string") {
+        console.warn(`[${rec.name}] ${engine}`);
+        return;
+      }
+      engines.push(registerRenderEngine(engine));
+      changed();
+    },
     uncaught: (err) => {
       console.warn("[" + rec.name + "] " + describe(err));
       toast(`${rec.name}${err.line ? ", line " + err.line : ""}: ${err.message}`);
     },
   });
-  const entry: Active = { code: rec.code, worker, menus, error: null };
+  const entry: Active = { code: rec.code, worker, menus, engines, error: null };
   active.set(rec.id, entry);
   changed();
   const started = await worker.start();
@@ -332,7 +351,8 @@ async function activate(rec: PluginRecord): Promise<void> {
   if (!started.ok) {
     entry.error = started.error;
     worker.kill();
-  } else if (menus.length === 0) {
+    for (const drop of engines.splice(0)) drop();
+  } else if (menus.length === 0 && engines.length === 0) {
     worker.kill();
   }
   changed();
@@ -343,6 +363,7 @@ function deactivate(id: string): void {
   if (!a) return;
   active.delete(id);
   a.worker.kill();
+  for (const drop of a.engines.splice(0)) drop();
   changed();
 }
 

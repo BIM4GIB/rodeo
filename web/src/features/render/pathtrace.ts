@@ -1,8 +1,9 @@
 // Path Traced: three-gpu-pathtracer's WebGLPathTracer over the render scene, a sample at a time.
-// A full-resolution stage accumulates while the view rests. A quarter-size stage takes one sample a
-// frame while the view moves, and stands in until the full one has its first sample. Each picture
-// shown is denoised while it has few samples, smoothed up to the output size, then bloomed, fogged
-// and finished (post.ts, finish.ts); the lens's depth of field is its own.
+// A full-resolution stage accumulates while the view rests. A smaller stage traces the moving
+// view's frames (motionFrame, a fresh sample a pixel each, for motion.ts) and stands in until the
+// full one has its first sample. Each picture shown is denoised while it has few samples, smoothed
+// up to the output size, then bloomed, fogged and finished (TraceFinisher, which the WebGPU engine
+// shares); the lens's depth of field is its own.
 
 import * as THREE from "three";
 import { DenoiseMaterial, WebGLPathTracer } from "three-gpu-pathtracer";
@@ -12,6 +13,7 @@ import { DepthPrepass } from "./finish.ts";
 import { PostStack, needsDepth } from "./post.ts";
 import type { RenderScene, SceneChange } from "./sceneBuilder.ts";
 import type { RenderSettings } from "./settings.ts";
+import type { MotionFrame, TraceEngine } from "./traceEngine.ts";
 
 /** The moving view's picture, as a share of the output's size on each side. */
 const LOW_RES = 0.25;
@@ -65,6 +67,8 @@ interface Stage {
   readonly samples: number;
   readonly target: THREE.WebGLRenderTarget;
   setSize(width: number, height: number): void;
+  /** clears its picture and its sample count */
+  reset(): void;
   update(): void;
   dispose(): void;
 }
@@ -133,6 +137,49 @@ function lowSize(n: number): number {
   return Math.max(1, Math.floor(n * LOW_RES));
 }
 
+/** The size a frame draws at: the target's, else the drawing buffer's. */
+export function frameSize(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget | null): { width: number; height: number } {
+  const size = target ? new THREE.Vector2(target.width, target.height) : renderer.getDrawingBufferSize(new THREE.Vector2());
+  return { width: Math.max(1, Math.floor(size.x)), height: Math.max(1, Math.floor(size.y)) };
+}
+
+/**
+ * Runs `fn` on the scene as a path tracer takes it: lit by the sky with the sun in it
+ * (RenderScene.pathSky), the sun's light left out. The background stays the sky without it.
+ */
+export function asTraced(scene: RenderScene, fn: () => void): void {
+  const s = scene.scene;
+  const environment = s.environment;
+  const sunShown = scene.sunLight.visible;
+  s.environment = scene.pathSky;
+  scene.sunLight.visible = false;
+  try {
+    fn();
+  } finally {
+    s.environment = environment;
+    scene.sunLight.visible = sunShown;
+  }
+}
+
+/** Runs `update` with every clearcoat in `root` at zero, then puts them back. */
+function withoutClearcoat(root: THREE.Object3D | null, update: () => void): void {
+  const coated = new Map<THREE.MeshPhysicalMaterial, number>();
+  root?.traverse((o) => {
+    const materials = (o as THREE.Mesh).isMesh ? [(o as THREE.Mesh).material].flat() : [];
+    for (const m of materials) {
+      if ((m as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial && (m as THREE.MeshPhysicalMaterial).clearcoat > 0) {
+        coated.set(m as THREE.MeshPhysicalMaterial, (m as THREE.MeshPhysicalMaterial).clearcoat);
+      }
+    }
+  });
+  for (const m of coated.keys()) m.clearcoat = 0;
+  try {
+    update();
+  } finally {
+    for (const [m, clearcoat] of coated) m.clearcoat = clearcoat;
+  }
+}
+
 function saveRenderer(r: THREE.WebGLRenderer): RendererState {
   return {
     target: r.getRenderTarget(),
@@ -161,13 +208,12 @@ function restoreRenderer(r: THREE.WebGLRenderer, s: RendererState): void {
   r.setRenderTarget(s.target);
 }
 
-/** Path Traced: samples the render scene a frame at a time and shows each picture finished. */
-export class PathEngine {
-  private readonly renderer: THREE.WebGLRenderer;
-  private readonly tracer: WebGLPathTracer;
-  private readonly full: Stage;
-  private readonly low: Stage;
-  private readonly libraryQuad: FullScreenQuad;
+/**
+ * A traced picture finished for showing: denoised while it is raw and has few samples, smoothed up
+ * to the output size, then fogged, bloomed and graded (post.ts). Both engines show their pictures
+ * through one, so a picture looks the same from either.
+ */
+export class TraceFinisher {
   private readonly denoise = new DenoiseMaterial({ sigma: DENOISE_SIGMA, kSigma: 1, threshold: DENOISE_THRESHOLD });
   private readonly denoiseQuad = new FullScreenQuad(this.denoise);
   private readonly denoised = makeTarget();
@@ -182,7 +228,91 @@ export class PathEngine {
   private readonly upscaled = makeTarget();
   private readonly post = new PostStack();
   private readonly depthPass = new DepthPrepass();
-  private readonly size = new THREE.Vector2();
+  /** the scene's depth through the camera, kept until forgetDepth or another size */
+  private depth: THREE.DepthTexture | null = null;
+  private depthW = 0;
+  private depthH = 0;
+
+  /**
+   * Denoises `picture` (pw × ph; while `denoise`, the settings ask for it and it has few samples),
+   * smooths it up to w × h, then fogs, blooms and finishes it to `target` (null: the canvas).
+   */
+  render(
+    renderer: THREE.WebGLRenderer,
+    picture: THREE.Texture,
+    pw: number,
+    ph: number,
+    samples: number,
+    denoise: boolean,
+    scene: RenderScene,
+    camera: THREE.Camera,
+    settings: RenderSettings,
+    target: THREE.WebGLRenderTarget | null,
+    w: number,
+    h: number,
+  ): void {
+    let color = picture;
+    if (denoise && settings.quality.denoise && samples < DENOISE_SAMPLES) color = this.denoisePass(renderer, picture, pw, ph, samples).texture;
+    if (pw !== w || ph !== h) color = this.upscalePass(renderer, color, w, h).texture;
+    const depth = needsDepth(settings, false) ? this.depthAt(renderer, scene, camera, w, h) : null;
+    this.post.render(renderer, color, depth, camera, scene, settings, target, false);
+  }
+
+  /** The camera or the geometry changed: the depth is drawn again when next needed. */
+  forgetDepth(): void {
+    this.depth = null;
+  }
+
+  dispose(): void {
+    this.denoise.dispose();
+    this.denoiseQuad.dispose();
+    this.denoised.dispose();
+    this.upscale.dispose();
+    this.upscaleQuad.dispose();
+    this.upscaled.dispose();
+    this.post.dispose();
+    this.depthPass.dispose();
+    this.depth = null;
+  }
+
+  /** The picture with its noise smoothed and its edges kept. The colour tolerance eases to nothing as samples grow. */
+  private denoisePass(renderer: THREE.WebGLRenderer, picture: THREE.Texture, pw: number, ph: number, samples: number): THREE.WebGLRenderTarget {
+    const out = sized(this.denoised, pw, ph);
+    this.denoise.threshold = Math.max(MIN_THRESHOLD, DENOISE_THRESHOLD * (1 - samples / DENOISE_SAMPLES));
+    this.denoise.map = picture;
+    renderer.setRenderTarget(out);
+    this.denoiseQuad.render(renderer);
+    return out;
+  }
+
+  /** A smaller picture stretched to w × h with bilinear weights. */
+  private upscalePass(renderer: THREE.WebGLRenderer, color: THREE.Texture, w: number, h: number): THREE.WebGLRenderTarget {
+    const out = sized(this.upscaled, w, h);
+    this.upscale.uniforms.map.value = color;
+    renderer.setRenderTarget(out);
+    this.upscaleQuad.render(renderer);
+    return out;
+  }
+
+  /** The scene's depth through the camera at w × h, drawn again only after forgetDepth or at another size. */
+  private depthAt(renderer: THREE.WebGLRenderer, scene: RenderScene, camera: THREE.Camera, w: number, h: number): THREE.DepthTexture {
+    if (this.depth && this.depthW === w && this.depthH === h) return this.depth;
+    this.depth = this.depthPass.render(renderer, scene.scene, camera, w, h);
+    this.depthW = w;
+    this.depthH = h;
+    return this.depth;
+  }
+}
+
+/** Path Traced: samples the render scene a frame at a time and shows each picture finished. */
+export class PathEngine implements TraceEngine {
+  readonly kind = "webgl";
+  private readonly renderer: THREE.WebGLRenderer;
+  private readonly tracer: WebGLPathTracer;
+  private readonly full: Stage;
+  private readonly low: Stage;
+  private readonly libraryQuad: FullScreenQuad;
+  private readonly finisher = new TraceFinisher();
   /** a pixel read back to wait for the GPU (accumulate) */
   private readonly probe = new Float32Array(4);
   private scene: RenderScene | null = null;
@@ -191,16 +321,14 @@ export class PathEngine {
   private built = false;
   /** counts the setScene calls, so a build that has been overtaken does nothing */
   private builds = 0;
-  /** the scene's depth through the camera, kept until the camera, the geometry or the size changes */
-  private depth: THREE.DepthTexture | null = null;
-  private depthW = 0;
-  private depthH = 0;
   /** the shader takes the lamps' share from lightShare (shareLights) */
   private readonly shared: boolean;
   /** builds the scene's BVH off the page's thread */
   private readonly bvh = new BvhBuilder();
   /** the build running now (the library takes one at a time) */
   private building: Promise<void> | null = null;
+  /** counts the motion frames traced */
+  private motionSerial = 0;
 
   constructor(renderer: THREE.WebGLRenderer) {
     this.renderer = renderer;
@@ -230,6 +358,10 @@ export class PathEngine {
     own.dispose();
     this.shared = shareLights(this.full.material);
     t.setBVHWorker(this.bvh);
+    // three-gpu-pathtracer 0.0.28's WebGL shader traces any clearcoat black, so the materials are
+    // packed without one (setSceneAsync packs them through this too); the Realistic picture keeps it
+    const update = t.updateMaterials.bind(t);
+    t.updateMaterials = () => withoutClearcoat(t.scene, update);
   }
 
   /** Samples taken of the current picture (the full-resolution stage's). */
@@ -239,6 +371,11 @@ export class PathEngine {
 
   /** The scene is set and its BVH built. */
   get ready(): boolean {
+    return this.built;
+  }
+
+  /** A picture shows from the first sample: the small stage's stands in until the full one has one. */
+  get hasPicture(): boolean {
     return this.built;
   }
 
@@ -256,7 +393,7 @@ export class PathEngine {
     this.scene = scene;
     this.camera = camera;
     this.built = false;
-    this.depth = null;
+    this.finisher.forgetDepth();
     const build = ++this.builds;
     onProgress?.(0);
     // one build at a time: a newer call waits for the one running, and one overtaken meanwhile stops
@@ -271,7 +408,7 @@ export class PathEngine {
     }
     if (build !== this.builds || !this.camera) return;
     // the build took the sky and lights as the raster draws them, and the camera it began with
-    this.traced(scene, () => {
+    asTraced(scene, () => {
       this.tracer.updateEnvironment();
       this.tracer.updateLights();
     });
@@ -295,7 +432,7 @@ export class PathEngine {
     // a build still to come takes the scene as it is when it runs; each update below starts the picture over
     const scene = this.scene;
     if (!this.built || !scene) return;
-    this.traced(scene, () => {
+    asTraced(scene, () => {
       if (change.materials) this.tracer.updateMaterials();
       if (change.lights) this.tracer.updateLights();
       if (change.environment) this.tracer.updateEnvironment();
@@ -305,7 +442,7 @@ export class PathEngine {
   /** The camera moved, or another one is used: starts over. */
   setCamera(camera: THREE.Camera): void {
     this.camera = camera;
-    this.depth = null;
+    this.finisher.forgetDepth();
     this.tracer.setCamera(camera);
   }
 
@@ -323,6 +460,31 @@ export class PathEngine {
       this.trace(settings, interactive, w, h);
       this.finish(settings, interactive, target, w, h);
     });
+  }
+
+  /**
+   * A fresh frame of the moving view: the small stage started over and given one sample at `scale`
+   * of w × h, through the camera as it is now. The resting picture starts over too.
+   */
+  motionFrame(settings: RenderSettings, scale: number, width: number, height: number): MotionFrame | null {
+    const scene = this.scene;
+    const camera = this.camera;
+    if (!this.built || !scene || !camera) return null;
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round(height * scale));
+    const state = saveRenderer(this.renderer);
+    try {
+      this.syncBounces(settings);
+      if (this.shared) this.full.material.uniforms.lightShare.value = lampShare(scene, settings);
+      this.low.setSize(w, h);
+      this.low.reset();
+      this.sampleLow(this.full.target.width, this.full.target.height);
+    } finally {
+      restoreRenderer(this.renderer, state);
+    }
+    if (this.low.samples < 1) return null;
+    camera.updateMatrixWorld();
+    return { color: this.low.target.texture, width: w, height: h, matrixWorld: camera.matrixWorld.clone(), projectionMatrix: camera.projectionMatrix.clone(), serial: ++this.motionSerial };
   }
 
   /**
@@ -346,10 +508,10 @@ export class PathEngine {
   private frame(target: THREE.WebGLRenderTarget | null, draw: (w: number, h: number) => void): void {
     if (!this.built || !this.scene || !this.camera) return;
     const r = this.renderer;
-    const size = target ? this.size.set(target.width, target.height) : r.getDrawingBufferSize(this.size);
+    const { width, height } = frameSize(r, target);
     const state = saveRenderer(r);
     try {
-      draw(Math.max(1, Math.floor(size.x)), Math.max(1, Math.floor(size.y)));
+      draw(width, height);
     } finally {
       restoreRenderer(r, state);
     }
@@ -360,7 +522,7 @@ export class PathEngine {
     const scene = this.scene;
     if (!scene) return;
     this.syncBounces(settings);
-    if (this.shared) this.full.material.uniforms.lightShare.value = scene.sun.up && settings.sun.on && settings.sun.intensity > 0 ? DAY_LAMP_SHARE : NIGHT_LAMP_SHARE;
+    if (this.shared) this.full.material.uniforms.lightShare.value = lampShare(scene, settings);
     this.full.setSize(w, h);
     this.low.setSize(lowSize(w), lowSize(h));
     // while the view moves only the low-res stage samples; the full one waits where it is
@@ -384,11 +546,7 @@ export class PathEngine {
       picture = this.low.target;
       samples = this.low.samples;
     }
-    let color: THREE.Texture = picture.texture;
-    if (settings.quality.denoise && samples < DENOISE_SAMPLES) color = this.denoisePass(picture, samples).texture;
-    if (picture.width !== w || picture.height !== h) color = this.upscalePass(color, w, h).texture;
-    const depth = needsDepth(settings, false) ? this.depthAt(scene, camera, w, h) : null;
-    this.post.render(this.renderer, color, depth, camera, scene, settings, target, false);
+    this.finisher.render(this.renderer, picture.texture, picture.width, picture.height, samples, true, scene, camera, settings, target, w, h);
   }
 
   dispose(): void {
@@ -398,37 +556,11 @@ export class PathEngine {
     this.full.material.dispose();
     this.libraryQuad.material.dispose();
     this.libraryQuad.dispose();
-    this.denoise.dispose();
-    this.denoiseQuad.dispose();
-    this.denoised.dispose();
-    this.upscale.dispose();
-    this.upscaleQuad.dispose();
-    this.upscaled.dispose();
-    this.post.dispose();
-    this.depthPass.dispose();
+    this.finisher.dispose();
     this.bvh.dispose();
     this.scene = null;
     this.camera = null;
-    this.depth = null;
     this.built = false;
-  }
-
-  /**
-   * Runs `fn` on the scene as the path tracer takes it: lit by the sky with the sun in it
-   * (RenderScene.pathSky), the sun's light left out. The background stays the sky without it.
-   */
-  private traced(scene: RenderScene, fn: () => void): void {
-    const s = scene.scene;
-    const environment = s.environment;
-    const sunShown = scene.sunLight.visible;
-    s.environment = scene.pathSky;
-    scene.sunLight.visible = false;
-    try {
-      fn();
-    } finally {
-      s.environment = environment;
-      scene.sunLight.visible = sunShown;
-    }
   }
 
   /** One sample at low resolution. The stages share a material whose resolution each sample sets, so the full stage's is set back for its next tile. */
@@ -437,38 +569,15 @@ export class PathEngine {
     this.full.material.resolution.set(w, h);
   }
 
-  /** The picture with its noise smoothed and its edges kept. The colour tolerance eases to nothing as samples grow. */
-  private denoisePass(picture: THREE.WebGLRenderTarget, samples: number): THREE.WebGLRenderTarget {
-    const out = sized(this.denoised, picture.width, picture.height);
-    this.denoise.threshold = Math.max(MIN_THRESHOLD, DENOISE_THRESHOLD * (1 - samples / DENOISE_SAMPLES));
-    this.denoise.map = picture.texture;
-    this.renderer.setRenderTarget(out);
-    this.denoiseQuad.render(this.renderer);
-    return out;
-  }
-
-  /** A low-res picture stretched to w × h with bilinear weights. */
-  private upscalePass(color: THREE.Texture, w: number, h: number): THREE.WebGLRenderTarget {
-    const out = sized(this.upscaled, w, h);
-    this.upscale.uniforms.map.value = color;
-    this.renderer.setRenderTarget(out);
-    this.upscaleQuad.render(this.renderer);
-    return out;
-  }
-
-  /** The scene's depth through the camera at w × h, drawn again only when the camera, the geometry or the size has changed. */
-  private depthAt(scene: RenderScene, camera: THREE.Camera, w: number, h: number): THREE.DepthTexture {
-    if (this.depth && this.depthW === w && this.depthH === h) return this.depth;
-    this.depth = this.depthPass.render(this.renderer, scene.scene, camera, w, h);
-    this.depthW = w;
-    this.depthH = h;
-    return this.depth;
-  }
-
   /** The light bounces the settings ask for. A change starts the picture over. */
   private syncBounces(settings: RenderSettings): void {
     if (this.tracer.bounces === settings.quality.bounces) return;
     this.tracer.bounces = settings.quality.bounces;
     this.tracer.reset();
   }
+}
+
+/** The lamps' share of the direct-light samples: by day the sky holds the sun, by night the lamps light. */
+function lampShare(scene: RenderScene, settings: RenderSettings): number {
+  return scene.sun.up && settings.sun.on && settings.sun.intensity > 0 ? DAY_LAMP_SHARE : NIGHT_LAMP_SHARE;
 }

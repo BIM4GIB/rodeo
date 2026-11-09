@@ -160,7 +160,7 @@ export async function chooseHatch(): Promise<boolean> {
   const list = h(
     "select",
     { cls: "menu-dialog-input hatch-pick", attrs: { size: String(Math.min(10, Math.max(4, hatches.length))), "aria-label": "Hatches" } },
-    ...hatches.map((r) => h("option", { value: String(r.index), text: r.name })),
+    ...hatches.map((r) => h("option", { attrs: { translate: "no" }, value: String(r.index), text: r.name })),
   );
   list.value = String(hatches[0].index);
   const preview = h("img", { cls: "hatch-preview", attrs: { alt: "" } });

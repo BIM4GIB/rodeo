@@ -10,7 +10,8 @@ import { beamGroup, boxReach, disposeBeams, surfaceReaches } from "../../app/bea
 import { MAX_LAMPS, type Viz3D } from "../../app/heliodon.ts";
 import type { ModelFace } from "../../app/view3d.ts";
 import type { Light3D } from "../../core/index.ts";
-import { makeMaterial, updateMaterial } from "./materials.ts";
+import { libraryTextures, type LibraryTextures } from "./library.ts";
+import { makeMaterial, releaseLibraryMaps, updateMaterial } from "./materials.ts";
 import { materialKey, type RenderSettings } from "./settings.ts";
 import { skyTexture, skyWithSun, sunState, type SunState } from "./sky.ts";
 import { MM, RENDER_SPACE, dirToRender, toRender } from "./space.ts";
@@ -156,6 +157,8 @@ interface FaceGroup {
   readonly material: THREE.MeshPhysicalMaterial;
   readonly faces: ModelFace[];
   readonly meshes: THREE.Mesh[];
+  /** the library textures the material was last made or updated with (null: none, or not loaded yet) */
+  lib: LibraryTextures | null;
 }
 
 /** Geometry where it stands in world mm: `matrix` places it, null when it is there already. */
@@ -191,11 +194,15 @@ export function buildScene(src: SceneSource, settings: RenderSettings, viz: Viz3
     compacted.push(geometry);
     if (geometry.boundingBox) world.union(geometry.boundingBox);
     const key = materialKey(face);
+    // a library material's faces need UVs and a tangent frame for their normal map
+    if (settings.materials[key]?.library) libraryAttributes(geometry, geometry.attributes.uv !== undefined);
     let group = groups.get(key);
     if (!group) {
-      const material = shadowsFaceLights(makeMaterial(face, settings.materials[key], clayOf(settings)));
+      const override = settings.materials[key];
+      const lib = override?.library ? libraryTextures(override.library) : null;
+      const material = shadowsFaceLights(makeMaterial(face, override, clayOf(settings), lib));
       ownMaterials.push(material);
-      group = { material, faces: [], meshes: [] };
+      group = { material, faces: [], meshes: [], lib };
       groups.set(key, group);
     }
     const mesh = new THREE.Mesh(geometry, group.material);
@@ -329,8 +336,19 @@ export function buildScene(src: SceneSource, settings: RenderSettings, viz: Viz3
       const clayChanged = clay !== clayOf(prev);
       for (const [key, group] of groups) {
         const override = next.materials[key];
-        if (!clayChanged && sameValues(prev.materials[key], override)) continue;
-        updateMaterial(group.material, group.faces[0], override, clay);
+        // a library material that has loaded since the group was made counts as a change
+        const lib = override?.library ? libraryTextures(override.library) : null;
+        if (!clayChanged && lib === group.lib && sameValues(prev.materials[key], override)) continue;
+        // a group that gains a library gets its UVs and tangents in place, so the geometry changes (losing one keeps them)
+        if (override?.library) {
+          for (const mesh of group.meshes) {
+            if (withLibraryAttributes.has(mesh.geometry)) continue;
+            libraryAttributes(mesh.geometry, mesh.geometry.attributes.uv !== undefined);
+            geometry = true;
+          }
+        }
+        updateMaterial(group.material, group.faces[0], override, clay, lib);
+        group.lib = lib;
         group.meshes.forEach((mesh, i) => {
           mesh.castShadow = castsShadow(group.faces[i].opacity, group.material);
         });
@@ -385,6 +403,7 @@ export function buildScene(src: SceneSource, settings: RenderSettings, viz: Viz3
     },
     dispose() {
       for (const g of compacted) g.dispose();
+      for (const group of groups.values()) releaseLibraryMaps(group.material);
       for (const m of ownMaterials) m.dispose();
       groundGeometry.dispose();
       sky.dispose();
@@ -422,6 +441,105 @@ function compact(face: ModelFace): THREE.BufferGeometry {
   out.computeBoundingBox();
   out.computeBoundingSphere();
   return out;
+}
+
+/**
+ * The geometries libraryAttributes has given UVs and tangents. A tangent alone does not say so: the
+ * WebGPU path tracer adds one to every geometry it takes (zeros where there are no UVs).
+ */
+const withLibraryAttributes = new WeakSet<THREE.BufferGeometry>();
+
+/** The axes a tangent is built against when the UVs give it no direction. */
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+
+/**
+ * What a library material needs of a compacted face (no index, three corners a triangle): UVs in
+ * metres where the drawing gives none, box-projected from the world positions (mm) on the flat
+ * normal's largest axis, and a tangent per triangle for the normal map, its w the bitangent's sign.
+ * `ownUvs` keeps the drawing's UVs as they are.
+ */
+function libraryAttributes(geometry: THREE.BufferGeometry, ownUvs: boolean): void {
+  const pos = geometry.attributes.position;
+  const drawn = geometry.attributes.uv;
+  const n = pos.count;
+  const uvs = new Float32Array(n * 2);
+  const tangents = new Float32Array(n * 4);
+  if (ownUvs) {
+    for (let i = 0; i < n; i++) {
+      uvs[2 * i] = drawn.getX(i);
+      uvs[2 * i + 1] = drawn.getY(i);
+    }
+  }
+  const p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const tangent = new THREE.Vector3();
+  const bitangent = new THREE.Vector3();
+  const scratch = new THREE.Vector3();
+  for (let t = 0; t + 2 < n; t += 3) {
+    for (let k = 0; k < 3; k++) p[k].fromBufferAttribute(pos, t + k);
+    e1.subVectors(p[1], p[0]);
+    e2.subVectors(p[2], p[0]);
+    normal.crossVectors(e1, e2);
+    // a degenerate triangle has no normal: it is taken to face up
+    if (normal.lengthSq() > 0) normal.normalize();
+    else normal.set(0, 0, 1);
+
+    if (!ownUvs) {
+      const ax = Math.abs(normal.x);
+      const ay = Math.abs(normal.y);
+      const az = Math.abs(normal.z);
+      for (let k = 0; k < 3; k++) {
+        const { x, y, z } = p[k];
+        let u = 0;
+        let v = 0;
+        if (az >= ax && az >= ay) {
+          u = x;
+          v = y;
+        } else if (ax >= ay) {
+          u = y * Math.sign(normal.x);
+          v = z;
+        } else {
+          u = -x * Math.sign(normal.y);
+          v = z;
+        }
+        uvs[2 * (t + k)] = u / 1000;
+        uvs[2 * (t + k) + 1] = v / 1000;
+      }
+    }
+
+    // the derivatives of position along u and v, from the triangle's edges and UVs
+    const du1 = uvs[2 * (t + 1)] - uvs[2 * t];
+    const dv1 = uvs[2 * (t + 1) + 1] - uvs[2 * t + 1];
+    const du2 = uvs[2 * (t + 2)] - uvs[2 * t];
+    const dv2 = uvs[2 * (t + 2) + 1] - uvs[2 * t + 1];
+    const det = du1 * dv2 - du2 * dv1;
+    if (Math.abs(det) > 1e-12) {
+      tangent.copy(e1).multiplyScalar(dv2).sub(scratch.copy(e2).multiplyScalar(dv1)).multiplyScalar(1 / det);
+      bitangent.copy(e2).multiplyScalar(du1).sub(scratch.copy(e1).multiplyScalar(du2)).multiplyScalar(1 / det);
+    } else {
+      tangent.set(0, 0, 0);
+      bitangent.set(0, 0, 0);
+    }
+    // across the normal, then to unit length; the bitangent is cross(normal, tangent) times w
+    const along = tangent.lengthSq();
+    tangent.addScaledVector(normal, -tangent.dot(normal));
+    let w = 1;
+    if (along > 0 && tangent.lengthSq() > 1e-12 * along) {
+      tangent.normalize();
+      w = scratch.crossVectors(normal, tangent).dot(bitangent) < 0 ? -1 : 1;
+    } else {
+      tangent.crossVectors(Math.abs(normal.x) < 0.9 ? AXIS_X : AXIS_Y, normal).normalize();
+    }
+    for (let k = 0; k < 3; k++) {
+      tangents.set([tangent.x, tangent.y, tangent.z, w], 4 * (t + k));
+    }
+  }
+  if (!ownUvs) geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  geometry.setAttribute("tangent", new THREE.BufferAttribute(tangents, 4));
+  withLibraryAttributes.add(geometry);
 }
 
 /**

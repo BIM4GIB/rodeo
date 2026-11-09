@@ -262,7 +262,7 @@ async function pickSavedViews(): Promise<ViewCamera[] | null> {
 }
 
 export function isRealisticMode(mode: RenderMode): boolean {
-  return mode === "realistic" || mode === "pathtraced";
+  return mode === "realistic" || mode === "pathtraced" || mode === "ai";
 }
 
 /** The selected objects' 3D box (with all they hold), or null when nothing selected is drawn in 3D. */

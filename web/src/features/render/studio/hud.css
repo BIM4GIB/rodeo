@@ -1,0 +1,475 @@
+/* Render Studio's HUD over the 3D view (hud.ts): the frame of what Render takes, the modes and the live
+   status across the top, the sun, the time, the date and the shutter along the bottom. Solid surfaces
+   from the colour tokens, as the editor's chrome: no glass, no blur. The root lets clicks through to the
+   view; only its pills, Done and the date popover take them. */
+
+/* the editor's bars leave the 3D view in Studio: the HUD does their work here */
+body.render-studio #viewbar,
+body.render-studio #modebar,
+body.render-studio #snapbar {
+  display: none !important;
+}
+
+.rs-hud {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  pointer-events: none;
+  font-size: 12px;
+  color: var(--text);
+  cursor: default;
+}
+
+.rs-hud [hidden] {
+  display: none !important;
+}
+
+.rs-hud button {
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+/* ---- the frame: outside it darkened, its edge and corners light ----------------- */
+
+.rs-hud-frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+.rs-hud-tick {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 0 solid #fff;
+}
+
+.rs-hud-tl {
+  left: -2px;
+  top: -2px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.rs-hud-tr {
+  right: -2px;
+  top: -2px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+
+.rs-hud-bl {
+  left: -2px;
+  bottom: -2px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+
+.rs-hud-br {
+  right: -2px;
+  bottom: -2px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+
+/* the size and the camera, above the frame's top left corner */
+.rs-hud-label {
+  position: absolute;
+  transform: translateY(-100%);
+  padding: 3px 8px;
+  border: 1px solid var(--pill-border);
+  border-radius: 6px;
+  background: var(--pill);
+  color: var(--text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---- the bars: a solid pill, its controls clickable, the strip around them not ---- */
+
+.rs-hud-pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0 6px;
+  border: 1px solid var(--pill-border);
+  border-radius: 10px;
+  background: var(--pill);
+  box-shadow: var(--shadow);
+}
+
+.rs-hud-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
+/* top: the modes and the status, centred; Done at the right */
+.rs-hud-top {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.rs-hud-modes {
+  height: 36px;
+  max-width: calc(100% - 184px);
+  padding: 0 8px 0 4px;
+}
+
+.rs-hud-modes .rs-seg {
+  flex: none;
+  width: auto;
+}
+
+.rs-hud-modes .rs-seg .seg-btn {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  overflow: visible;
+}
+
+.rs-hud-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+  color: var(--text-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rs-hud-status-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 260px;
+}
+
+.rs-hud-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 14px;
+}
+
+.rs-hud-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.rs-hud-status[data-phase="refining"] .rs-hud-dot,
+.rs-hud-status[data-phase="moving"] .rs-hud-dot,
+.rs-hud-status[data-phase="preparing"] .rs-hud-dot {
+  background: var(--accent);
+  animation: rs-hud-pulse 1.2s ease-in-out infinite;
+}
+
+.rs-hud-status[data-phase="done"] .rs-hud-dot {
+  background: #4cc38a;
+}
+
+.rs-hud-status[data-phase="paused"] .rs-hud-dot {
+  background: var(--warn);
+}
+
+.rs-hud-meter {
+  position: relative;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fill-strong);
+  overflow: hidden;
+}
+
+.rs-hud-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--progress, 0%);
+  background: var(--accent);
+  transition: width 0.2s linear;
+}
+
+.rs-hud-meter[data-indeterminate] > span {
+  width: 30%;
+  animation: rs-hud-slide 1.1s ease-in-out infinite;
+}
+
+.rs-hud-done {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--pill-border);
+  border-radius: 10px;
+  background: var(--pill);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+/* bottom: the controls, centred */
+.rs-hud-bottom {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  height: 52px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.rs-hud-bar {
+  height: 52px;
+  padding: 0 8px 0 6px;
+  gap: 6px;
+}
+
+.rs-hud-tool {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.rs-hud-tool:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.rs-hud-tool[aria-pressed="true"] {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.rs-hud-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 200px;
+  min-width: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rs-hud-time.is-off {
+  opacity: 0.45;
+}
+
+.rs-hud-range {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rs-hud-readout {
+  flex: none;
+  min-width: 44px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rs-hud-datewrap {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+.rs-hud-date {
+  height: 34px;
+  min-width: 68px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rs-hud-date:hover,
+.rs-hud-date[aria-expanded="true"] {
+  background: var(--fill-hover);
+}
+
+/* the date popover: solid, above the bar */
+.rs-hud-pop {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: 268px;
+  padding: 12px;
+  border: 1px solid var(--pill-border);
+  border-radius: 10px;
+  background: var(--chrome);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.rs-hud-pop .rs-chips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.rs-hud-pop .rs-chip {
+  width: 100%;
+  height: 26px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.rs-hud-pop-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.rs-hud-shutters {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* the shutter: a round accent button, a ring turning while the pictures are made */
+.rs-hud-shutter {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.rs-hud-shutter:hover {
+  opacity: 0.9;
+}
+
+.rs-hud-shutter:active {
+  transform: scale(0.96);
+}
+
+.rs-hud-shutter:focus-visible,
+.rs-hud-tool:focus-visible,
+.rs-hud-date:focus-visible,
+.rs-hud-caret:focus-visible,
+.rs-hud-done:focus-visible,
+.rs-hud .rs-seg .seg-btn:focus-visible,
+.rs-hud .rs-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.rs-hud-ring {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rs-hud-shutter.is-busy .rs-hud-ring {
+  opacity: 1;
+  animation: rs-hud-spin 0.9s linear infinite;
+}
+
+.rs-hud-caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.rs-hud-caret:hover {
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+/* a narrow view: the date goes, the time's slider shortens, the status keeps to a line */
+@container (max-width: 639px) {
+  .rs-hud-datewrap {
+    display: none;
+  }
+
+  .rs-hud-time {
+    width: 120px;
+  }
+
+  .rs-hud-status-body {
+    max-width: 140px;
+  }
+}
+
+@keyframes rs-hud-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes rs-hud-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes rs-hud-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

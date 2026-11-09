@@ -1,0 +1,36 @@
+The textures in public/materials are from Poly Haven (https://polyhaven.com), released under the CC0 licence
+(https://polyhaven.com/license): free to use, change and share, commercially or not, with no credit needed.
+
+Dark Deck Boards | wood_floor_deck | Dimitrios Savva | https://polyhaven.com/a/wood_floor_deck
+Grey Board Cladding | exterior_wall_cladding | Charlotte Baglioni | https://polyhaven.com/a/exterior_wall_cladding
+Herringbone Parquet | herringbone_parquet | Jenelle van Heerden | https://polyhaven.com/a/herringbone_parquet
+Light Oak Floor | laminate_floor_02 | Dario Barresi | https://polyhaven.com/a/laminate_floor_02
+Oak Veneer | oak_veneer_01 | Jenelle van Heerden | https://polyhaven.com/a/oak_veneer_01
+Weathered Cladding | weathered_brown_planks | Dimitrios Savva | https://polyhaven.com/a/weathered_brown_planks
+Dark Engineering Brick | dark_brick_wall | Dario Barresi | https://polyhaven.com/a/dark_brick_wall
+Pale Brick | whitewashed_brick | Charlotte Baglioni | https://polyhaven.com/a/whitewashed_brick
+Red Brick | red_brick | Rob Tuytel | https://polyhaven.com/a/red_brick
+Yellow Stock Brick | yellow_brick | Rob Tuytel | https://polyhaven.com/a/yellow_brick
+Flagstone | stone_tiles_02 | Charlotte Baglioni | https://polyhaven.com/a/stone_tiles_02
+Rough Stone Wall | rustic_stone_wall_02 | Amal Kumar | https://polyhaven.com/a/rustic_stone_wall_02
+Sandstone Blocks | sandstone_blocks_05 | Rob Tuytel | https://polyhaven.com/a/sandstone_blocks_05
+Fair-Faced Concrete | concrete_wall_008 | Dario Barresi | https://polyhaven.com/a/concrete_wall_008
+Polished Concrete | concrete_floor_worn_001 | Dimitrios Savva | https://polyhaven.com/a/concrete_floor_worn_001
+Precast Concrete Panel | concrete_wall_007 | Dario Barresi | https://polyhaven.com/a/concrete_wall_007
+Rough Render | white_plaster_02 | Rob Tuytel | https://polyhaven.com/a/white_plaster_02
+Smooth White Plaster | white_stucco | Amal Kumar | https://polyhaven.com/a/white_stucco
+Chequered Floor Tile | floor_tiles_06 | Rob Tuytel | https://polyhaven.com/a/floor_tiles_06
+Limestone Floor Tile | marble_01 | Rob Tuytel | https://polyhaven.com/a/marble_01
+White Wall Tile | long_white_tiles | Jenelle van Heerden | https://polyhaven.com/a/long_white_tiles
+Corrugated Iron | corrugated_iron | Jenelle van Heerden | https://polyhaven.com/a/corrugated_iron
+Painted Metal Plate | blue_metal_plate | Rob Tuytel | https://polyhaven.com/a/blue_metal_plate
+Asphalt | asphalt_02 | Rob Tuytel | https://polyhaven.com/a/asphalt_02
+Cobblestones | cobblestone_floor_04 | Rob Tuytel | https://polyhaven.com/a/cobblestone_floor_04
+Concrete Pavers | concrete_pavers | Amal Kumar | https://polyhaven.com/a/concrete_pavers
+Gravel | gravel_floor_02 | Jenelle van Heerden | https://polyhaven.com/a/gravel_floor_02
+Leafy Grass | leafy_grass | Charlotte Baglioni | https://polyhaven.com/a/leafy_grass
+Sand | sand_01 | Rob Tuytel | https://polyhaven.com/a/sand_01
+Clay Roof Tiles | clay_roof_tiles_02 | Amal Kumar | https://polyhaven.com/a/clay_roof_tiles_02
+Roof Slates | roof_slates_03 | Rob Tuytel | https://polyhaven.com/a/roof_slates_03
+Cotton | cotton_jersey | colormass | https://polyhaven.com/a/cotton_jersey
+Tan Leather | fabric_leather_02 | Rob Tuytel | https://polyhaven.com/a/fabric_leather_02

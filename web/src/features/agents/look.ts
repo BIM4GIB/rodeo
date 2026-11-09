@@ -4,7 +4,7 @@
 // enough to send to a model, with what they show, so the model can measure from them.
 
 import * as THREE from "three";
-import type { AppContext } from "../../app/ext.ts";
+import type { AppContext, DrawingRef } from "../../app/ext.ts";
 import { Renderer } from "../../app/renderer.ts";
 import { setViz, store, type DisplayMode } from "../../app/state.ts";
 import type { ToolOverlay } from "../../app/tools.ts";
@@ -77,24 +77,26 @@ export interface PlanLook {
   readonly showSelection?: boolean;
 }
 
-/** The plan drawn offscreen as the editor draws it, at `look`'s place. */
-export function lookPlan(ctx: AppContext, look: PlanLook): Picture {
+/**
+ * The plan of drawing `d` drawn offscreen as the editor draws it, at `look`'s place: with the
+ * scene of its own while it is behind another tab, the editor's layer and selection being its.
+ */
+export function lookPlan(d: DrawingRef, look: PlanLook): Picture {
   const s = store;
-  if (!s.session) throw new Error("no drawing is open");
-  const scene = ctx.scene;
+  const scene = d.scene();
   const layerId = look.layerId ?? null;
   if (layerId && !scene.layer(layerId)) throw new Error(`no layer has the id ${layerId}`);
-  const active = layerId ?? s.activeLayerId;
+  const active = layerId ?? d.activeLayerId();
   let box: BBox | null = null;
   if (look.ids?.length) {
-    box = boundsOfAll(s.session.doc, look.ids);
+    box = boundsOfAll(d.session.doc, look.ids);
     if (!box) throw new Error("none of those objects has a place in the plan");
   } else if (look.box) {
     box = look.box;
   } else if (look.frame === "view") {
-    box = ctx.view.visibleRect();
+    box = d.visibleRect();
   } else {
-    box = scene.drawnBounds(active) ?? ctx.view.visibleRect();
+    box = scene.drawnBounds(active) ?? d.visibleRect();
   }
   if (![box.x0, box.y0, box.x1, box.y1].every(Number.isFinite)) throw new Error("the box isn't finite");
   const bw = Math.max(box.x1 - box.x0, 1e-6);
@@ -105,9 +107,27 @@ export function lookPlan(ctx: AppContext, look: PlanLook): Picture {
   const canvas = document.createElement("canvas");
   const view = new View();
   const renderer = new Renderer(canvas, view, scene, NO_TOOLS);
-  const saved = { activeLayerId: s.activeLayerId, layerMode: s.layerMode, selection: s.selection, preselect: s.preselect, editVertex: s.editVertex, showGrid: s.showGrid };
+  const saved = {
+    activeLayerId: s.activeLayerId,
+    activeClassIndex: s.activeClassIndex,
+    layerMode: s.layerMode,
+    selection: s.selection,
+    preselect: s.preselect,
+    editVertex: s.editVertex,
+    editGroupId: s.editGroupId,
+    symbolEdit: s.symbolEdit,
+    showGrid: s.showGrid,
+  };
   const pad = look.ids?.length ? 0.08 : 0.02;
   try {
+    // behind: drawn as its tab keeps it, with nothing of the drawing in front (its group, its symbol)
+    if (!d.isShown()) {
+      s.activeLayerId = d.activeLayerId();
+      s.activeClassIndex = d.activeClassIndex() ?? s.activeClassIndex;
+      s.selection = d.selection();
+      s.editGroupId = null;
+      s.symbolEdit = null;
+    }
     if (layerId) {
       s.activeLayerId = layerId;
       s.layerMode = "active-only" satisfies DisplayMode;

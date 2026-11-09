@@ -8,6 +8,7 @@
 import { h } from "./dom.ts";
 import { shortcutText, type Item, type Row } from "./menu.ts";
 import { showDialog } from "./menubar.ts";
+import { onLanguage, t } from "./i18n.ts";
 
 const STORAGE_KEY = "openvwx.menukeys.v1";
 const SEP = " › ";
@@ -44,6 +45,27 @@ export interface MenuCommand {
 /** Changes from the defaults: command path to its combination, "" for none. */
 type Changes = Record<string, string>;
 
+/**
+ * Commands that moved menus, by their old path and new one; a path ending " › " moves everything under it. Keys
+ * kept under an old path, in this browser or a workspace file, follow the command.
+ */
+const MOVED: readonly (readonly [string, string])[] = [
+  ["AEC › Machine Design › ", "Tools › Machine Design › "],
+  ["AEC › Electrical › ", "AEC › MEP › "],
+  ["View › Theme › ", "View › Appearance › "],
+  ["View › Dark Canvas", "View › Appearance › Dark Canvas"],
+  ["Window › Object Info", "Window › Palettes › Object Info"],
+  ["Tools › Options › Preferences…", "Edit › Preferences…"],
+];
+
+/** `path` where its command is now. */
+function movedPath(path: string): string {
+  for (const [from, to] of MOVED) {
+    if (from.endsWith(SEP) ? path.startsWith(from) : path === from) return to + path.slice(from.length);
+  }
+  return path;
+}
+
 const listeners = new Set<() => void>();
 let changes: Changes = load();
 /** the menus' commands, known once the menu bar is built */
@@ -57,13 +79,17 @@ function load(): Changes {
   }
 }
 
-/** Kept or imported changes with anything that is not a path and a ⌘ combination (or "") dropped. */
+/** Kept or imported changes with anything that is not a path and a ⌘ combination (or "") dropped, and moved commands under their new paths. */
 function clean(raw: unknown): Changes {
   const out: Changes = {};
   if (!raw || typeof raw !== "object") return out;
   for (const [path, keys] of Object.entries(raw)) {
     if (typeof keys !== "string") continue;
-    if (keys === "" || isCombination(keys)) out[path] = keys;
+    if (keys !== "" && !isCombination(keys)) continue;
+    const now = movedPath(path);
+    // a key kept under the new path wins over one under the old
+    if (now !== path && Object.hasOwn(raw, now)) continue;
+    out[now] = keys;
   }
   return out;
 }
@@ -83,17 +109,19 @@ function save(next: Changes): void {
   for (const fn of listeners) fn();
 }
 
-/** A tooltip naming the command's shortcut, "Undo (⌘Z)", or the label alone when it has none. */
+/** A tooltip naming the command's shortcut, "Undo (⌘Z)", or the label alone when it has none, in the interface's language. */
 function titleWithKey(el: HTMLElement): void {
   const label = (el.dataset.keyLabel ??= el.title.replace(/\s*\([^)]*\)$/, ""));
   const keys = menuKeyOf(el.dataset.menuKey ?? "");
-  el.title = keys ? `${label} (${shortcutText(keys)})` : label;
+  el.title = keys ? `${t(label)} (${shortcutText(keys)})` : t(label);
 }
 
 /** Re-titles every element that names a command's shortcut (data-menu-key). */
 function syncTitles(): void {
   for (const el of document.querySelectorAll<HTMLElement>("[data-menu-key]")) titleWithKey(el);
 }
+
+onLanguage(syncTitles);
 
 /** Gives `el` the tooltip `label` with the shortcut of the command at `path`, kept in step with Menu Shortcuts…. */
 export function keyTitle(el: HTMLElement, label: string, path: string): void {

@@ -216,7 +216,7 @@
 }
 
 .ccad-slot {
-  cursor: pointer;
+  cursor: default;
 }
 
 .ccad-slot-on .ccad-slot-rect {

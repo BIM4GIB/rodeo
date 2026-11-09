@@ -4,10 +4,11 @@ How to use Rodeo, the drawing and 3D modelling app at [rodeo.build](https://rode
 
 ## Getting around
 
-- [Files: opening, saving and tabs](files.md): opening and saving drawings, autosave, tabs, new drawings and templates, units and file information.
+- [Files: opening, saving and tabs](files.md): opening and saving drawings, autosave, tabs, new drawings and templates, units and file information, sharing and embedding drawings, and the Gallery.
+- [Branches, compare and merge](branches.md): branches of cloud drawings, comparing versions, merge requests and blame.
 - [The workspace](workspace.md): the window's layout, the Agents panel, zooming and panning, snapping, the grid and rulers, preferences, palettes and workspaces, view panes, the menus at a glance and utilities.
 - [Layers and classes](layers-classes.md): design and sheet layers, classes, visibility, the Organization dialog, saved views, and class and layer mapping.
-- [Importing, exporting and printing](import-export.md): printing and PDF; DXF, DWG, PDF and images in and out; 3D models in and out (Rhino, SketchUp, Archicad, Revit, IFC, STEP and mesh formats); shapefiles and worksheets.
+- [Importing, exporting and printing](import-export.md): printing and PDF; DXF, DWG, PDF and images in and out; 3D models in and out (Rhino, SketchUp, Archicad, Revit, IFC, STEP, SolidWorks, Inventor, FreeCAD, Fusion 360, NX, Creo and mesh formats); shapefiles and worksheets.
 
 ## Drawing and editing
 
@@ -18,7 +19,7 @@ How to use Rodeo, the drawing and 3D modelling app at [rodeo.build](https://rode
 
 ## 3D
 
-- [3D view, lights and rendering](3d-view-rendering.md): opening the 3D view and moving around, views and display, lights, cameras and the sun, rendering, Render Image and working planes.
+- [3D view, lights and rendering](3d-view-rendering.md): opening the 3D view and moving around, views and display, lights, cameras and the sun, rendering and the material library, Render Studio, Render and its queue, and working planes.
 - [3D modelling](3d-modeling.md): extrudes and sweeps, solids and booleans, sections, surfaces and meshes, the 3D Power Pack and the 3D Modeling tool set.
 
 ## Documents
@@ -45,6 +46,8 @@ How to use Rodeo, the drawing and 3D modelling app at [rodeo.build](https://rode
 - Keyboard shortcuts are shown as on a Mac, such as <kbd>⇧⌘J</kbd>. On Windows and Linux, <kbd>⌘</kbd> is <kbd>Ctrl</kbd>, <kbd>⌥</kbd> is <kbd>Alt</kbd> and <kbd>⇧</kbd> is <kbd>Shift</kbd>.
 - Tools are named with their tool set, such as the **Wall** tool (Building Shell tool set).
 - **Limits:** at the end of a section says what Rodeo doesn't do yet, or does differently from Vectorworks.
+
+This guide is also in the app: **Help › User Guide** opens it in a new tab.
 
 Rodeo is young, and files it writes have not yet been opened in Vectorworks. Keep your originals and check edited copies in Vectorworks or the free Vectorworks Viewer before relying on them.
 

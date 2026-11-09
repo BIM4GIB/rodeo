@@ -13,6 +13,8 @@ export interface Thread {
   messages: ChatMessage[];
   /** dollars spent on it, where the provider says */
   cost: number;
+  /** the file name of the drawing it worked in, as its last message was sent */
+  drawing?: string;
 }
 
 const DB = "rodeo-agents";

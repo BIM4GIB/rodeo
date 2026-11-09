@@ -6,9 +6,13 @@
 // only, on the models it picks: the user signs in, and where the server sells them by AI credit
 // the panel shows the balance, what each message cost, and the top-ups when it runs low.
 // The engine (agent.ts, the tools, the API's docs) loads with the first message.
+// Each open drawing has a chat of its own, and the panel shows the one in front: an agent goes on
+// working in its drawing when another tab comes to the front, so several work at once. Each
+// drawing's tab shows what its agent is doing (at work, waiting for its tab, finished), and the
+// panel's top line names the drawing its chat works in and the other agents at work.
 
 import { h } from "../../app/dom.ts";
-import { appContext } from "../../app/ext.ts";
+import { appContext, onDrawingClosed, redrawTabs, registerCloseGuard, registerTabMark, type DrawingRef, type TabMark } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
 import { openContextMenu, type Row } from "../../app/menu.ts";
 import { store } from "../../app/state.ts";
@@ -17,7 +21,7 @@ import { currentUser, onUser, refreshUser, serverConfig } from "../../platform/a
 import type { ServerConfig } from "../../platform/protocol.ts";
 import { formatCredit, openCreditDialog, pricing, topUpButtons } from "../account/credit.ts";
 import { requireSignIn } from "../account/signin.ts";
-import type { AgentEvent } from "./agent.ts";
+import type { AgentEvent, RunTarget } from "./agent.ts";
 import type { ContentPart, Usage } from "./llm.ts";
 import type { Picture } from "./look.ts";
 import { renderMarkdown } from "./markdown.ts";
@@ -34,7 +38,46 @@ const ICONS = {
   check: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.8 6.3 5 8.4l4.2-4.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   cross: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.8 3.8 8.2 8.2M8.2 3.8 3.8 8.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
   file: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h4l2.5 2.5v6.5H3z M7 1.5V4h2.5" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>',
+  /** marks on a drawing's tab: its agent at work, waiting for the tab, finished, stopped by an error */
+  working: '<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="1.6"/><path d="M7 2a5 5 0 0 1 5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  waiting: '<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.6" fill="currentColor"/><path d="M5.6 4.8v4.4M8.4 4.8v4.4" style="stroke:var(--surface)" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  done: '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.2l1.5 4.3 4.3 1.5-4.3 1.5L7 12.8 5.5 8.5 1.2 7l4.3-1.5z" fill="currentColor"/></svg>',
+  failed: '<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.6" fill="currentColor"/><path d="M7 4.2v3.4" style="stroke:var(--surface)" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="9.9" r=".95" style="fill:var(--surface)"/></svg>',
 };
+
+/** How a chat's last run ended, until the user has seen it, or what its run is doing now. */
+type ChatState = "idle" | "working" | "waiting" | "done" | "failed";
+
+/** A drawing's conversation with its agent, as the panel shows it while that drawing is in front. */
+interface Chat {
+  readonly root: HTMLElement;
+  /** the drawing it works in; null while none is open */
+  drawing(): DrawingRef | null;
+  state(): ChatState;
+  /** what its run waits to do once its drawing is in front, while the state is "waiting" */
+  waitingFor(): string;
+  /** whether it has nothing in it yet */
+  empty(): boolean;
+  stop(): void;
+  /** the conversation goes on in `d` (its drawing opened again in its place) */
+  rebind(d: DrawingRef): void;
+  /** its drawing is in front: how its last run ended has been seen */
+  seen(): void;
+  /** the server's terms or the user's credit changed */
+  refresh(): void;
+  /** draws the top line again: its drawing and the agents at work in others */
+  where(): void;
+  showThread(t: Thread): Promise<void>;
+  /** its root left the panel for good (its drawing closed) */
+  dispose(): void;
+}
+
+/** The server's agents and the user's credit, shared by every drawing's chat. */
+const shared: { loaded: boolean; hasServer: boolean; serverAi: ServerConfig["ai"]; balance: number | null } = { loaded: false, hasServer: false, serverAi: null, balance: null };
+
+/** Each open drawing's chat, by drawing; the key null holds the one shown while none is open. */
+const chats = new Map<DrawingRef | null, Chat>();
+let host: HTMLElement | null = null;
 
 const SUGGESTIONS = [
   "What's in this drawing?",
@@ -84,33 +127,132 @@ interface Sink {
   readonly now?: HTMLElement;
 }
 
+/** Opens the saved conversation `id` in the Agents panel, in the chat of the drawing in front; false when the panel isn't built or the conversation is gone. */
+export async function openAgentsThread(id: string): Promise<boolean> {
+  const t = (await listThreads()).find((x) => x.id === id);
+  if (!t || !host) return false;
+  appContext()?.palettes.show("agents");
+  await frontChat().showThread(t);
+  return true;
+}
+
+/** The panel: the chat of the drawing in front, swapped for another drawing's as its tab comes to the front. */
 export function agentsPanel(): HTMLElement {
+  const panel = h("div", { cls: "pal-fill ag-host" });
+  host = panel;
+  void serverConfig().then((cfg) => {
+    shared.loaded = true;
+    shared.hasServer = cfg !== null;
+    shared.serverAi = cfg?.ai ?? null;
+    for (const c of chats.values()) c.refresh();
+  });
+  // signing in or out, and a top-up, change what the panel offers
+  onUser((u) => {
+    shared.balance = u?.aiCredit ?? null;
+    for (const c of chats.values()) c.refresh();
+  });
+  store.on("session", showFront);
+  onDrawingClosed(drawingClosed);
+  registerTabMark(tabMark);
+  registerCloseGuard((d) => (chats.get(d)?.state() === "working" || chats.get(d)?.state() === "waiting" ? "An agent is at work in this drawing: closing it stops the agent." : null));
+  showFront();
+  return panel;
+}
+
+/** The chat of the drawing in front, made when first asked for; one begun with no drawing open goes on in the first drawing opened. */
+function frontChat(): Chat {
+  const d = appContext()?.frontDrawing() ?? null;
+  const chat = chats.get(d);
+  if (chat) return chat;
+  const loose = d ? chats.get(null) : undefined;
+  if (d && loose) {
+    loose.rebind(d);
+    return loose;
+  }
+  const made = chatView(d);
+  chats.set(d, made);
+  return made;
+}
+
+/** Shows the chat of the drawing in front (on every change to the open drawing: cheap when it is shown already). */
+function showFront(): void {
+  if (!host) return;
+  const chat = frontChat();
+  if (host.firstChild !== chat.root) host.replaceChildren(chat.root);
+  chat.seen();
+  chat.where();
+}
+
+/** A chat's drawing changed (opened in a tab of its own by its run, or again in its place): it is kept under the new one. */
+function chatMoved(chat: Chat, d: DrawingRef): void {
+  for (const [k, c] of chats) if (c === chat) chats.delete(k);
+  const there = chats.get(d);
+  // the empty chat made as the drawing came to the front gives way
+  if (there && there !== chat) there.dispose();
+  chats.set(d, chat);
+  showFront();
+  stateChanged();
+}
+
+/** A drawing's tab closed, or the drawing opened again in its place (`next`): its agent stops, and its chat goes or follows it. */
+function drawingClosed(d: DrawingRef, next: DrawingRef | null): void {
+  const chat = chats.get(d);
+  if (!chat) return;
+  chat.stop();
+  chats.delete(d);
+  if (next) chat.rebind(next);
+  else chat.dispose();
+  stateChanged();
+}
+
+/** What an agent does shows on its drawing's tab, and on the panel's top line. */
+function stateChanged(): void {
+  redrawTabs();
+  const d = appContext()?.frontDrawing() ?? null;
+  chats.get(d)?.where();
+}
+
+const MARK_TITLES: Record<Exclude<ChatState, "idle">, string> = {
+  working: "An agent is at work in this drawing",
+  waiting: "",
+  done: "The agent has finished: its answer is in Agents",
+  failed: "The agent stopped with an error: see Agents",
+};
+
+function tabMark(d: DrawingRef): TabMark | null {
+  const chat = chats.get(d);
+  const state = chat?.state() ?? "idle";
+  if (!chat || state === "idle") return null;
+  const title = state === "waiting" ? `The agent is waiting for this drawing to be in front, to go on with: ${chat.waitingFor()}` : MARK_TITLES[state];
+  return { html: ICONS[state], title, cls: `ag-tab ${state}` };
+}
+
+const fileBase = (name: string): string => name.replace(/\.[^.]+$/, "") || name;
+
+/** A drawing's conversation with its agent: everything the panel shows while that drawing is in front. */
+function chatView(start: DrawingRef | null): Chat {
   let thread: Thread = newThread();
   let running: AbortController | null = null;
   /** files attached in this conversation, by name, for import_file */
   const files = new Map<string, File>();
   let pending: File[] = [];
-  /** whether the server's config is in, whether there is a server, and its models and credit terms */
-  let loaded = false;
-  let hasServer = false;
-  let serverAi: ServerConfig["ai"] = null;
-  /** the user's AI credit, kept up to date by each request's charge */
-  let balance: number | null = null;
-  void serverConfig().then((cfg) => {
-    loaded = true;
-    hasServer = cfg !== null;
-    serverAi = cfg?.ai ?? null;
-    refreshModel();
-    refreshCredit();
-    if (!thread.messages.length) showEmpty();
-  });
+  /** the drawing its runs work in; made with the engine at the first message */
+  let target: RunTarget | null = null;
+  let bound: DrawingRef | null = start;
+  /** calls waiting for the drawing to come to the front, by call id: what each will do */
+  const waits = new Map<string, string>();
+  /** how the last run ended while its drawing was behind, until the drawing is in front */
+  let unseen: "done" | "failed" | null = null;
+  let self: Chat;
 
   // ---- chrome ----------------------------------------------------------------------
 
-  const title = h("button", { cls: "ag-title", attrs: { type: "button", title: "Conversations" } }, h("span", { cls: "ag-title-text", text: thread.title }), h("span", { cls: "ag-chev", html: ICONS.chevron }));
+  const title = h("button", { cls: "ag-title", attrs: { type: "button", title: "Conversations" } }, h("span", { cls: "ag-title-text", text: thread.title, attrs: { translate: "no" } }), h("span", { cls: "ag-chev", html: ICONS.chevron }));
   const newBtn = iconButton(ICONS.plus, "New chat");
   const creditBtn = h("button", { cls: "ag-credit", attrs: { type: "button", title: "AI credit: top up and see what was used" }, hidden: true });
   const head = h("div", { cls: "ag-head" }, title, h("span", { cls: "ag-spacer" }), creditBtn, newBtn);
+  // the drawing this chat works in, and the agents at work in other tabs
+  const whereEl = h("div", { cls: "ag-where" });
 
   // the conversation, in a scroller of its own so a change in its size (text streaming in, a
   // picture loading, a card or Thinking opened) can keep the newest of it in view
@@ -127,7 +269,7 @@ export function agentsPanel(): HTMLElement {
   const costLabel = h("span", { cls: "ag-cost" });
   const sendBtn = h("button", { cls: "ag-send", html: ICONS.send, attrs: { type: "button", title: "Send (Enter)", "aria-label": "Send" } });
   const composer = h("div", { cls: "ag-composer" }, chips, input, h("div", { cls: "ag-row" }, attachBtn, picker, modelLabel, h("span", { cls: "ag-spacer" }), costLabel, sendBtn));
-  const root = h("div", { cls: "pal-fill ag" }, head, body, composer);
+  const root = h("div", { cls: "pal-fill ag" }, head, whereEl, body, composer);
 
   // ---- the log ------------------------------------------------------------------------
 
@@ -194,15 +336,15 @@ export function agentsPanel(): HTMLElement {
 
   /** What stands between the user and a first message, with what to do about it; null when nothing does. */
   function gate(): HTMLElement | null {
-    if (!loaded) return null;
+    if (!shared.loaded) return null;
     const box = (text: string, ...actions: HTMLElement[]): HTMLElement => h("div", { cls: "ag-setup" }, h("p", { text }), ...actions);
-    if (!serverAi) {
-      return box(hasServer ? "The agents aren't set up on this server yet." : "The agents run through the Rodeo server, and this copy of the editor has none.");
+    if (!shared.serverAi) {
+      return box(shared.hasServer ? "The agents aren't set up on this server yet." : "The agents run through the Rodeo server, and this copy of the editor has none.");
     }
     if (!currentUser()) return box("Sign in to use the agents.", button("Sign In…", "primary", () => void requireSignIn("Sign in to use the agents")));
-    const t = serverAi.credit;
-    if (t && (balance ?? 0) < t.hold) {
-      const lead = (balance ?? 0) > 0 ? `You have ${formatCredit(balance ?? 0, t.currency)} of AI credit: add some to start.` : "Add AI credit to start.";
+    const t = shared.serverAi.credit;
+    if (t && (shared.balance ?? 0) < t.hold) {
+      const lead = (shared.balance ?? 0) > 0 ? `You have ${formatCredit(shared.balance ?? 0, t.currency)} of AI credit: add some to start.` : "Add AI credit to start.";
       return box(`${lead} ${pricing(t)}`, topUpButtons(t, (message) => toast(message)));
     }
     return null;
@@ -216,7 +358,11 @@ export function agentsPanel(): HTMLElement {
         { cls: "ag-empty" },
         h("div", { cls: "ag-empty-title", text: "Agents" }),
         h("p", {
-          text: "Ask for anything in this drawing: questions, edits, renders, exports or plug-ins. The agent reads, looks at and changes the drawing while you watch, and can hand parts of the work to a team of subagents.",
+          text: `Ask for anything in ${bound ? fileBase(bound.name()) : "this drawing"}: questions, edits, renders, exports or plug-ins. The agent reads, looks at and changes the drawing while you watch, and can hand parts of the work to a team of subagents.`,
+        }),
+        h("p", {
+          cls: "ag-empty-note",
+          text: "Each open drawing has an agent of its own. Bring another tab to the front and this one keeps working; its tab shows how it is getting on.",
         }),
         setup,
         h(
@@ -239,7 +385,7 @@ export function agentsPanel(): HTMLElement {
     const el = h("div", { cls: "ag-user" });
     if (pics.length) el.append(h("div", { cls: "ag-user-pics" }, ...pics.map((url) => thumb(url, null, "Attached picture"))));
     if (names.length) el.append(h("div", { cls: "ag-user-files" }, ...names.map((n) => h("span", { cls: "ag-file", html: ICONS.file }, n))));
-    if (text) el.append(h("div", { cls: "ag-user-text", text }));
+    if (text) el.append(h("div", { cls: "ag-user-text", text, attrs: { translate: "no" } }));
     log.append(el);
     stick = true;
     follow();
@@ -269,7 +415,7 @@ export function agentsPanel(): HTMLElement {
     settle(s);
     endReasoning(s);
     if (!s.text) {
-      const el = h("div", { cls: "ag-md" });
+      const el = h("div", { cls: "ag-md", attrs: { translate: "no" } });
       s.el.append(el);
       s.text = { el, src: "", timer: 0 };
     }
@@ -281,10 +427,10 @@ export function agentsPanel(): HTMLElement {
   function addReasoning(s: Sink, delta: string, live = true): void {
     settle(s);
     if (!s.reasoning) {
-      const body = h("div", { cls: "ag-reason-body" });
+      const body = h("div", { cls: "ag-reason-body", attrs: { translate: "no" } });
       body.addEventListener("scroll", () => (body.dataset.pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 24 ? "1" : "0"));
       const label = h("span", { cls: "ag-reason-label", text: live ? "Thinking" : "Thought" });
-      const line = h("span", { cls: "ag-reason-line" });
+      const line = h("span", { cls: "ag-reason-line", attrs: { translate: "no" } });
       const el = h("details", { cls: `ag-reason${live ? " live" : ""}` }, h("summary", {}, label, line), body);
       s.el.append(el);
       s.reasoning = { el, body, label, line, src: "", started: Date.now(), timer: 0 };
@@ -440,6 +586,7 @@ export function agentsPanel(): HTMLElement {
     sendBtn.setAttribute("aria-label", on ? "Stop" : "Send");
     sendBtn.classList.toggle("stop", on);
     root.classList.toggle("running", on);
+    stateChanged();
   }
 
   async function send(): Promise<void> {
@@ -459,9 +606,14 @@ export function agentsPanel(): HTMLElement {
       follow();
       return;
     }
-    const settings = agentSettings(serverAi);
+    const settings = agentSettings(shared.serverAi);
     const app = appContext();
     if (!app) return;
+    const { RunTarget } = await import("./agent.ts");
+    target ??= new RunTarget(bound, app, (d) => {
+      bound = d;
+      chatMoved(self, d);
+    });
     input.value = "";
     pending = [];
     renderChips();
@@ -492,6 +644,7 @@ export function agentsPanel(): HTMLElement {
       thread.title = titleFrom(text || attached[0]?.name || "");
       refreshTitle();
     }
+    if (bound) thread.drawing = bound.name();
     userBubble(text, urls, names);
 
     const turn = h("div", { cls: "ag-turn" });
@@ -530,6 +683,27 @@ export function agentsPanel(): HTMLElement {
         case "result": {
           const c = cards.get(e.id);
           if (c) finishCard(c, e.ok, e.text, e.images, e.files);
+          if (waits.delete(e.id)) stateChanged();
+          break;
+        }
+        case "wait": {
+          const c = cards.get(e.id);
+          const label = c?.el.querySelector(".ag-tool-label")?.textContent ?? "its next step";
+          if (c) {
+            c.progress.hidden = false;
+            c.progress.textContent = `Waiting for ${bound ? fileBase(bound.name()) : "the drawing"} to be in front: ${e.why}`;
+          }
+          waits.set(e.id, label);
+          stateChanged();
+          // behind another tab: the user is told where to go to let it on
+          if (bound && !bound.isShown()) toast(`The agent in ${fileBase(bound.name())} is waiting for its tab to be in front, to go on with: ${label}.`, "info");
+          break;
+        }
+        case "resume": {
+          const c = cards.get(e.id);
+          if (c) c.progress.hidden = true;
+          waits.delete(e.id);
+          stateChanged();
           break;
         }
         case "sub_start":
@@ -550,8 +724,8 @@ export function agentsPanel(): HTMLElement {
           cost += e.usage.charged ?? 0;
           tokens += usageTokens(e.usage);
           if (e.usage.balance !== null) {
-            balance = e.usage.balance;
-            refreshCredit();
+            shared.balance = e.usage.balance;
+            for (const c of chats.values()) c.refresh();
           }
           costLabel.textContent = costText(thread.cost + cost);
           break;
@@ -562,7 +736,7 @@ export function agentsPanel(): HTMLElement {
     setRunning(true);
     try {
       const { runAgent } = await import("./agent.ts");
-      const end = await runAgent({ app, settings, history: thread.messages, attachments: files, signal: running.signal, onEvent });
+      const end = await runAgent({ app, target, settings, history: thread.messages, attachments: files, signal: running.signal, onEvent });
       thread.messages.push(...end.added);
       if (main.text) flushText(main);
       endReasoning(main);
@@ -572,6 +746,11 @@ export function agentsPanel(): HTMLElement {
         settle(sink);
       }
       if (end.error) turn.append(errorNote(end.error, end.errorCode));
+      // finished behind another tab: its tab says so until it is brought to the front
+      if (!end.stopped && bound?.isOpen() && !bound.isShown()) {
+        unseen = end.error ? "failed" : "done";
+        toast(end.error ? `The agent in ${fileBase(bound.name())} stopped with an error.` : `The agent in ${fileBase(bound.name())} has finished.`, end.error ? "error" : "info");
+      }
       // refused for want of credit: the balance shown is out of date
       if (end.errorCode === "credit") void refreshUser();
       else if (end.stopped) turn.append(h("div", { cls: "ag-note", text: "Stopped." }));
@@ -581,6 +760,7 @@ export function agentsPanel(): HTMLElement {
       turn.append(errorNote(errorMessage(err), null));
     } finally {
       running = null;
+      waits.clear();
       setRunning(false);
       thread.cost += cost;
       thread.updated = Date.now();
@@ -594,7 +774,7 @@ export function agentsPanel(): HTMLElement {
 
   function errorNote(message: string, code: string | null): HTMLElement {
     const el = h("div", { cls: "ag-error" }, h("span", { text: message }));
-    const t = serverAi?.credit;
+    const t = shared.serverAi?.credit;
     if (code === "credit" && t) el.append(topUpButtons(t, (m) => toast(m)));
     else if (code === "unauthorized") el.append(button("Sign In…", "", () => void requireSignIn("Sign in to use the agents")));
     return el;
@@ -620,8 +800,7 @@ export function agentsPanel(): HTMLElement {
     }
     log.replaceChildren();
     const { toolsFor } = await import("./tools.ts");
-    const app = appContext();
-    const tools = app ? new Map(toolsFor(true, app).map((x) => [x.spec.function.name, x])) : new Map();
+    const tools = new Map(toolsFor(true).map((x) => [x.spec.function.name, x]));
     let sink: Sink | null = null;
     const withPicture: string[] = [];
     for (const m of t.messages) {
@@ -687,7 +866,7 @@ export function agentsPanel(): HTMLElement {
     const rows: Row[] = [
       { label: "New chat", run: () => void showThread(newThread()) },
       ...(all.length ? (["-"] as Row[]) : []),
-      ...all.slice(0, 30).map((t): Row => ({ label: t.title, checked: () => t.id === thread.id, run: () => void showThread(t) })),
+      ...all.slice(0, 30).map((t): Row => ({ label: t.drawing ? `${t.title} · ${fileBase(t.drawing)}` : t.title, checked: () => t.id === thread.id, run: () => void showThread(t) })),
     ];
     if (thread.messages.length) {
       rows.push("-", {
@@ -705,22 +884,22 @@ export function agentsPanel(): HTMLElement {
   // ---- models and credit ----------------------------------------------------------------
 
   function refreshModel(): void {
-    const s = agentSettings(serverAi);
+    const s = agentSettings(shared.serverAi);
     modelLabel.textContent = `${shortModel(s.planner)} + ${shortModel(s.worker)}`;
   }
 
   /** What was charged, in the credit's currency; nothing where the agents are free. */
   function costText(amount: number): string {
-    const t = serverAi?.credit;
+    const t = shared.serverAi?.credit;
     return amount && t ? formatCredit(amount, t.currency) : "";
   }
 
   function refreshCredit(): void {
-    const t = serverAi?.credit;
-    creditBtn.hidden = !t || balance === null;
-    if (!t || balance === null) return;
-    creditBtn.textContent = formatCredit(balance, t.currency);
-    creditBtn.classList.toggle("low", balance < t.hold);
+    const t = shared.serverAi?.credit;
+    creditBtn.hidden = !t || shared.balance === null;
+    if (!t || shared.balance === null) return;
+    creditBtn.textContent = formatCredit(shared.balance, t.currency);
+    creditBtn.classList.toggle("low", shared.balance < t.hold);
   }
 
   // ---- composer -------------------------------------------------------------------------
@@ -739,7 +918,7 @@ export function agentsPanel(): HTMLElement {
           pending.splice(i, 1);
           renderChips();
         });
-        return h("span", { cls: "ag-chip" }, h("span", { cls: "ag-chip-name", text: f.name }), x);
+        return h("span", { cls: "ag-chip" }, h("span", { cls: "ag-chip-name", text: f.name, attrs: { translate: "no" } }), x);
       }),
     );
   }
@@ -784,21 +963,76 @@ export function agentsPanel(): HTMLElement {
   title.addEventListener("click", () => void threadMenu());
   newBtn.addEventListener("click", () => void showThread(newThread()));
   creditBtn.addEventListener("click", openCreditDialog);
-  // a new drawing keeps the chat: the agent reads the drawing afresh each run
-  store.on("session", () => {
-    if (!thread.messages.length && !running) showEmpty();
-  });
 
-  // signing in or out, and a top-up, change what the panel offers
-  onUser((u) => {
-    balance = u?.aiCredit ?? null;
-    refreshCredit();
-    if (!thread.messages.length && !running) showEmpty();
-  });
+  // ---- where it works ---------------------------------------------------------------
+
+  let whereKey = "";
+
+  /** The top line: the drawing this chat works in, and the agents at work (or done) in the others, each a way to its tab. */
+  function where(): void {
+    const others = [...chats.values()].filter((c) => c !== self && c.drawing()?.isOpen() && c.state() !== "idle");
+    const name = bound ? fileBase(bound.name()) : "";
+    const key = JSON.stringify([name, others.map((c) => [c.drawing()!.name(), c.state()])]);
+    if (key === whereKey) return;
+    whereKey = key;
+    const here = h(
+      "span",
+      { cls: "ag-where-here", attrs: { title: bound ? `This chat's agent works in ${bound.name()}, whichever tab is in front` : "Open or start a drawing for the agent to work in" } },
+      h("span", { cls: "ag-where-icon", html: ICONS.file }),
+      h("span", { cls: "ag-where-name", text: name || "No drawing open", attrs: { translate: "no" } }),
+    );
+    const chipsEl = others.map((c) => {
+      const d = c.drawing()!;
+      const state = c.state() as Exclude<ChatState, "idle">;
+      const b = h(
+        "button",
+        { cls: `ag-where-other ${state}`, attrs: { type: "button", title: `${tabMark(d)?.title ?? ""}. Bring ${d.name()} to the front.` } },
+        h("span", { cls: "ag-where-mark", html: ICONS[state] }),
+        h("span", { cls: "ag-where-name", text: fileBase(d.name()), attrs: { translate: "no" } }),
+      );
+      b.addEventListener("click", () => d.show());
+      return b;
+    });
+    whereEl.replaceChildren(here, ...(chipsEl.length ? [h("span", { cls: "ag-where-also", text: "Also:" }), ...chipsEl] : []));
+  }
 
   refreshModel();
+  refreshCredit();
   showEmpty();
-  return root;
+  self = {
+    root,
+    drawing: () => bound,
+    state: () => (running ? (waits.size ? "waiting" : "working") : (unseen ?? "idle")),
+    waitingFor: () => [...waits.values()][0] ?? "",
+    empty: () => !thread.messages.length && !running,
+    stop: () => running?.abort(),
+    rebind: (d) => {
+      // a run's target says when it moves; the chat follows it there
+      if (target && target.current !== d) target.follow(d);
+      else {
+        bound = d;
+        chatMoved(self, d);
+      }
+      if (!thread.messages.length && !running) showEmpty();
+    },
+    seen: () => {
+      if (!unseen || !bound?.isShown()) return;
+      unseen = null;
+      stateChanged();
+    },
+    refresh: () => {
+      refreshModel();
+      refreshCredit();
+      if (!thread.messages.length && !running) showEmpty();
+    },
+    where,
+    showThread,
+    dispose: () => {
+      running?.abort();
+      root.remove();
+    },
+  };
+  return self;
 }
 
 // ---- small parts ---------------------------------------------------------------------

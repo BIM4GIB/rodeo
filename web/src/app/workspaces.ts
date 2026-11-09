@@ -46,7 +46,7 @@ interface WorkspaceFile {
   readonly toolDisplay?: string;
   /** the menus as Menus… arranged them, null for the defaults; absent in older files */
   readonly menus?: MenuLayout | null;
-  /** Window > View Panes' arrangement; absent in older files */
+  /** View > Multiple View Panes' arrangement; absent in older files */
   readonly panes?: PaneArrangement;
   /** the preferences the View bar's Quick Preferences lists; absent in older files */
   readonly quickPrefs?: string[];
@@ -254,7 +254,7 @@ export function workspaceRows(palettes: Palettes): Row[] {
         },
       }),
     ),
-    ...(names.length === 0 ? [{ label: "No saved workspaces", enabled: () => false }] : []),
+    ...(names.length === 0 ? [{ label: "No saved workspaces", why: () => "Save one first: Window › Workspaces › Save Workspace As…", enabled: () => false }] : []),
     "-",
     { label: "Save Workspace As…", run: () => void saveWorkspaceAs(palettes) },
     { label: "Menus…", run: () => void menuLayoutDialog() },
@@ -273,6 +273,7 @@ export function workspaceRows(palettes: Palettes): Row[] {
     { label: "Import Workspace…", run: () => pickWorkspaceFile(palettes) },
     {
       label: "Delete Workspace",
+      why: () => "Save one first: Window › Workspaces › Save Workspace As…",
       enabled: () => names.length > 0,
       items: () =>
         load().workspaces.map(

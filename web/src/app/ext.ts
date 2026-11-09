@@ -4,11 +4,12 @@
 // (features/index.ts imports them all before the app starts); the editor calls
 // these hooks at fixed points, so a feature never edits the editor's files.
 
-import type { ChangeEvent, EditSession, ObjectInfo, Pt, RecordValue, VwxDocument } from "../core/index.ts";
+import type { BBox, ChangeEvent, EditSession, ObjectInfo, ObjectRecord, Pt, RecordValue, VwxDocument } from "../core/index.ts";
 import type { Palettes, PaletteSpec } from "./dock.ts";
 import type { Row } from "./menu.ts";
 import type { Scene } from "./scene.ts";
 import type { SiteModifier } from "./siteModelShapes.ts";
+import type { Snapper } from "./snap.ts";
 import type { ToolId } from "./state.ts";
 import type { Painter, ToolController } from "./tools.ts";
 import type { View } from "./view.ts";
@@ -43,12 +44,52 @@ export interface OpenOptions {
   readonly replace?: boolean;
 }
 
+/**
+ * An open drawing as work that goes on while another tab is in front holds on to it (an agent's
+ * run): its session, and the active layer, selection and plan view it keeps, which are the
+ * window's while it is in front and its tab's while it is behind.
+ */
+export interface DrawingRef {
+  readonly session: EditSession;
+  readonly source: DocumentSource | null;
+  /** its file name, as its tab shows it */
+  name(): string;
+  /** whether it is still open in a tab */
+  isOpen(): boolean;
+  /** whether it is the drawing the window shows */
+  isShown(): boolean;
+  /** brings its tab to the front, unless the drawing in front can't be left now (the user is told why) */
+  show(): void;
+  activeLayerId(): string | null;
+  setActiveLayer(id: string): void;
+  activeClassIndex(): number | null;
+  selection(): ReadonlySet<string>;
+  setSelection(ids: Iterable<string>): void;
+  /** the group being edited: only ever one in front */
+  editGroupId(): string | null;
+  /** the world box the plan shows of it, the window's or the one its tab keeps */
+  visibleRect(): BBox;
+  /** fits `box` in its plan view (the window's when in front) */
+  zoomTo(box: BBox): void;
+  /** the scene that draws it: the window's while it is in front, else one of its own */
+  scene(): Scene;
+}
+
+/** A feature's mark on a drawing's tab (an agent at work in it): an icon or a word, with its tooltip. */
+export interface TabMark {
+  readonly html: string;
+  readonly title: string;
+  readonly cls?: string;
+}
+
 /** What features can reach of the running editor, from onReady on. */
 export interface AppContext {
   readonly scene: Scene;
   readonly view: View;
   readonly palettes: Palettes;
   readonly controller: ToolController;
+  /** the snapping the tools use (pins and picks snap the same way) */
+  readonly snap: Snapper;
   /** the 2D drawing's canvas */
   readonly canvas: HTMLCanvasElement;
   requestDraw(): void;
@@ -58,6 +99,8 @@ export interface AppContext {
    * asking about its unsaved changes.
    */
   openDocument(data: Uint8Array | Blob, name: string, options?: OpenOptions): Promise<void>;
+  /** Opens or imports a file as dropping it on the window does: any format Rodeo reads, by its name's extension. */
+  openFile(file: File): Promise<void>;
   /** The open drawing as .vwx bytes, or null with none open. */
   documentBytes(): Promise<Uint8Array | null>;
   fit(): void;
@@ -65,6 +108,8 @@ export interface AppContext {
   show3d(): Promise<View3D | null>;
   /** The 3D view if it has been created. */
   view3d(): View3D | null;
+  /** The 3D view alone, in one pane, as the top bar's 3D shows it (null if WebGL is unavailable). */
+  show3dAlone(): Promise<View3D | null>;
   /** Back to the 2D drawing from the 3D view (nothing when it shows already). */
   show2d(): void;
   /** How the 3D view draws the model (View > Rendering), and setting it as that menu does. */
@@ -74,6 +119,10 @@ export interface AppContext {
   /** Create Similar Object: makes `id` the tool, with the settings `obj` was drawn with; false when it can't copy `obj` */
   setToolFrom(id: ToolId, obj: ObjectInfo): boolean;
   save(): Promise<void>;
+  /** The drawing in front, or null with none open. */
+  frontDrawing(): DrawingRef | null;
+  /** Every open drawing, in the order of their tabs. */
+  drawings(): readonly DrawingRef[];
 }
 
 type MenuRows = () => readonly Row[];
@@ -111,6 +160,10 @@ export interface PluginDriver {
   readonly shape: "point" | "linear" | "rect";
   /** drawn by Rodeo itself, placed by a tool of its own, so Plug-in Insertion doesn't offer it */
   readonly builtIn?: boolean;
+  /** what Object Info says over its parameters, instead of how a change draws it */
+  readonly note?: string;
+  /** false for those drawn again only when a parameter changes (Vectorworks' own Landmark objects): Reset All Plug-Ins leaves them as they were */
+  readonly resets?: boolean;
   /** what Object Info calls a parameter (its display name), or undefined for its field name */
   label(field: string): string | undefined;
   /** whether a parameter is only shown (static text the script sets) */
@@ -128,9 +181,10 @@ export interface PluginDriver {
   reset(id: string): Promise<string | null>;
   /**
    * The plug-in's own Object Info layout, or null to list its fields as they are. Undefined until it is
-   * known (its script runs to set it up), and `ready` is called then.
+   * known (its script runs to set it up), and `ready` is called then. `rec` is the object's parameter
+   * record, for a layout that lists what the object has.
    */
-  layout(ready: () => void): readonly PluginWidget[] | null | undefined;
+  layout(ready: () => void, rec?: ObjectRecord): readonly PluginWidget[] | null | undefined;
   /**
    * Which widgets of object `id`'s layout are greyed or hidden. `apply` gets what is known now, if
    * anything, and then what the plug-in's script says for the object's values, when that differs.
@@ -209,6 +263,11 @@ const urlHandlers: { param: string; run: (value: string, params: URLSearchParams
 const layerExtensions: LayerExtension[] = [];
 const contextRows: ((under: string | null) => readonly Row[])[] = [];
 const driverSources: (() => readonly PluginDriver[])[] = [];
+const tabMarks: ((d: DrawingRef) => TabMark | null)[] = [];
+const closeGuards: ((d: DrawingRef) => string | null)[] = [];
+const behindGuards: ((d: DrawingRef) => string | null)[] = [];
+const closeHooks: ((d: DrawingRef, next: DrawingRef | null) => void)[] = [];
+let tabsRedraw: () => void = () => undefined;
 let wantedDriver: string | null = null;
 
 let ctx: AppContext | null = null;
@@ -254,6 +313,13 @@ export function registerTopBar(build: () => HTMLElement, side: "left" | "right" 
   topBar.push({ build, side });
 }
 
+const fileBadges: (() => HTMLElement)[] = [];
+
+/** Adds a small element beside the open drawing's name in the top bar (a branch's name); the feature shows and hides it. */
+export function registerFileBadge(build: () => HTMLElement): void {
+  fileBadges.push(build);
+}
+
 /** Called once the editor is running, with what features can reach of it. */
 export function onReady(fn: (ctx: AppContext) => void): void {
   if (ctx) fn(ctx);
@@ -288,6 +354,67 @@ export function leaveRefusal(): string | null {
     if (why) return why;
   }
   return null;
+}
+
+/** Adds a mark to each drawing's tab, where `mark` gives one; redrawTabs has the strip ask again. */
+export function registerTabMark(mark: (d: DrawingRef) => TabMark | null): void {
+  tabMarks.push(mark);
+}
+
+export function extensionTabMarks(d: DrawingRef): TabMark[] {
+  return tabMarks.flatMap((mark) => mark(d) ?? []);
+}
+
+/** Has the tab strip drawn again: a feature's marks have changed. */
+export function redrawTabs(): void {
+  tabsRedraw();
+}
+
+export function setTabsRedraw(fn: () => void): void {
+  tabsRedraw = fn;
+}
+
+/**
+ * Asks before a drawing's tab closes while `guard` gives a reason (an agent at work in it): the user
+ * is asked whether to close it all the same.
+ */
+export function registerCloseGuard(guard: (d: DrawingRef) => string | null): void {
+  closeGuards.push(guard);
+}
+
+/** Why closing `d` needs asking about first, or null when it doesn't. */
+export function closeQuestion(d: DrawingRef): string | null {
+  for (const guard of closeGuards) {
+    const why = guard(d);
+    if (why) return why;
+  }
+  return null;
+}
+
+/**
+ * Keeps edits to a drawing behind other tabs waiting until it is in front while `guard` gives a
+ * reason (a live cloud drawing, whose changes go out through a session only the front one is in).
+ */
+export function registerBehindGuard(guard: (d: DrawingRef) => string | null): void {
+  behindGuards.push(guard);
+}
+
+/** Why `d` can't be edited while it is behind, or null when it can. */
+export function behindRefusal(d: DrawingRef): string | null {
+  for (const guard of behindGuards) {
+    const why = guard(d);
+    if (why) return why;
+  }
+  return null;
+}
+
+/** Hears of a drawing's tab closing, or of the drawing being opened again in its place (`next`: a revert, a reload). */
+export function onDrawingClosed(fn: (d: DrawingRef, next: DrawingRef | null) => void): void {
+  closeHooks.push(fn);
+}
+
+export function drawingClosed(d: DrawingRef, next: DrawingRef | null): void {
+  for (const fn of closeHooks) fn(d, next);
 }
 
 /** Adds a mark and right-click rows to each layer in the Layers list (it redraws on the store's "layer" event). */
@@ -472,6 +599,8 @@ export function mountExtensionChrome(
     const host = side === "left" ? topbarLeft : topbarRight;
     host.prepend(build());
   }
+  const info = topbarLeft.querySelector(".file-info");
+  for (const build of fileBadges) info?.append(build());
 }
 
 export function appStarted(context: AppContext): void {

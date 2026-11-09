@@ -55,12 +55,15 @@ Drawings export as DXF (R12, in the document's units) and SVG, and with **Export
 
 **File › Open** (or dropping a `.dwg` on the start screen) opens an AutoCAD DWG file as a new drawing, and **File › Import › Import DWG…** (or dropping one on the window) brings one into the drawing you have open. It reads every release from R13 to the 2018 format AutoCAD still saves, with no need to save it as DXF first.
 
-- Lines, arcs, circles, ellipses, polylines, splines, points, text, blocks (dynamic blocks too), dimensions, leaders, tables and hatches come in at the drawing's own size, each DWG layer becoming a class.
+- Lines, arcs, circles, ellipses, polylines, splines, points, text, blocks (dynamic blocks too), dimensions, leaders, multileaders, tables and hatches come in at the drawing's own size, each DWG layer becoming a class.
+- A multileader comes in as its leader lines, landing and arrowheads (AutoCAD's closed arrow unless it names another), with its text or block.
 - Objects keep their colour (the nearest in your palette) and line weight. Solid and gradient hatches come in filled, patterned ones as their lines, and layers that are off or frozen become hidden classes.
 - Dashed line types come across when your drawing already has a line type to copy.
 - A drawing with nothing in model space comes in from its paper space.
+- 3D faces, polyface and polygon meshes, MESH objects, and 3D solids, regions and bodies come in as meshes in their colour, and Top/Plan shows them from above. They go in a group of their own beside the 2D objects'. The solids are meshed through [OpenCascade](#step-and-iges), which loads the first time a drawing has one.
+- External references (xrefs) are drawn from their own files, their layers coming in as classes named like AutoCAD's, `SITEPLAN|WALLS`. Drop the files with the drawing to use them straight away; otherwise the import lists the ones it needs and asks for them, and **Import Without Them** leaves them out. An overlay isn't drawn inside another xref, as in AutoCAD.
 
-**Limits:** multileaders, 3D solids, images and xrefs are left out, and the import says how many.
+**Limits:** images, underlays, wipeouts and objects of AutoCAD's vertical apps are left out, and the import says how many. Faces of a solid on a spline surface (a loft, or a blend between curved faces) and elliptical cones are left out of its mesh.
 
 ### Import Image File(s)… and Paste as Bitmap
 
@@ -155,6 +158,31 @@ Each pen is coloured as Rhino shows it, and everything is grouped by Rhino layer
 
 **Limits:** a file saved with Save Small has no render meshes, and its surfaces are left out and counted, as are SubDs and bare surfaces.
 
+### STEP and IGES
+
+**File › Import › Import STEP…** and **Import IGES…** (or dropping a `.stp`, `.step`, `.igs` or `.iges`) read the solids and surfaces of mechanical CAD files, through [OpenCascade](https://www.opencascade.com) as WebAssembly (LGPL-2.1, loaded only when such a file is first imported). Units and up axis come from the file, and STEP and IGES are z up.
+
+- Each assembly comes in as a group named after its node, and each part as a mesh named after it.
+- A part's faces keep the colour the file gives them, so a part with coloured faces comes in as one mesh per colour.
+- Curves are triangulated to within 0.1% of a part's size and 14° of its surface, so a large or finely curved part makes many triangles.
+- **File › Open** takes them too, as a drop does: into a new drawing when none is open.
+
+**Limits:** at most 250,000 triangles come in at once, so a model that would make more is triangulated coarser to fit; a file with no shapes in it (wires only) is refused with that said.
+
+### SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo parts
+
+**File › Import › Import CAD Parts…** (or dropping a `.sldprt`, `.ipt`, `.FCStd`, `.f3d` or `.prt`) reads a part from these apps' own files, without exporting it first. [cadmpeg](https://github.com/cadmpeg/cadmpeg) (Apache-2.0), as WebAssembly, turns the part into STEP, which then comes in as a STEP import does: in millimetres, z up, triangulated the same way. Each app's reader (3 to 6 MB to download) loads only when its first file is imported, and the conversion runs beside the page, so the drawing stays usable meanwhile.
+
+- The group holding the part is named after the file and its app: "Bracket (SolidWorks part)".
+- A `.prt` is an NX or a Creo part; Rodeo tries NX's reader, then Creo's.
+- **File › Open** takes them too, as a drop does: into a new drawing when none is open.
+
+**Limits:**
+- Colours mostly don't come through, so most parts come in grey.
+- Assemblies (`.sldasm`, `.iam`, `.asm`) point at their part files, which don't come with them, and CATIA files don't come in reliably yet. For these Rodeo says to export STEP from the app instead.
+- A file holding only sketches or drawings has nothing to import, and is refused with that said.
+- cadmpeg is young: it reads most parts whole, but some come in missing faces. Check a part against its app before relying on it.
+
 ### FBX
 
 **Import FBX…** reads binary and ASCII FBX (Blender, 3ds Max, Maya, Revit, Unity, Unreal), each model through its full transform chain, split by material.
@@ -229,6 +257,7 @@ The model is read by rvt-rs (`web/vendor/rvt-rs`, Apache-2.0, WebAssembly loaded
 - Walls come in without their layers yet.
 - The doors and windows aren't Rodeo door and window objects in their walls: a wall's openings are cut into its own geometry, so editing its heights or ends stretches them with it.
 - Elements whose geometry isn't decoded yet come in as their bounding box, drawn see-through, and a note says how many and what was left out.
+- Revit keeps a railing's top rail and handrails as a profile and a path, with no faces. Where the rest of a railing falls short of its box, they're swept from those and added. A railing that fills its box without them comes in without them, and a rail placed with an offset, a turn, a flip, an extension or a fillet, or with a profile that isn't symmetric, isn't swept, so its railing stays a box.
 
 ### Revit families and templates
 
@@ -379,3 +408,25 @@ Like Create Report, the worksheet copies its settings and font from one the draw
 
 - Excel 97–2004 (.xls) workbooks aren't read yet, nor is a reference to the file kept.
 - A drawing with no worksheet can't import one yet.
+
+## Converting files
+
+### Convert Files…
+
+**File › Convert Files…** opens the converter, rodeo.build/convert, in a new tab; the start hub links to it too. Drop one or more files on it, or choose them, pick the format to write, and download what comes back; with several, **Download all (.zip)** zips them.
+
+It reads Vectorworks, Revit projects, Archicad, DWG, DXF, PDF, EMF, IFC, SketchUp, Rhino, glTF, OBJ, FBX, Collada, STL, PLY, 3DS, USD and Blender files, and writes Vectorworks, PDF, SVG, DXF, EPS, EMF, PNG, IFC, SketchUp, Rhino, glTF, OBJ, FBX, Collada, STL, PLY, 3DS, USDZ, STEP and IGES.
+
+The conversion runs in your browser, so the file is never uploaded. A preview shows what came in, in 3D or in plan, with its units, layers, objects, size and what was left out.
+
+OBJ, STL, PLY and 3DS files don't say their units: choose them, and whether Y is up, on the file's row.
+
+### Open in Rodeo
+
+**Open in Rodeo** on a converted file opens it in the editor in a new tab, as a drawing with no file behind it: **Save** asks where it goes.
+
+### The rodeo command
+
+`npx @rodeo.build/cli convert model.rvt model.ifc` converts on your own computer with Node 22 or later; the output's extension picks the format. `rodeo convert "plans/*.dwg" --to pdf --out pdfs` converts many files into a folder, `rodeo info drawing.dwg` lists its layers, object counts, extent and units, and `rodeo formats` lists what it reads and writes. `--json` prints results for scripts.
+
+**Limits:** Rodeo doesn't write DWG: write DXF, which AutoCAD opens. A DWG's or DXF's layers become classes, and its line types draw solid. A PDF converts one page (`--page` chooses it on the command line). Models' textures are left out; their colours stay. A drawing converted to .vwx is built on Rodeo's blank drawing, which Vectorworks hasn't been confirmed to open. Very large Revit models can run out of browser memory: the command line has more room.

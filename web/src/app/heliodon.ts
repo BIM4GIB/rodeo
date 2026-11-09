@@ -95,7 +95,7 @@ export const DEFAULT_VIZ: Viz3D = {
   lights: true,
   haze: 0,
   clip: { on: false, x: [0, 1], y: [0, 1], z: [0, 1] },
-  shaded: { textures: false, colors: true, groundOnly: false, edges: true, shadowQuality: "high" },
+  shaded: { textures: true, colors: true, groundOnly: false, edges: true, shadowQuality: "high" },
   // dashes drawn at 55 % over the white faces that hide them
   lineRender: { dashStyle: 0, dashShade: 0.45 },
 };

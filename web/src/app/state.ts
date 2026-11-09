@@ -3,7 +3,7 @@
 // store.session (the core's EditSession) and is never copied here.
 
 import type { Attributes, DropShadow, EditSession, LayerInfo, LineMarker, Pt } from "../core/index.ts";
-import { DEFAULT_VIZ, type Viz3D } from "./heliodon.ts";
+import { DEFAULT_VIZ, type ShadedOptions, type ShadowQuality, type Viz3D } from "./heliodon.ts";
 
 export type ToolId =
   | "select"
@@ -480,6 +480,8 @@ const GRID_KEY = "openvwx.grid";
 const ZOOM_LINES_KEY = "openvwx.zoomLineThickness";
 const SNAP_KINDS_KEY = "openvwx.snapKinds";
 const SNAP_SETTINGS_KEY = "openvwx.snapSettings.v1";
+const SHADED_KEY = "openvwx.shadedOptions.v1";
+const SHADOW_QUALITIES: readonly ShadowQuality[] = ["low", "medium", "high", "veryHigh"];
 
 /** How snapping reaches: its radius on screen, the grid's spacing, and the Smart Point Settings. */
 export interface SnapSettings {
@@ -562,9 +564,29 @@ export interface DrawEffects {
   readonly shadow?: DropShadow;
 }
 
-/** Changes the 3D view's projection, lighting or clip cube (the Visualization palette). */
+/** Saved Shaded Options; the defaults for anything missing or unreadable. */
+function loadShaded(): ShadedOptions {
+  const d = DEFAULT_VIZ.shaded;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SHADED_KEY) ?? "null") as Partial<Record<keyof ShadedOptions, unknown>> | null;
+    const flag = (k: "textures" | "colors" | "groundOnly" | "edges"): boolean => (typeof saved?.[k] === "boolean" ? (saved[k] as boolean) : d[k]);
+    const q = SHADOW_QUALITIES.find((s) => s === saved?.shadowQuality);
+    return { textures: flag("textures"), colors: flag("colors"), groundOnly: flag("groundOnly"), edges: flag("edges"), shadowQuality: q ?? d.shadowQuality };
+  } catch {
+    return d;
+  }
+}
+
+/** Changes the 3D view's projection, lighting or clip cube (the Visualization palette); Shaded Options are kept in this browser. */
 export function setViz(patch: Partial<Viz3D>): void {
   store.viz3d = { ...store.viz3d, ...patch };
+  if (patch.shaded) {
+    try {
+      localStorage.setItem(SHADED_KEY, JSON.stringify(patch.shaded));
+    } catch {
+      // storage blocked: the options last for this visit
+    }
+  }
   store.emit("viz3d");
 }
 
@@ -632,7 +654,7 @@ class Store {
   /** the 3D view is shown over the drawing */
   view3d = false;
   /** how the 3D view is looked at and lit (the Visualization palette) */
-  viz3d: Viz3D = DEFAULT_VIZ;
+  viz3d: Viz3D = { ...DEFAULT_VIZ, shaded: loadShaded() };
   hint = "";
   /** last pointer position in document units (snapped) */
   cursor: Pt | null = null;

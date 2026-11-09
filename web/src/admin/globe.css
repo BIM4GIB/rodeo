@@ -1,0 +1,28 @@
+/* The admin page's globe (globe.ts): a square box that fits its column, the canvas filling it,
+   and the hover label as a solid chip over the canvas. */
+
+.adm-globe {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  margin: 0 auto;
+}
+
+.adm-globe canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.adm-globe-tip {
+  position: absolute;
+  z-index: 2;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}

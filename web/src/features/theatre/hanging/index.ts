@@ -4,6 +4,7 @@
 import { appContext } from "../../../app/ext.ts";
 import { store } from "../../../app/state.ts";
 import { errorMessage, toast } from "../../../app/toast.ts";
+import { need } from "../../../app/menuReasons.ts";
 import { addStageRows, addStageTools } from "../registry.ts";
 import { autoNumberPositions, convertToHangingPosition } from "./hangingPosition.ts";
 import { HangingPositionTool } from "./tool.ts";
@@ -12,7 +13,7 @@ const open = (): boolean => store.session !== null;
 
 addStageRows("Lighting", () => [
   { label: "Hanging Position", enabled: open, run: () => appContext()?.setTool("hangingposition") },
-  { label: "Convert to Hanging Position…", enabled: () => open() && store.selection.size > 0, run: () => void convertToHangingPosition().catch((err: unknown) => toast(errorMessage(err))) },
+  { label: "Convert to Hanging Position…", why: need.selection, enabled: () => open() && store.selection.size > 0, run: () => void convertToHangingPosition().catch((err: unknown) => toast(errorMessage(err))) },
   { label: "Auto Number Positions", enabled: open, run: autoNumberPositions },
   "-",
 ]);

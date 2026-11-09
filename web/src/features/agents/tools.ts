@@ -5,8 +5,7 @@
 // run JavaScript against the whole API in the plug-in sandbox, and save plug-ins of their own.
 // The planner can also hand work to subagents (agent.ts runs them).
 
-import { setActiveLayer, setSelection } from "../../app/commands.ts";
-import type { AppContext } from "../../app/ext.ts";
+import type { AppContext, DrawingRef } from "../../app/ext.ts";
 import { downloadBlob } from "../../app/fileio.ts";
 import { documentBlob } from "../../app/writeOut.ts";
 import type { Row } from "../../app/menu.ts";
@@ -49,6 +48,10 @@ export interface SubTask {
 
 export interface ToolContext {
   readonly app: AppContext;
+  /** the drawing the run works in, whichever is in front (agent.ts RunTarget); throws when there is none */
+  drawing(): DrawingRef;
+  /** the run goes on in `d` (a drawing it opened) */
+  follow(d: DrawingRef): void;
   readonly signal: AbortSignal;
   /** files the user attached to the conversation, by name */
   readonly attachments: ReadonlyMap<string, File>;
@@ -58,10 +61,19 @@ export interface ToolContext {
   readonly delegate?: (tasks: readonly SubTask[]) => Promise<string>;
 }
 
+/**
+ * What a call needs of its drawing beyond reading it: "window" works in the editor's window (the 3D
+ * view, menus, importers, the tool and view), so it waits until the drawing is in front; "edit"
+ * changes it, which waits only where the drawing can't be changed from behind (a live cloud one).
+ */
+export type Need = "window" | "edit";
+
 export interface Tool {
   readonly spec: ToolSpec;
   /** what the tool is doing, for its card ("Reading layers") */
   label(args: Record<string, unknown>): string;
+  /** reads (and pictures drawn offscreen) need nothing: they go on with the drawing behind */
+  readonly needs?: Need | ((args: Record<string, unknown>) => Need | undefined);
   run(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutput>;
 }
 
@@ -71,10 +83,8 @@ const SCRIPT_SECONDS = 120;
 
 // ---- helpers --------------------------------------------------------------------
 
-function session(): EditSession {
-  const s = store.session;
-  if (!s) throw new Error("No drawing is open. Ask the user to open one (or import a file they attach).");
-  return s;
+function session(ctx: ToolContext): EditSession {
+  return ctx.drawing().session;
 }
 
 /** JSON for a model: typed arrays and maps summarised, the whole cut to MAX_TEXT. */
@@ -173,7 +183,7 @@ const RENDER_MODES: readonly RenderMode[] = ["shaded", "textured", "wireframe", 
 // ---- the API the agents may call -------------------------------------------------
 
 /** edits that aren't drawing changes: listeners, collaboration and saving bookkeeping */
-const NOT_EDITS = new Set(["onChange", "onStep", "markSaved", "setLayerGuard", "applyRemote", "batch"]);
+const NOT_EDITS = new Set(["onChange", "onStep", "markSaved", "setLayerGuard", "applyRemote", "batch", "joinSince"]);
 
 /** Every edit an agent may make. */
 export function editMethods(): string[] {
@@ -198,24 +208,33 @@ function callDoc(doc: VwxDocument, method: string, a: readonly unknown[]): unkno
   return typeof v === "function" ? (v as (...x: unknown[]) => unknown).apply(doc, [...a]) : v;
 }
 
+/** BEHIND says what goes on while the user has another drawing in front. */
+const BEHIND =
+  "The user has another drawing in front just now. Reads, edits, build, scripts, look_plan and exports go on in this drawing as usual; look_3d, render, lighting, editor, run_command, import_file and running a plug-in wait until the user brings it to the front.";
+
 /** The editor's state in a few lines: the file, the layer and selection, the views. */
-function editorState(ctx: AppContext): Record<string, unknown> {
-  const s = store.session;
-  if (!s) return { open: false };
+function editorState(ctx: ToolContext): Record<string, unknown> {
+  let d: DrawingRef;
+  try {
+    d = ctx.drawing();
+  } catch {
+    return { open: false };
+  }
+  const s = d.session;
   const doc = s.doc;
-  const layer = doc.layers().find((l) => l.id === store.activeLayerId);
-  const sel = [...store.selection];
-  const r = ctx.view.visibleRect();
+  const layer = doc.layers().find((l) => l.id === d.activeLayerId());
+  const sel = [...d.selection()];
+  const r = d.visibleRect();
+  const front = d.isShown();
   return {
     open: true,
     file: doc.info.fileName,
     units: doc.info.units,
     activeLayer: layer ? { id: layer.id, name: layer.name, kind: layer.kind } : null,
     selection: { count: sel.length, ids: sel.slice(0, 60) },
-    editingGroup: store.editGroupId,
-    tool: store.tool,
-    view: store.view3d ? "3d" : "2d",
-    renderMode3d: ctx.renderMode(),
+    ...(front
+      ? { editingGroup: store.editGroupId, tool: store.tool, view: store.view3d ? "3d" : "2d", renderMode3d: ctx.app.renderMode() }
+      : { inFront: false, note: BEHIND }),
     planView: { x0: Math.round(r.x0), y0: Math.round(r.y0), x1: Math.round(r.x1), y1: Math.round(r.y1) },
     canUndo: s.canUndo(),
     canRedo: s.canRedo(),
@@ -223,32 +242,29 @@ function editorState(ctx: AppContext): Record<string, unknown> {
   };
 }
 
-const effects: Effects = {
-  select(list) {
-    const doc = store.session?.doc;
-    if (!doc) return [];
-    const keep = list.filter((id) => {
-      const o = doc.object(id);
-      return !!o && o.layerId === store.activeLayerId && o.parentId === store.editGroupId;
-    });
-    setSelection(keep);
-    return keep;
-  },
-  zoomTo(b) {
-    const ctx = appCtx;
-    if (!ctx) return;
-    ctx.view.fit(b);
-    store.emit("view");
-  },
-  setActiveLayer(id) {
-    setActiveLayer(id);
-  },
-};
+/** What a script's select, zoomTo and setActiveLayer do: to the run's drawing, in the window while it is in front. */
+function effectsOf(d: DrawingRef): Effects {
+  return {
+    select(list) {
+      const doc = d.session.doc;
+      const keep = list.filter((id) => {
+        const o = doc.object(id);
+        return !!o && o.layerId === d.activeLayerId() && o.parentId === d.editGroupId();
+      });
+      d.setSelection(keep);
+      return keep;
+    },
+    zoomTo(b) {
+      d.zoomTo(b);
+    },
+    setActiveLayer(id) {
+      d.setActiveLayer(id);
+    },
+  };
+}
 
-let appCtx: AppContext | null = null;
-
-function callEnv(): CallEnv {
-  return { session: store.session, activeLayerId: store.activeLayerId, selection: [...store.selection], effects };
+function callEnv(d: DrawingRef): CallEnv {
+  return { session: d.session, activeLayerId: d.activeLayerId(), selection: [...d.selection()], effects: effectsOf(d) };
 }
 
 /** What a script's openvwx offers: every read and edit, and long results. */
@@ -256,22 +272,22 @@ function scriptApi(): WorkerApi {
   return { doc: docMembers(), edit: editMethods(), evalMax: 20_000 };
 }
 
-/** Answers a script's call: reads and edits straight to the drawing, the rest as plug-ins get it. */
-async function scriptCall(method: string, a: unknown[]): Promise<unknown> {
-  if (method.startsWith("doc.")) return plain(callDoc(session().doc, method.slice(4), a));
+/** Answers a script's call: reads and edits straight to the run's drawing, the rest as plug-ins get it. */
+async function scriptCall(ctx: ToolContext, method: string, a: unknown[]): Promise<unknown> {
+  if (method.startsWith("doc.")) return plain(callDoc(session(ctx).doc, method.slice(4), a));
   if (method === "edit.batch") {
     const steps = a[0];
     if (!Array.isArray(steps)) throw new TypeError("openvwx.edit.batch takes a list of [method, ...args] steps");
-    const s = session();
+    const s = session(ctx);
     return plain(s.batch(() => (steps as unknown[][]).map((step) => callEdit(s, String(step[0]), step.slice(1)))));
   }
-  if (method.startsWith("edit.")) return plain(callEdit(session(), method.slice(5), a));
+  if (method.startsWith("edit.")) return plain(callEdit(session(ctx), method.slice(5), a));
   if (method === "ui.toast") {
     toast(String(a[0] ?? ""), "info");
     return undefined;
   }
   if (method.startsWith("ui.") || method === "fetch") throw new Error(`openvwx.${method} isn't open to agent scripts: report back in the result instead`);
-  return dispatch(method, a, callEnv());
+  return dispatch(method, a, callEnv(ctx.drawing()));
 }
 
 // ---- menus --------------------------------------------------------------------
@@ -303,26 +319,27 @@ const norm = (s: string): string => s.toLowerCase().replace(/[…]|\.\.\./g, "")
 type Format = "vwx" | "pdf" | "svg" | "png" | "dxf" | "ifc" | "obj" | "glb" | "3ds" | "stl" | "3dm" | "fbx" | "dae" | "ply" | "skp";
 const FORMATS: readonly Format[] = ["vwx", "pdf", "svg", "png", "dxf", "ifc", "obj", "glb", "3ds", "stl", "3dm", "fbx", "dae", "ply", "skp"];
 
-function baseName(): string {
-  return (store.session?.doc.info.fileName ?? "drawing").replace(/\.[^.]+$/, "") || "drawing";
+function baseName(ctx: ToolContext): string {
+  return (session(ctx).doc.info.fileName || "drawing").replace(/\.[^.]+$/, "") || "drawing";
 }
 
-function exportLayers(ctx: AppContext, given: string[], kinds: readonly ("design" | "sheet")[]): string[] {
-  const all = ctx.scene.layers();
+function exportLayers(d: DrawingRef, given: string[], kinds: readonly ("design" | "sheet")[]): string[] {
+  const scene = d.scene();
+  const all = scene.layers();
   if (given.length) {
     for (const id of given) if (!all.some((l) => l.id === id)) throw new Error(`no layer has the id ${id}`);
     return given;
   }
-  const drawn = ctx.scene.drawnLayers(store.activeLayerId).filter((l) => kinds.includes(l.kind));
+  const drawn = scene.drawnLayers(d.activeLayerId()).filter((l) => kinds.includes(l.kind));
   return (drawn.length ? drawn : all.filter((l) => kinds.includes(l.kind) && l.visibility !== "hidden")).map((l) => l.id);
 }
 
-async function exportFile(ctx: AppContext, format: Format, layerIds: string[], name: string, widthPx: number): Promise<OutFile> {
-  const doc = session().doc;
+async function exportFile(d: DrawingRef, format: Format, layerIds: string[], name: string, widthPx: number): Promise<OutFile> {
+  const doc = d.session.doc;
   const file = `${name}.${format}`;
   switch (format) {
     case "vwx":
-      return { name: file, blob: await documentBlob(session()) };
+      return { name: file, blob: await documentBlob(d.session) };
     case "pdf": {
       const { exportPdf } = await import("../../export/pdf.ts");
       const bytes = exportPdf(doc, layerIds.length ? { layerIds } : {});
@@ -331,7 +348,7 @@ async function exportFile(ctx: AppContext, format: Format, layerIds: string[], n
     case "svg":
     case "png": {
       const { exportSvg } = await import("../../export/svg.ts");
-      const svg = exportSvg(doc, exportLayers(ctx, layerIds, ["design", "sheet"]));
+      const svg = exportSvg(doc, exportLayers(d, layerIds, ["design", "sheet"]));
       if (format === "svg") return { name: file, blob: new Blob([svg], { type: "image/svg+xml" }) };
       const { svgToPng } = await import("../../export/png.ts");
       const m = /viewBox="[-\d.e]+ [-\d.e]+ ([\d.e]+) ([\d.e]+)"/.exec(svg);
@@ -345,23 +362,23 @@ async function exportFile(ctx: AppContext, format: Format, layerIds: string[], n
     }
     case "ifc": {
       const { exportIfc } = await import("../../export/ifc.ts");
-      return { name: file, blob: new Blob([exportIfc(doc, new Set(exportLayers(ctx, layerIds, ["design"])), file)], { type: "application/x-step" }) };
+      return { name: file, blob: new Blob([exportIfc(doc, new Set(exportLayers(d, layerIds, ["design"])), file)], { type: "application/x-step" }) };
     }
     case "obj": {
       const { exportObj } = await import("../../export/model3d.ts");
-      return { name: file, blob: new Blob([exportObj(doc, new Set(exportLayers(ctx, layerIds, ["design"])))], { type: "text/plain" }) };
+      return { name: file, blob: new Blob([exportObj(doc, new Set(exportLayers(d, layerIds, ["design"])))], { type: "text/plain" }) };
     }
     case "glb": {
       const { exportGlb } = await import("../../export/model3d.ts");
-      return { name: file, blob: new Blob([await exportGlb(doc, new Set(exportLayers(ctx, layerIds, ["design"])))], { type: "model/gltf-binary" }) };
+      return { name: file, blob: new Blob([await exportGlb(doc, new Set(exportLayers(d, layerIds, ["design"])))], { type: "model/gltf-binary" }) };
     }
     case "3ds": {
       const { export3ds } = await import("../../export/threeds.ts");
-      return { name: file, blob: new Blob([export3ds(doc, new Set(exportLayers(ctx, layerIds, ["design"]))) as Uint8Array<ArrayBuffer>], { type: "application/x-3ds" }) };
+      return { name: file, blob: new Blob([export3ds(doc, new Set(exportLayers(d, layerIds, ["design"]))) as Uint8Array<ArrayBuffer>], { type: "application/x-3ds" }) };
     }
     case "stl": {
       const { exportStlBinary, stlMeshes } = await import("../../export/stl.ts");
-      const meshes = stlMeshes(doc, new Set(exportLayers(ctx, layerIds, ["design"])));
+      const meshes = stlMeshes(doc, new Set(exportLayers(d, layerIds, ["design"])));
       return { name: file, blob: new Blob([exportStlBinary(meshes) as Uint8Array<ArrayBuffer>], { type: "model/stl" }) };
     }
     case "3dm": {
@@ -370,28 +387,28 @@ async function exportFile(ctx: AppContext, format: Format, layerIds: string[], n
         import("../../export/scene3d.ts"),
         import("../../import/rhino3dm.ts"),
       ]);
-      const layers = new Set(exportLayers(ctx, layerIds, ["design"]));
+      const layers = new Set(exportLayers(d, layerIds, ["design"]));
       const names = new Map(doc.layers().map((l) => [l.id, l.name]));
       const bytes = export3dm(modelOf(doc, layers, true), flatOf(doc, layers), names, await rhinoLib());
       return { name: file, blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "model/vnd.3dm" }) };
     }
     case "fbx": {
       const [{ exportFbx }, { modelOf }] = await Promise.all([import("../../export/fbx.ts"), import("../../export/scene3d.ts")]);
-      const bytes = exportFbx(modelOf(doc, new Set(exportLayers(ctx, layerIds, ["design"])), true));
+      const bytes = exportFbx(modelOf(doc, new Set(exportLayers(d, layerIds, ["design"])), true));
       return { name: file, blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/octet-stream" }) };
     }
     case "dae": {
       const [{ exportCollada }, { modelOf }] = await Promise.all([import("../../export/collada.ts"), import("../../export/scene3d.ts")]);
-      return { name: file, blob: new Blob([exportCollada(modelOf(doc, new Set(exportLayers(ctx, layerIds, ["design"])), true))], { type: "model/vnd.collada+xml" }) };
+      return { name: file, blob: new Blob([exportCollada(modelOf(doc, new Set(exportLayers(d, layerIds, ["design"])), true))], { type: "model/vnd.collada+xml" }) };
     }
     case "ply": {
       const [{ exportPly }, { modelOf }] = await Promise.all([import("../../export/ply.ts"), import("../../export/scene3d.ts")]);
-      const bytes = exportPly(modelOf(doc, new Set(exportLayers(ctx, layerIds, ["design"]))));
+      const bytes = exportPly(modelOf(doc, new Set(exportLayers(d, layerIds, ["design"]))));
       return { name: file, blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/octet-stream" }) };
     }
     case "skp": {
       const { exportSkp } = await import("../../export/skp.ts");
-      const { bytes } = exportSkp(doc, new Set(exportLayers(ctx, layerIds, ["design"])));
+      const { bytes } = exportSkp(doc, new Set(exportLayers(d, layerIds, ["design"])));
       return { name: file, blob: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/vnd.sketchup.skp" }) };
     }
   }
@@ -411,13 +428,18 @@ interface ImportOptions {
 }
 
 /** Opens or imports an attachment, answering the importers' questions from `o`; says what the editor said. */
-async function importFile(ctx: AppContext, file: File, o: ImportOptions): Promise<ToolOutput> {
+async function importFile(tc: ToolContext, file: File, o: ImportOptions): Promise<ToolOutput> {
+  const ctx = tc.app;
   const name = file.name;
   if (/\.vwx$/i.test(name)) {
+    const before = ctx.frontDrawing();
     await ctx.openDocument(new Uint8Array(await file.arrayBuffer()), name);
-    return { text: `Opened ${name} in place of the drawing that was open (the editor asked about unsaved changes first).` };
+    const opened = ctx.frontDrawing();
+    if (!opened || opened === before) return { text: `${name} wasn't opened.`, error: true };
+    tc.follow(opened);
+    return { text: `Opened ${name} in a tab of its own, in front; the tools now work in it (the drawing you were in stays open in its tab).` };
   }
-  if (!store.session) throw new Error("open a drawing first: files other than .vwx are imported into one");
+  session(tc);
   const said: string[] = [];
   let failed = false;
   const before = store.selection;
@@ -427,11 +449,12 @@ async function importFile(ctx: AppContext, file: File, o: ImportOptions): Promis
   });
   try {
     if (/\.dxf$/i.test(name)) {
+      // an agent's attachment cannot be asked for its external references: the toast names those not found
       const { importDroppedDxf } = await import("../../app/dxfImport.ts");
-      await importDroppedDxf(file, ctx.scene, ctx.view);
+      await importDroppedDxf(file, ctx.scene, ctx.view, { ask: false });
     } else if (/\.dwg$/i.test(name)) {
       const { importDroppedDwg } = await import("../../app/dxfImport.ts");
-      await importDroppedDwg(file, ctx.scene, ctx.view);
+      await importDroppedDwg(file, ctx.scene, ctx.view, { ask: false });
     } else if (/\.pdf$/i.test(name)) {
       const { importPdf } = await import("../../app/pdfImport.ts");
       await importPdf(file, ctx.scene, ctx.view, {
@@ -443,7 +466,7 @@ async function importFile(ctx: AppContext, file: File, o: ImportOptions): Promis
     } else {
       const { meshFormat, importMesh } = await import("../../app/meshImport.ts");
       const format = meshFormat(name);
-      if (!format) throw new Error(`${name}: Rodeo opens .vwx and imports .dxf, .dwg, .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp, .3dm, .fbx, .dae/.kmz, .blend and .ply; a picture the user attaches is seen, not imported`);
+      if (!format) throw new Error(`${name}: Rodeo opens .vwx and imports .dxf, .dwg, .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp, .3dm, .stp/.step, .igs/.iges, .sldprt/.ipt/.fcstd/.f3d/.prt (CAD parts), .fbx, .dae/.kmz, .blend and .ply; a picture the user attaches is seen, not imported`);
       // what the dialog would default to: metres, y up for OBJ and z up for 3DS and PLY (the formats that say their units ignore it)
       await importMesh(file, ctx.scene, ctx.view, { mm: MESH_UNITS[o.units ?? (format === "stl" ? "mm" : "m")] ?? 1000, yUp: o.yUp ?? format === "obj" });
     }
@@ -580,13 +603,13 @@ const TOOLS: Tool[] = [
     ),
     label: () => "Reading the drawing",
     async run(_a, ctx) {
-      const s = store.session;
-      if (!s) return { text: toText({ open: false, note: "No drawing is open." }) };
-      const doc = s.doc;
+      const state = editorState(ctx);
+      if (!state.open) return { text: toText({ open: false, note: "No drawing is open." }) };
+      const doc = session(ctx).doc;
       const classes = doc.classes();
       const out = {
         info: doc.info,
-        state: editorState(ctx.app),
+        state,
         layers: doc.layers().map((l) => ({
           id: l.id,
           name: l.name,
@@ -613,8 +636,8 @@ const TOOLS: Tool[] = [
       ["method"],
     ),
     label: (a) => `Reading ${String(a.method ?? "")}`,
-    async run(a) {
-      const value = callDoc(session().doc, str(a.method, "method"), args(a.args));
+    async run(a, ctx) {
+      const value = callDoc(session(ctx).doc, str(a.method, "method"), args(a.args));
       if (Array.isArray(value)) {
         const offset = Math.max(0, Math.floor(num(a.offset, 0)));
         const limit = Math.max(1, Math.floor(num(a.limit, 200)));
@@ -632,8 +655,9 @@ const TOOLS: Tool[] = [
       ["method"],
     ),
     label: (a) => `Editing: ${String(a.method ?? "")}`,
-    async run(a) {
-      return { text: toText(callEdit(session(), str(a.method, "method"), args(a.args))) };
+    needs: "edit",
+    async run(a, ctx) {
+      return { text: toText(callEdit(session(ctx), str(a.method, "method"), args(a.args))) };
     },
   },
   {
@@ -644,10 +668,11 @@ const TOOLS: Tool[] = [
       ["steps"],
     ),
     label: (a) => `Editing: ${Array.isArray(a.steps) ? a.steps.length : 0} changes as one step`,
-    async run(a) {
+    needs: "edit",
+    async run(a, ctx) {
       const steps = a.steps;
       if (!Array.isArray(steps) || !steps.every(Array.isArray)) throw new Error("steps is a list of [method, ...args] lists");
-      const s = session();
+      const s = session(ctx);
       for (const step of steps as unknown[][]) if (!editMethods().includes(String(step[0]))) throw new Error(`edit.${String(step[0])} isn't an edit`);
       const results = s.batch(() => (steps as unknown[][]).map((step) => callEdit(s, String(step[0]), step.slice(1))));
       return { text: toText(results) };
@@ -683,7 +708,7 @@ const TOOLS: Tool[] = [
     ),
     label: () => "Looking at the plan",
     async run(a, ctx) {
-      const pic = lookPlan(ctx.app, { ids: ids(a.ids), box: box(a.box), frame: a.frame === "view" ? "view" : "extent", layerId: typeof a.layerId === "string" ? a.layerId : undefined, size: num(a.size, 1280), showSelection: a.showSelection === true });
+      const pic = lookPlan(ctx.drawing(), { ids: ids(a.ids), box: box(a.box), frame: a.frame === "view" ? "view" : "extent", layerId: typeof a.layerId === "string" ? a.layerId : undefined, size: num(a.size, 1280), showSelection: a.showSelection === true });
       return { text: pic.caption, images: [pic] };
     },
   },
@@ -703,6 +728,7 @@ const TOOLS: Tool[] = [
       },
     ),
     label: (a) => `Looking in 3D${typeof a.preset === "string" ? ` (${a.preset})` : ""}${a.holes === true ? " for holes" : ""}`,
+    needs: "window",
     async run(a, ctx) {
       const pic = await lookModel(ctx.app, {
         preset: VIEW_PRESETS.includes(a.preset as ViewPreset) ? (a.preset as ViewPreset) : undefined,
@@ -727,8 +753,8 @@ const TOOLS: Tool[] = [
       },
     ),
     label: (a) => (typeof a.layerId === "string" || ids(a.ids).length ? "Checking the model is closed" : "Checking every layer is closed"),
-    async run(a) {
-      const s = session();
+    async run(a, ctx) {
+      const s = session(ctx);
       const key = typeof a.layerId === "string" ? a.layerId : "";
       const layer = key ? (s.doc.layers().find((l) => l.id === key) ?? s.doc.layers().find((l) => l.name === key)) : undefined;
       if (key && !layer) throw new Error(`no layer ${key}`);
@@ -779,6 +805,7 @@ const TOOLS: Tool[] = [
       },
     ),
     label: (a) => `Rendering ${num(a.width, 1920)}×${num(a.height, 1080)}${a.engine === "pathtraced" ? ", path traced" : ""}`,
+    needs: "window",
     async run(a, ctx) {
       const pic = await renderLook(ctx.app, {
         cameraId: typeof a.cameraId === "string" ? a.cameraId : undefined,
@@ -794,7 +821,7 @@ const TOOLS: Tool[] = [
         signal: ctx.signal,
         progress: (t) => ctx.progress(t),
       });
-      const files = pic.full ? [{ name: `${baseName()} render.png`, blob: pic.full }] : [];
+      const files = pic.full ? [{ name: `${baseName(ctx)} render.png`, blob: pic.full }] : [];
       return { text: pic.caption, images: [pic], files };
     },
   },
@@ -836,9 +863,10 @@ const TOOLS: Tool[] = [
       },
     ),
     label: (a) => (a.preset === "dark_stage" ? "Lighting the stage for night" : a.lights ? "Changing the lights" : a.viz || a.render || a.preset ? "Changing the lighting" : "Reading the lighting"),
-    async run(a) {
+    needs: (a) => (a.preset !== undefined || a.viz !== undefined || a.render !== undefined ? "window" : a.lights !== undefined ? "edit" : undefined),
+    async run(a, ctx) {
       const { lighting } = await import("./lighting.ts");
-      return { text: toText(lighting(session(), { preset: a.preset, viz: a.viz, render: a.render, lights: a.lights })) };
+      return { text: toText(lighting(session(ctx), { preset: a.preset, viz: a.viz, render: a.render, lights: a.lights })) };
     },
   },
   {
@@ -855,27 +883,29 @@ const TOOLS: Tool[] = [
       ["action"],
     ),
     label: (a) => `Editor: ${String(a.action ?? "").replace(/_/g, " ")}`,
+    needs: (a) => (a.action === "state" || a.action === "select" || a.action === "set_active_layer" ? undefined : "window"),
     async run(a, ctx) {
       const app = ctx.app;
+      const d = ctx.drawing();
       switch (a.action) {
         case "state":
-          return { text: toText(editorState(app)) };
+          return { text: toText(editorState(ctx)) };
         case "select": {
           const list = ids(a.ids);
-          const doc = session().doc;
+          const doc = session(ctx).doc;
           const layers = new Set(list.map((id) => doc.object(id)?.layerId).filter(Boolean));
           if (layers.size === 1) {
             const only = [...layers][0]!;
-            if (only !== store.activeLayerId) setActiveLayer(only);
+            if (only !== d.activeLayerId()) d.setActiveLayer(only);
           }
-          const kept = effects.select(list);
+          const kept = effectsOf(d).select(list);
           return { text: `Selected ${kept.length} of ${list.length}${kept.length < list.length ? " (only objects directly on the active layer, outside groups, can be selected)" : ""}.` };
         }
         case "zoom_to": {
-          const b = boundsOfAll(session().doc, ids(a.ids));
+          const b = boundsOfAll(session(ctx).doc, ids(a.ids));
           if (!b) throw new Error("none of those objects has a place in the plan");
           app.show2d();
-          effects.zoomTo(b);
+          d.zoomTo(b);
           return { text: "Zoomed the plan to them." };
         }
         case "fit":
@@ -883,7 +913,7 @@ const TOOLS: Tool[] = [
           app.fit();
           return { text: "Fitted the plan to the drawing." };
         case "set_active_layer":
-          setActiveLayer(str(a.layerId, "layerId"));
+          d.setActiveLayer(str(a.layerId, "layerId"));
           return { text: "Done." };
         case "show_2d":
           app.show2d();
@@ -929,6 +959,7 @@ const TOOLS: Tool[] = [
       ["path"],
     ),
     label: (a) => `Running ${String(a.path ?? "")}`,
+    needs: "window",
     async run(a) {
       const want = norm(str(a.path, "path"));
       const list = commands();
@@ -950,8 +981,8 @@ const TOOLS: Tool[] = [
     async run(a, ctx) {
       const format = a.format as Format;
       if (!FORMATS.includes(format)) throw new Error(`format is one of ${FORMATS.join(", ")}`);
-      const name = (typeof a.name === "string" && a.name.trim() ? a.name.trim() : baseName()).replace(/[\\/:*?"<>|]+/g, "-");
-      const file = await exportFile(ctx.app, format, ids(a.layerIds), name, num(a.widthPx, 3000));
+      const name = (typeof a.name === "string" && a.name.trim() ? a.name.trim() : baseName(ctx)).replace(/[\\/:*?"<>|]+/g, "-");
+      const file = await exportFile(ctx.drawing(), format, ids(a.layerIds), name, num(a.widthPx, 3000));
       if (a.download === true) downloadBlob(file.name, file.blob);
       const images = format === "png" ? [{ ...(await blobPicture(file.blob)), caption: file.name }] : undefined;
       return { text: `Made ${file.name} (${Math.round(file.blob.size / 1024)} KB); it is in the chat for the user to download.`, files: [file], images };
@@ -960,7 +991,7 @@ const TOOLS: Tool[] = [
   {
     spec: spec(
       "import_file",
-      "Imports a file the user attached to the chat, by its name: .vwx opens in place of the drawing; .dxf, .dwg (AutoCAD R13 to 2018 and later), .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp (SketchUp), .3dm (Rhino), .fbx, .dae/.kmz (SketchUp's Collada), .blend (Blender) and .ply come into the active layer, selected. OBJ, 3DS, STL and PLY files don't say their units: give units and yUp (default metres, millimetres for STL; y up for OBJ, z up for 3DS, STL and PLY); the others say their own. A PDF imports one page (default 1) at a scale (default the layer's).",
+      "Imports a file the user attached to the chat, by its name: .vwx opens in a tab of its own, in front, and you go on working in it; .dxf, .dwg (AutoCAD R13 to 2018 and later), .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp (SketchUp), .3dm (Rhino), .stp/.step (STEP), .igs/.iges (IGES), .sldprt, .ipt, .fcstd, .f3d and .prt (CAD parts from SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo), .fbx, .dae/.kmz (SketchUp's Collada), .blend (Blender) and .ply come into the active layer, selected. OBJ, 3DS, STL and PLY files don't say their units: give units and yUp (default metres, millimetres for STL; y up for OBJ, z up for 3DS, STL and PLY); the others say their own. A PDF imports one page (default 1) at a scale (default the layer's).",
       {
         name: { type: "string" },
         units: { type: "string", enum: Object.keys(MESH_UNITS), description: "OBJ and 3DS" },
@@ -973,13 +1004,14 @@ const TOOLS: Tool[] = [
       ["name"],
     ),
     label: (a) => `Importing ${String(a.name ?? "")}`,
+    needs: "window",
     async run(a, ctx) {
       const name = str(a.name, "name");
       const file = ctx.attachments.get(name) ?? [...ctx.attachments.values()].find((f) => f.name.toLowerCase() === name.toLowerCase());
       if (!file) throw new Error(`no attachment is called ${name}; attached: ${[...ctx.attachments.keys()].join(", ") || "none"}`);
       const flag = (v: unknown): boolean | undefined => (typeof v === "boolean" ? v : undefined);
       const n = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
-      return importFile(ctx.app, file, {
+      return importFile(ctx, file, {
         units: typeof a.units === "string" ? a.units : undefined,
         yUp: flag(a.yUp),
         page: n(a.page),
@@ -1003,8 +1035,9 @@ const TOOLS: Tool[] = [
       ["layerId"],
     ),
     label: () => "Building 3D from the line work",
+    needs: "edit",
     async run(a, ctx) {
-      const s = session();
+      const s = session(ctx);
       const key = str(a.layerId, "layerId");
       const layer = s.doc.layers().find((l) => l.id === key) ?? s.doc.layers().find((l) => l.name === key);
       if (!layer || layer.kind !== "design") throw new Error(`no design layer ${key}`);
@@ -1023,7 +1056,7 @@ const TOOLS: Tool[] = [
         const edges = m.edges.length ? s.add3DPolygons(target, m.edges.map(([i, j]) => ({ points: [...at[i], ...at[j]], closed: false }))) : null;
         return { target, meshes, edges };
       });
-      setSelection(made.meshes.length ? made.meshes : made.edges ? [made.edges] : []);
+      ctx.drawing().setSelection(made.meshes.length ? made.meshes : made.edges ? [made.edges] : []);
       const madeIds = new Set(made.meshes);
       const { solids } = checkSolids(s.doc.model3d().filter((x) => madeIds.has(x.objectId)));
       const open = solids.reduce((n, x) => n + x.closure.open, 0);
@@ -1063,8 +1096,8 @@ const TOOLS: Tool[] = [
       ["layerId"],
     ),
     label: () => "Measuring the drawing",
-    async run(a) {
-      const s = session();
+    async run(a, ctx) {
+      const s = session(ctx);
       const layer = designLayer(s.doc, str(a.layerId, "layerId"));
       const segments = lineWork(s.doc, layer.id, new Set(ids(a.ids)));
       const axes = findAxes(segments);
@@ -1115,8 +1148,8 @@ const TOOLS: Tool[] = [
       ["layerId"],
     ),
     label: () => "Reading the floor plan",
-    async run(a) {
-      const s = session();
+    async run(a, ctx) {
+      const s = session(ctx);
       const layer = designLayer(s.doc, str(a.layerId, "layerId"));
       const input = planInput(s.doc, layer.id, new Set(ids(a.ids)));
       if (!input.segments.length) return { text: `${layer.name} has no straight lines${ids(a.ids).length ? " among those objects" : ""} to read a plan from`, error: true };
@@ -1137,8 +1170,9 @@ const TOOLS: Tool[] = [
       ["layer", "elements"],
     ),
     label: (a) => `Building ${Array.isArray(a.elements) ? a.elements.length : 0} element${Array.isArray(a.elements) && a.elements.length === 1 ? "" : "s"} in 3D`,
+    needs: "edit",
     async run(a, ctx) {
-      const s = session();
+      const s = session(ctx);
       const key = str(a.layer, "layer");
       const elements = Array.isArray(a.elements) ? a.elements : [];
       if (!elements.length) throw new Error("elements is empty");
@@ -1148,12 +1182,12 @@ const TOOLS: Tool[] = [
       const existing = s.doc.layers().find((l) => l.id === key) ?? s.doc.layers().find((l) => l.name === key);
       if (existing && existing.kind !== "design") throw new Error(`${existing.name} is a sheet layer: build on a design layer`);
       const off = Array.isArray(a.offset) && a.offset.length === 2 && a.offset.every((v) => typeof v === "number" && Number.isFinite(v)) ? { x: a.offset[0] as number, y: a.offset[1] as number } : undefined;
-      const active = s.doc.layers().find((l) => l.id === store.activeLayerId);
+      const active = s.doc.layers().find((l) => l.id === ctx.drawing().activeLayerId());
       const made = s.batch(() => {
         const target = existing ? existing.id : s.createLayer(key, "design", active?.kind === "design" ? active.scale : 50);
         return { target, placed: placeParts(s, target, parts, off) };
       });
-      setSelection(made.placed.ids);
+      ctx.drawing().setSelection(made.placed.ids);
       return {
         text: toText(
           rounded({
@@ -1177,6 +1211,7 @@ const TOOLS: Tool[] = [
       ["code"],
     ),
     label: () => "Running a script",
+    needs: "edit",
     async run(a, ctx) {
       const code = str(a.code, "code");
       const logs: string[] = [];
@@ -1184,7 +1219,7 @@ const TOOLS: Tool[] = [
       const worker = new PluginWorker(
         code,
         {
-          call: (method, x) => scriptCall(method, x),
+          call: (method, x) => scriptCall(ctx, method, x),
           log: (level, text) => logs.push(level === "log" ? text : `[${level}] ${text}`),
           menu: () => {},
           uncaught: (e) => logs.push(`[uncaught] ${e.name}: ${e.message}`),
@@ -1226,6 +1261,7 @@ const TOOLS: Tool[] = [
       ["action"],
     ),
     label: (a) => `Plug-ins: ${String(a.action ?? "")}`,
+    needs: (a) => (a.action === "run" ? "window" : undefined),
     async run(a) {
       const find = (): ReturnType<typeof installed>[number] => {
         const rec = installed().find((r) => r.id === a.id || r.name === a.id);
@@ -1287,8 +1323,7 @@ const DELEGATE: Tool = {
 };
 
 /** The tools a planner (with delegate) or a subagent gets. */
-export function toolsFor(planner: boolean, ctx: AppContext): readonly Tool[] {
-  appCtx = ctx;
+export function toolsFor(planner: boolean): readonly Tool[] {
   return planner ? [...TOOLS, DELEGATE] : TOOLS;
 }
 

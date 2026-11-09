@@ -8,6 +8,7 @@
 // with saved and exported workspaces.
 
 import { byId, h } from "./dom.ts";
+import { appContext } from "./ext.ts";
 import { PALETTE_ICON, TOOL_ICON, UI_ICON } from "./icons.ts";
 import { menuButton, type Item, type Row } from "./menu.ts";
 import { allMenus } from "./menubar.ts";
@@ -622,7 +623,13 @@ export interface ToolSetConfig {
 
 const ALL_TOOLS: readonly ToolDef[] = [...BASIC, ...TOOL_SETS.flatMap((s) => s.tools)];
 
-/** The top bar's tools: a button per group, showing the group's last used tool; its caret drops the rest. */
+/**
+ * The top bar's tools: a button per group, showing the group's last used tool; its caret drops the rest.
+ * The tools everyone uses come first (moving round, drawing, changing what is drawn, annotating),
+ * then architecture and interiors, 3D modelling and its lights and cameras, the site, and the stage,
+ * each group led by its most used tool. The specialist sets (machine parts, fasteners, welding and
+ * tolerances, MEP, ConnectCAD, irrigation, GIS, rigging detail) are in the Tool sets button's menu.
+ */
 const TOP_GROUPS: readonly (readonly ToolId[] | "-")[] = [
   ["select", "reshape"],
   ["pan", "zoom", "flyover", "translateview", "walkthrough"],
@@ -631,23 +638,34 @@ const TOP_GROUPS: readonly (readonly ToolId[] | "-")[] = [
   ["rect", "roundrect"],
   ["circle", "arc", "quarterarc", "oval", "spiral"],
   ["polyline", "polygon", "triangle", "regpoly", "dlpolygon"],
-  ["text", "callout", "leadersimple", "leaderline", "hyperlink"],
-  "-",
-  ["dimension", "arclength", "slopedim", "measure", "dimtape", "protractor", "cloud"],
-  ["secmarker", "secline", "intelev", "detailcallout", "drawlabel", "refmarker", "gridline", "redline", "generalnotes", "tbborder", "benchmark", "northarrow", "scalebar", "datatag", "legend", "symmetry", "centermark", "fcf", "gdtnote", "weldfilletaws", "weldfilletiso", "weldflangeaws", "weldflangeiso", "weldgrooveaws", "weldgrooveiso", "weldmiscaws", "weldmisciso", "weldslotplugaws", "weldslotplugiso"],
-  ["breakline", "insulation", "repunit", "steel", "steel3d", "lumber", "linearmaterial", "framing", "bulbflat", "shaftbreak", "shaftbreak2", "bolt", "screw", "nail", "anchor", "carriagebolt", "carriagebolt3d", "lagscrew", "lagscrew3d", "boltnutinch", "boltnutmm", "woodscrew", "woodscrew3d", "sheetmetalscrew", "sheetmetalscrew3d", "weld", "stipple", "drilledhole", "drilledhole3d", "tappedmm", "tappedmm3d", "tappedin", "tappedin3d", "slot", "holepattern", "screwthread", "keyway"],
-  ["spurgear", "spurgear3d", "gearrack", "gearrack3d", "sprocket", "sprocket3d", "chainlinear", "chainlinear3d", "chaincircular", "chaincircular3d", "offsetlink", "offsetlink3d", "pulley", "pulley3d", "bevelgear", "bevelgear3d", "worm", "worm3d", "wormgear", "wormgear3d", "key", "key3d", "woodruffkey", "woodruffkey3d", "shaft", "shaft3d"],
-  ["ballbearing", "ballbearing3d", "rollerbearing", "rollerbearing3d", "needlebearing", "needlebearing3d", "taperedbearing", "taperedbearing3d", "thrustbearing", "thrustbearing3d", "locknut", "locknut3d", "pillowblock", "pillowblock3d", "flanged2", "flanged23d", "flanged4", "flanged43d"],
-  ["compspring1", "compspring13d", "compspring2", "compspring23d", "conicalspring", "conicalspring3d", "diespring", "diespring3d", "extspringfront", "extspring3d", "extspringend", "torsionfront", "torsion3d", "torsionend", "belleville", "belleville3d"],
-  ["fastener", "clevisinch", "clevisinch3d", "clevismetric", "clevismetric3d", "clevisdin", "clevisdin3d", "cotterpin", "cotterpin3d", "dowelpin", "dowelpin3d", "parallelpin", "parallelpin3d", "taperpininch", "taperpininch3d", "taperpindin", "taperpindin3d", "rivetlarge", "rivetlarge3d", "rivetsmall", "rivetsmall3d", "rivetdin", "rivetdin3d", "rivettubular", "rivettubular3d", "acornnut", "acornnut3d", "hexcapnut", "hexcapnut3d", "knurleddin", "knurleddin3d", "knurledinch", "knurledinch3d", "wingdin", "wingdin3d", "winga", "winga3d", "wingb", "wingb3d", "wingc", "wingc3d", "wingd", "wingd3d", "ringasme", "ringasme3d", "ringdin", "ringdin3d", "washerdin", "washerdin3d", "eyebolt", "eyebolt3d", "jbolt", "jbolt3d", "swingbolt", "swingbolt3d", "swingeyebolt", "swingeyebolt3d", "tbolt", "tbolt3d", "thumbscrew", "thumbscrew3d", "ubolt", "ubolt3d"],
-  ["plant", "existingtree", "hardscape", "massingmodel", "landscape", "hedgerow", "propline", "parking", "parkingspaces", "parkingarea", "parkingpath", "stake", "fence", "curb", "roadstraight", "roadcurved", "roadtee", "roadpoly", "tablechairs", "desk", "shelving", "clothesrod", "bathshower", "grabbars", "fireplace", "toiletstall", "cabinet", "customcab", "countertop", "compsink", "railing", "ceilinggrid", "seating", "stagedeck", "stageplug", "stagesteps", "stageramp", "ropestanchion", "softgoods", "television", "videoscreen", "blendedscreen", "ledscreen", "speaker", "speakerarray", "rackruler", "receptacle", "switch", "commdevice", "incandescent", "trussstraight", "trusscurved", "lightingpipe", "pipeladder", "rigpoint", "hoist", "hoistorigin", "bridle", "mothergrid", "riggingload", "cablepath", "cable", "hopover", "distributor", "eleccomponent", "lightdevice", "ganging", "stageorigin", "focusinstrument", "spikemark", "focuspoint", "aligndistribute", "outlet", "dripoutlet", "irrpipe", "valve", "poc", "controller", "syscomponent", "designzone", "hydrozone", "space", "column", "pilaster", "structmember", "stair", "simplestair", "ramp", "elevator", "escalator"],
-  ["symbol", "locus"],
-  ["extrect", "extpoly", "sphere", "hemisphere", "cone"],
+  ["text", "callout", "leadersimple", "leaderline", "datatag", "generalnotes", "legend", "cloud", "redline", "hyperlink"],
+  ["symbol", "plugin", "locus"],
   "-",
   ["moveby", "rotate", "mirror", "offset", "shear", "fpresize"],
   ["fillet", "chamfer", "trim", "split", "connect", "clip"],
   ["eyedropper", "attrmap", "visibility", "selectsimilar"],
+  "-",
+  ["dimension", "arclength", "slopedim", "measure", "dimtape", "protractor"],
+  ["secmarker", "secline", "intelev", "detailcallout", "drawlabel", "refmarker", "gridline", "tbborder", "benchmark", "northarrow", "scalebar", "symmetry", "centermark"],
+  "-",
+  ["wall", "walljoin"],
+  ["door", "window"],
+  ["slab", "column", "pilaster", "structmember"],
+  ["stair", "simplestair", "ramp", "railing", "elevator", "escalator"],
+  ["tablechairs", "desk", "shelving", "clothesrod", "bathshower", "grabbars", "fireplace", "toiletstall", "cabinet", "customcab", "countertop", "compsink", "ceilinggrid"],
+  "-",
+  ["extrect", "extpoly", "sphere", "hemisphere", "cone", "poly3d", "locus3d"],
+  ["pushpull", "chamferedge", "filletedge", "shellsolid", "taperface", "offsetedge", "deform", "loftsurface", "chainextrude"],
+  ["light", "camera", "heliodon", "videocamera", "renderbitmap"],
+  "-",
+  ["plant", "existingtree", "hardscape", "massingmodel", "landscape", "hedgerow", "sitemodifier", "grade", "propline", "parking", "parkingspaces", "parkingarea", "parkingpath", "stake", "fence", "curb", "roadstraight", "roadcurved", "roadtee", "roadpoly"],
+  "-",
+  ["stagedeck", "stageplug", "stagesteps", "stageramp", "seating", "ropestanchion", "softgoods", "television", "videoscreen", "blendedscreen", "ledscreen", "speaker", "speakerarray"],
+  ["lightdevice", "lightaccessory", "focuspoint", "hangingposition", "lightingpipe", "pipeladder", "trussstraight", "trusscurved", "hoist"],
 ];
+
+/** Every tool the top bar's groups hold. */
+const IN_TOP_BAR = new Set<ToolId>(TOP_GROUPS.flatMap((g) => (g === "-" ? [] : g)));
 
 /** Tools a command takes up for its clicks, on no palette. */
 const COMMAND_TOOLS: readonly ToolDef[] = [
@@ -919,6 +937,11 @@ export function toolScreenTip(id: ToolId): ScreenTip {
   return { title: label(id), keys: toolKeyLabel(id) || undefined, note: set ? `${set} tool set` : undefined, detail: toolHelp(id) || undefined };
 }
 
+/** A tool's menu row: its icon, name and key, ticked while it is the tool. */
+function toolRow(id: ToolId, setTool: (id: ToolId) => void): Row {
+  return { label: label(id), icon: TOOL_ICON[id], keys: toolKeyLabel(id) || undefined, checked: () => store.tool === id, run: () => setTool(id) };
+}
+
 /** One top bar group: the button of its current tool, and a caret dropping the group when it has more. */
 function toolGroup(tools: readonly ToolId[], setTool: (id: ToolId) => void): HTMLElement {
   const key = GROUP_KEY + tools[0];
@@ -944,9 +967,7 @@ function toolGroup(tools: readonly ToolId[], setTool: (id: ToolId) => void): HTM
       title: "More tools",
       attrs: { type: "button", "aria-label": `More tools like ${label(tools[0])}` },
     });
-    menuButton(more, () =>
-      tools.map((id): Row => ({ label: label(id), icon: TOOL_ICON[id], keys: toolKeyLabel(id) || undefined, checked: () => store.tool === id, run: () => setTool(id) })),
-    );
+    menuButton(more, () => tools.map((id) => toolRow(id, setTool)));
     group.append(more);
   }
   const sync = (): void => {
@@ -970,26 +991,53 @@ function toolGroup(tools: readonly ToolId[], setTool: (id: ToolId) => void): HTM
   return group;
 }
 
-/** The top bar's tools, in groups. */
+/** The top bar's tools, in groups, and the Tool sets button after them. */
 function mountTools(setTool: (id: ToolId) => void): void {
   const row = byId("tb-tools");
   row.append(...TOP_GROUPS.map((g) => (g === "-" ? h("div", { cls: "tb-sep", attrs: { role: "separator" } }) : toolGroup(g, setTool))));
   scrollTools(row);
+  mountToolSets(setTool);
 }
 
 /**
- * The tool row scrolls where it is too wide for its place: a phone's bar along the bottom, a
- * tablet's or landscape phone's top bar. Its edges fade where more tools lie beyond them (the
- * classes set the fades' width in styles.css), and the active tool is brought into view when it
- * changes. Where the row fits, none of this shows.
+ * The tool row scrolls where it is too wide for the room between the bar's ends, or for a phone's
+ * bar along the bottom. Its edges fade where more tools lie beyond them (the classes set the fades'
+ * width in styles.css), the scroll buttons either side of it show, each greyed out once the row is
+ * at its end (styles.css leaves them out for a finger, which swipes), and the active tool is
+ * brought into view when it changes. Where the row fits, none of this shows.
  */
 function scrollTools(row: HTMLElement): void {
+  const back = byId<HTMLButtonElement>("btn-tools-back");
+  const ahead = byId<HTMLButtonElement>("btn-tools-ahead");
+  back.innerHTML = CHEVRON_LEFT;
+  ahead.innerHTML = CHEVRON_RIGHT;
+  for (const [button, sign] of [[back, -1], [ahead, 1]] as const) {
+    button.addEventListener("click", () => {
+      // so Space keeps working for panning instead of re-pressing the button
+      button.blur();
+      row.scrollBy({ left: sign * row.clientWidth * 0.8, behavior: "smooth" });
+    });
+  }
   const fades = (): void => {
-    row.classList.toggle("more-start", row.scrollLeft > 1);
-    row.classList.toggle("more-end", row.scrollLeft < row.scrollWidth - row.clientWidth - 1);
+    const start = row.scrollLeft > 1;
+    const end = row.scrollLeft < row.scrollWidth - row.clientWidth - 1;
+    row.classList.toggle("more-start", start);
+    row.classList.toggle("more-end", end);
+    back.disabled = !start;
+    ahead.disabled = !end;
+  };
+  // whether the row overflows is measured without the scroll buttons, as their room may be all it lacks
+  const fit = (): void => {
+    back.hidden = true;
+    ahead.hidden = true;
+    const scrolls = row.scrollWidth > row.clientWidth + 1;
+    back.hidden = !scrolls;
+    ahead.hidden = !scrolls;
+    fades();
   };
   row.addEventListener("scroll", fades, { passive: true });
-  new ResizeObserver(fades).observe(row);
+  // a frame later, as showing or hiding the scroll buttons resizes the row again
+  new ResizeObserver(() => requestAnimationFrame(fit)).observe(row);
   // after the groups have shown the active one, so it is the one to bring in
   store.on("tool", () => {
     const on = row.querySelector<HTMLElement>(".tb-tool.active");
@@ -1000,11 +1048,36 @@ function scrollTools(row: HTMLElement): void {
       row.scrollTo({ left: row.scrollLeft + (r.left + r.width / 2) - (box.left + box.width / 2), behavior: "smooth" });
     }
   });
-  fades();
+  fit();
+}
+
+/**
+ * The Tool sets button at the tool row's end: a submenu per tool set, as Window > Workspaces >
+ * Tool Sets… arranges them, each tool with its icon and key, and a row that opens the Tool Sets
+ * palette. It is pressed while the tool is one that only the tool sets hold.
+ */
+function mountToolSets(setTool: (id: ToolId) => void): void {
+  const btn = byId<HTMLButtonElement>("btn-toolsets");
+  btn.innerHTML = `${PALETTE_ICON.toolSets}${UI_ICON.caret}`;
+  menuButton(btn, () => [
+    ...toolSets().map((set): Row => ({ label: set.label, icon: setIcon(set), items: set.tools.map((id) => toolRow(id, setTool)) })),
+    "-",
+    { label: "Show Tool Sets Palette", run: () => appContext()?.palettes.show("toolsets") },
+  ]);
+  const sync = (): void => {
+    btn.classList.toggle("active", !IN_TOP_BAR.has(store.tool) && toolSets().some((s) => s.tools.includes(store.tool)));
+  };
+  store.on("tool", sync);
+  setListeners.add(sync);
+  sync();
 }
 
 /** The caret's chevron, down. */
 const CHEVRON = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+/** The tool row's scroll buttons' chevrons, left and right. */
+const CHEVRON_LEFT = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M7.5 3 4.5 6 7.5 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const CHEVRON_RIGHT = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /** A file's name without its extension: a short one with a letter in it, so "Plan 2.1" keeps its ".1". */
 function baseName(name: string): string {
@@ -1020,7 +1093,7 @@ function saveCaretRows(): Row[] {
   const pick = (label: string): Row | undefined => rows.find((r): r is Item => r !== "-" && r.label === label);
   const groups: (Row | undefined)[][] = [
     ["Save", "Save As…", "Save to Cloud…", "Save to Google Drive…", "Save to OneDrive…"].map(pick),
-    [pick("Export"), pick("Share…"), pick("Publish…"), pick("Print…")],
+    [pick("Export"), pick("Share"), pick("Publish…"), pick("Print…")],
   ];
   const out: Row[] = [];
   for (const group of groups) {

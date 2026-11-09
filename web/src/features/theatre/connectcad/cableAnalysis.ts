@@ -66,8 +66,8 @@ export async function analyzeCableRoutes(): Promise<void> {
   const racked = ways.filter(([, w]) => !w.external && w.racked).length;
   const external = ways.filter(([, w]) => w.external).length;
   const failed = ways.filter(([, w]) => !w.external && !w.route && !w.racked);
-  const many = (n: number, one: string, more = one): string => `${n} circuit${n === 1 ? "" : "s"} ${n === 1 ? one : more}`;
-  const said = [many(routed, "runs along the cable paths", "run along the cable paths"), racked ? many(racked, "stays within racks", "stay within racks") : null, external ? many(external, "to externals left out") : null].filter(Boolean).join(", ");
+  const many = (n: number, one: string, more: string): string => `${n} ${n === 1 ? one : more}`;
+  const said = [many(routed, "circuit runs along the cable paths", "circuits run along the cable paths"), racked ? many(racked, "circuit stays within racks", "circuits stay within racks") : null, external ? many(external, "circuit to externals left out", "circuits to externals left out") : null].filter(Boolean).join(", ");
   if (!failed.length) {
     toast(`Analyze Cable Routes: ${said}.`, "info");
     return;
@@ -94,7 +94,7 @@ export async function analyzeCableRoutes(): Promise<void> {
     okLabel: "Mark up Circuits",
     cls: "ccad-dialog",
     body: [
-      h("p", { text: `${said}; ${many(failed.length, "couldn't be given a cable route")}:` }),
+      h("p", { text: `${said}; ${many(failed.length, "circuit couldn't be given a cable route", "circuits couldn't be given a cable route")}:` }),
       h("div", { cls: "ccad-scroll" }, h("table", { cls: "ccad-table" }, h("tr", {}, h("th", { text: "Circuit" }), h("th", { text: "Problem" })), ...issues.map((i) => h("tr", {}, h("td", { text: i.information }), h("td", { text: i.problem }))))),
       h("p", { cls: "muted", text: `Mark up Circuits marks them in the class ${MARKUP_CLASS}. A camera not yet joined to the cable paths can wait; join it with the Cable Route tool, or name its drop point in its equipment's Object Info.` }),
     ],

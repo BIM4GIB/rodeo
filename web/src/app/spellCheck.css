@@ -59,7 +59,7 @@
   background: var(--fill);
   color: var(--text);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .sc-suggestion:hover {

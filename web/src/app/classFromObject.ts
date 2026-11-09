@@ -139,7 +139,7 @@ export async function updateClassFrom(id: string | null): Promise<void> {
     toast("The drawing has no class to update.", "info");
     return;
   }
-  const list = h("select", { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Class" } }, ...classes.map((c) => h("option", { value: String(c.index), text: c.name })));
+  const list = h("select", { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Class" } }, ...classes.map((c) => h("option", { attrs: { translate: "no" }, value: String(c.index), text: c.name })));
   list.value = String(classes.some((c) => c.index === o.classIndex) ? o.classIndex : classes[0].index);
   const ticks = groupsOf(o).map((g) => ({ g, box: h("input", { attrs: { type: "checkbox", "aria-label": GROUP_LABEL[g] } }) }));
   for (const t of ticks) t.box.checked = true;

@@ -72,7 +72,7 @@ export async function editWorksheet(index?: number): Promise<void> {
   const picker = h(
     "select",
     { cls: "ws-picker", attrs: { "aria-label": "Worksheet" } },
-    ...sheets.map(([i, name]) => h("option", { value: String(i), text: name })),
+    ...sheets.map(([i, name]) => h("option", { attrs: { translate: "no" }, value: String(i), text: name })),
   );
   const ref = h("span", { cls: "ws-ref", attrs: { "aria-live": "polite" } });
   const entry = h("input", { cls: "ws-entry", attrs: { type: "text", "aria-label": "Cell contents", spellcheck: "false", autocomplete: "off" } });
@@ -179,7 +179,7 @@ export async function editWorksheet(index?: number): Promise<void> {
       tds.push(line);
       body.append(h("tr", { cls: db ? "db" : "" }, h("th", { cls: "ws-row", text: db ? `${r + 1} ▸` : String(r + 1), attrs: { scope: "row" } }), ...line));
     }
-    const table = h("table", { cls: "ws-grid" }, h("thead", {}, head), body);
+    const table = h("table", { cls: "ws-grid", attrs: { translate: "no" } }, h("thead", {}, head), body);
     table.addEventListener("pointerdown", (e) => {
       const td = (e.target as HTMLElement).closest("td");
       if (!td?.dataset.row) return;

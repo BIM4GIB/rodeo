@@ -323,6 +323,93 @@ console.log("\nground plane");
   level.dispose();
 }
 
+console.log("\nlibrary attributes");
+{
+  // a wall in the y-z plane, 2 m across (y) and 3 m up (z), facing +x; the second faces −x
+  const corners = [0, 0, 0, 0, 2000, 0, 0, 2000, 3000, 0, 0, 3000];
+  const east = face(indexed(corners, [0, 1, 2, 0, 2, 3]));
+  const west = face(indexed(corners, [0, 2, 1, 0, 3, 2]));
+  const key = materialKey(east);
+  const withLibrary: RenderSettings = { ...DEFAULT_RENDER, materials: { [key]: { preset: "auto", library: "test-oak" } } };
+  const xyz = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number) => new THREE.Vector3(a.getX(i), a.getY(i), a.getZ(i));
+
+  const s = build([east], [], [], withLibrary);
+  const mesh = meshesOf(rootOf(s))[0];
+  const uv = mesh.geometry.attributes.uv;
+  const tan = mesh.geometry.attributes.tangent;
+  check(uv !== undefined && tan !== undefined && tan.itemSize === 4, "a library group's faces get UVs and a tangent");
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  for (let i = 0; i < uv.count; i++) {
+    minU = Math.min(minU, uv.getX(i));
+    maxU = Math.max(maxU, uv.getX(i));
+    minV = Math.min(minV, uv.getY(i));
+    maxV = Math.max(maxV, uv.getY(i));
+  }
+  check(near(maxU - minU, 2) && near(maxV - minV, 3), `box UVs in metres: the 2 m wall spans 2 units across and 3 up (${(maxU - minU).toFixed(3)}, ${(maxV - minV).toFixed(3)})`);
+
+  const normal = new THREE.Vector3(1, 0, 0);
+  let orthogonal = true;
+  let unit = true;
+  let flowsAlong = true;
+  let handed = true;
+  for (let i = 0; i < tan.count; i++) {
+    const t = xyz(tan, i);
+    const w = tan.getW(i);
+    unit = unit && near(t.length(), 1);
+    orthogonal = orthogonal && near(t.dot(normal), 0);
+    // the tangent runs along +y (u), the bitangent cross(normal, tangent) times w up the wall (+z, v)
+    flowsAlong = flowsAlong && close(t, new THREE.Vector3(0, 1, 0));
+    handed = handed && close(new THREE.Vector3().crossVectors(normal, t).multiplyScalar(w), new THREE.Vector3(0, 0, 1));
+  }
+  check(unit && orthogonal, "every tangent is a unit vector across the normal");
+  check(flowsAlong && handed, "the tangent runs along the wall's u, and its w makes the bitangent point up the wall");
+
+  const ws = build([west], [], [], withLibrary);
+  const wm = meshesOf(rootOf(ws))[0];
+  const wt = wm.geometry.attributes.tangent;
+  const wNormal = new THREE.Vector3(-1, 0, 0);
+  let westOk = true;
+  for (let i = 0; i < wt.count; i++) {
+    const t = xyz(wt, i);
+    westOk = westOk && close(t, new THREE.Vector3(0, -1, 0)) && near(t.dot(wNormal), 0) && close(new THREE.Vector3().crossVectors(wNormal, t).multiplyScalar(wt.getW(i)), new THREE.Vector3(0, 0, 1));
+  }
+  check(westOk, "a wall facing −x: its tangent runs along −y, and its bitangent still points up");
+
+  // a picture's UVs are the drawing's: kept as they are, not box-projected
+  const drawn = indexed(corners, [0, 1, 2, 0, 2, 3]);
+  drawn.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+  const d = meshesOf(rootOf(build([face(drawn)], [], [], withLibrary)))[0];
+  check(d.geometry.attributes.uv.getX(1) === 1 && d.geometry.attributes.uv.getY(2) === 1 && d.geometry.attributes.uv.getX(5) === 0 && d.geometry.attributes.tangent !== undefined, "a drawing's UVs are kept, and the tangent is still added");
+
+  // without a library: no UVs and no tangent; the faces' own geometry is never changed
+  const plain = meshesOf(rootOf(build([east])))[0];
+  check(plain.geometry.attributes.uv === undefined && plain.geometry.attributes.tangent === undefined, "a group without a library gets neither UVs nor a tangent");
+  check(east.geometry.attributes.uv === undefined && east.geometry.attributes.tangent === undefined, "the 3D view's geometry is never changed");
+
+  // a library added in an update: the faces gain their attributes in place (the geometry changes); the same settings change nothing; losing the library keeps them
+  const live = build([east]);
+  const added = live.update(withLibrary, DEFAULT_VIZ);
+  check(only(added, ["geometry", "materials"]), `a library added in an update: geometry and materials (${show(added)})`);
+  check(only(live.update(withLibrary, DEFAULT_VIZ), []), "the same library again: nothing changes");
+  const removed = live.update(DEFAULT_RENDER, DEFAULT_VIZ);
+  check(only(removed, ["materials"]) && meshesOf(rootOf(live))[0].geometry.attributes.tangent !== undefined, "library removed: materials only, the tangent kept");
+  live.dispose();
+
+  // the WebGPU path tracer gives every geometry it takes a tangent (zeros, without UVs): a library added after still gets its own
+  const traced = build([east]);
+  const tg = meshesOf(rootOf(traced))[0].geometry;
+  tg.setAttribute("tangent", new THREE.BufferAttribute(new Float32Array(tg.attributes.position.count * 4), 4));
+  const later = traced.update(withLibrary, DEFAULT_VIZ);
+  const laterTangent = meshesOf(rootOf(traced))[0].geometry.attributes.tangent;
+  check(
+    only(later, ["geometry", "materials"]) && tg.attributes.uv !== undefined && laterTangent.getX(0) ** 2 + laterTangent.getY(0) ** 2 + laterTangent.getZ(0) ** 2 > 0.99,
+    "a tracer's tangent does not stop a library's UVs and tangent",
+  );
+  traced.dispose();
+  s.dispose();
+  ws.dispose();
+}
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exitCode = failures === 0 ? 0 : 1;
 

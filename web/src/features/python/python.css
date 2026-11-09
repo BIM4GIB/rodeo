@@ -41,7 +41,7 @@
   background: none;
   color: var(--accent);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 /* a layout dialog a script shows (layoutDialog.ts): its controls where the script placed them */

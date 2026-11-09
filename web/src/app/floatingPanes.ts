@@ -240,7 +240,7 @@ class Pane {
     return [
       { label: "Top/Plan", checked: () => this.kind === "plan", run: () => this.showPlan() },
       "-",
-      ...STANDARD_VIEWS.map(([id, label]): Row => ({ label, checked: () => this.kind === "3d" && this.preset === id, run: () => void this.show3d(id) })),
+      ...STANDARD_VIEWS.map(([id, label]): Row => ({ label, i18n: `View › ${label}`, checked: () => this.kind === "3d" && this.preset === id, run: () => void this.show3d(id) })),
       "-",
       { label: "Fit to Window", run: () => void this.fit() },
       { label: "Show in Main View", run: () => this.handOver() },

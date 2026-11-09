@@ -14,8 +14,18 @@ import { errorMessage, toast } from "./toast.ts";
 import type { View } from "./view.ts";
 import "./revitFile.css";
 
-/** The drawing of the Revit model in `bytes`, from the file `name`, made in a worker; `progress` hears each step, and `signal` stops it. */
-export function revitModelDrawing(bytes: Uint8Array, name: string, progress?: (step: string) => void, signal?: AbortSignal): Promise<RevitDrawing> {
+/**
+ * The drawing of the Revit model in `bytes`, from the file `name`, made in a worker; `progress` hears
+ * each step, and `signal` stops it. Once it resolves, the worker reads on for the elements only a
+ * slower pass draws in full: `detail` hears the drawing made again with them, when there are any.
+ */
+export function revitModelDrawing(
+  bytes: Uint8Array,
+  name: string,
+  progress?: (step: string) => void,
+  signal?: AbortSignal,
+  detail?: (drawing: RevitDrawing, count: number) => void,
+): Promise<RevitDrawing> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./revitImport.worker.ts", import.meta.url), { type: "module" });
     signal?.addEventListener("abort", () => {
@@ -25,9 +35,13 @@ export function revitModelDrawing(bytes: Uint8Array, name: string, progress?: (s
     worker.onmessage = (e: MessageEvent<RevitReply>) => {
       const m = e.data;
       if (m.type === "progress") return progress?.(m.step);
+      if (m.type === "done") {
+        resolve(m.drawing);
+        if (detail) return;
+      } else if (m.type === "detail") {
+        if (m.drawing) detail?.(m.drawing, m.count);
+      } else reject(new Error(m.message));
       worker.terminate();
-      if (m.type === "done") resolve(m.drawing);
-      else reject(new Error(m.message));
     };
     worker.onerror = (e) => {
       worker.terminate();

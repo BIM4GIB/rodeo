@@ -91,7 +91,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--fill);
-  cursor: pointer;
+  cursor: default;
 }
 
 .re-btn {
@@ -103,7 +103,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .re-btn:hover:not(:disabled) {

@@ -128,7 +128,8 @@ export function installAutosave(deps: AutosaveDeps): void {
     }
   };
   window.setInterval(() => void tick(), TICK_MS);
-  void offerRecovery(deps);
+  // an embed (?embed) shows someone else's drawing: a copy this browser's editor left waits for the editor
+  if (!new URLSearchParams(location.search).has("embed")) void offerRecovery(deps);
 }
 
 /** At start: when a copy with unsaved changes was left, offers to open it. */

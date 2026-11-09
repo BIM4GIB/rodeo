@@ -26,7 +26,7 @@ const TEXT = 4;
 const DIMENSION = 7;
 const POPUP = 8;
 
-const FIELD = {
+export const FIELD = {
   name: "Building Name",
   show: "Show in Plan",
   label: "Label",
@@ -167,11 +167,17 @@ export async function massingDialog(start: MassingSettings): Promise<MassingSett
   };
 }
 
-interface Building {
+/** What a massing model is drawn from: Rodeo's own, or Vectorworks Landmark's read as one (features/landmark). */
+export interface Building {
   readonly id: string;
   readonly layerId: string;
   readonly format: number;
+  /** a parameter, by Rodeo's name for it (FIELD) */
   value(field: string): RecordValue | undefined;
+  /** its outline in its own frame, when it isn't kept in Path Points */
+  readonly corners?: readonly Pt[];
+  /** keeps its gross area (mm², all floors), when it isn't kept as Gross Area's text */
+  gross?(s: EditSession, area: number): void;
 }
 
 function buildingOf(doc: VwxDocument, id: string): Building | null {
@@ -183,6 +189,7 @@ function buildingOf(doc: VwxDocument, id: string): Building | null {
 const numberOf = (b: Building, field: string): number => Number(b.value(field)) || 0;
 
 const cornersOf = (b: Building): Pt[] => {
+  if (b.corners) return [...b.corners];
   try {
     return JSON.parse(String(b.value(FIELD.path) || "[]")) as Pt[];
   } catch {
@@ -202,7 +209,8 @@ function placeOf(o: ObjectInfo): { toWorld(q: Pt): Pt; toLocal(q: Pt): Pt } {
 
 const classNamed = (doc: VwxDocument, name: string): number | null => (name === OWN_CLASS ? null : (doc.classes().find((c) => c.name === name)?.index ?? null));
 
-function redraw(s: EditSession, b: Building): void {
+/** Draws a massing model again from its parameters, in place of what it showed. */
+export function redraw(s: EditSession, b: Building): void {
   const doc = s.doc;
   const corners = cornersOf(b);
   const object = doc.object(b.id);
@@ -251,7 +259,8 @@ function redraw(s: EditSession, b: Building): void {
   const label = String(b.value(FIELD.label));
   const lines = [...(label === "Name" || label === "Name and Gross Area" ? [name] : []), ...(label === "Gross Area" || label === "Name and Gross Area" ? [`Area: ${area}`] : [])].filter(Boolean);
   if (lines.length) add({ kind: "text", at: { x: numberOf(b, FIELD.labelX), y: numberOf(b, FIELD.labelY) }, text: lines.join("\r"), height: LABEL_MM * scale, hAlign: 2, vAlign: 5 } as NewShape, { fillPattern: 0 });
-  s.setRecordField(b.id, b.format, FIELD.gross, area);
+  if (b.gross) b.gross(s, grossArea(corners, numberOf(b, FIELD.floors)));
+  else s.setRecordField(b.id, b.format, FIELD.gross, area);
   const ids = s.addObjects(b.layerId, shapes, classIndex, looks);
   // each kind of part in the class chosen for it, or looking as a shell does
   const solidIn = (faces: number[][], css: string, chosen: RecordValue | undefined): void => {

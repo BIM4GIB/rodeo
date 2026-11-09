@@ -26,7 +26,7 @@
   border-radius: 50%;
   background: transparent;
   color: var(--text-2);
-  cursor: pointer;
+  cursor: default;
 }
 
 .smart-hub {
@@ -130,7 +130,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .picker-tab:hover {
@@ -204,7 +204,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
+  cursor: default;
 }
 
 .smart-item:hover {

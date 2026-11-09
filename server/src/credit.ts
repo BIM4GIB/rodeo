@@ -7,6 +7,7 @@
 
 import type { Hono } from "hono";
 import type { AiCreditInfo, AiCreditTerms } from "../../web/src/platform/protocol.ts";
+import { logAdmin } from "./adminLog.ts";
 import { isAdmin, planOf, requireUser, type UserRow } from "./auth.ts";
 import { config, type AiCredit } from "./config.ts";
 import { all, get, run, tx } from "./db.ts";
@@ -173,6 +174,7 @@ export function registerCredit(app: Hono): void {
     const micro = Math.round(amount * MICRO);
     if (micro < 0 && balanceOf(user.id) + micro < 0) fail(400, "That would take their balance below nothing");
     const balance = addCredit(user.id, "grant", micro, { ref: admin.email, note });
+    logAdmin(admin, amount > 0 ? "credit.grant" : "credit.take", user.email, `${formatMoney(Math.abs(amount), credit.currency)}${note ? `: ${note}` : ""}`);
     if (body.notify === true && micro > 0) {
       const given = formatMoney(amount, credit.currency);
       const text = [

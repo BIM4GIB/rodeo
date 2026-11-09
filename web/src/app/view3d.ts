@@ -8,7 +8,8 @@
 // perspective or orthogonal camera, where the sun stands and whether it casts shadows,
 // and the clip cube that cuts the model open; View > Rendering's options how Shaded draws
 // (textures, colours, edges, shadows on the ground only, their quality) and the dashes of
-// Dashed Hidden Line.
+// Dashed Hidden Line. The selected objects are drawn over the model in the selection's colour
+// (setSelected).
 
 import "./view3d.css";
 import * as THREE from "three";
@@ -17,13 +18,15 @@ import type { Light3D, Mesh3D, ResourceInfo, Vec3 } from "../core/index.ts";
 import { beamGroup, boxReach, disposeBeams, surfaceReaches } from "./beams.ts";
 import { h } from "./dom.ts";
 import { DEFAULT_VIZ, MAX_LAMPS, sunPlace, type ShadowQuality, type Viz3D } from "./heliodon.ts";
+import { ACCENT } from "./renderer.ts";
 
 /**
  * Hidden Line: white faces hide the edges behind them; Dashed Hidden Line also dashes those edges.
- * Realistic and Path Traced are drawn by the render feature (setRenderHook); Shaded without one.
+ * Realistic, Path Traced and AI are drawn by the render feature (setRenderHook); Shaded without one.
  */
 export type RenderMode = "shaded" | "textured" | "wireframe" | "hidden" | "dashed" | "sketch" | RealisticMode;
-export type RealisticMode = "realistic" | "pathtraced";
+/** AI: the Realistic picture painted by the server's image model once the view rests (features/render/aiLive.ts) */
+export type RealisticMode = "realistic" | "pathtraced" | "ai";
 /** the standard views; "iso" is Right Isometric */
 export type ViewPreset =
   | "top"
@@ -42,7 +45,7 @@ export type ViewPreset =
   | "lowerLeftRearIso";
 
 export function isRealistic(mode: RenderMode): mode is RealisticMode {
-  return mode === "realistic" || mode === "pathtraced";
+  return mode === "realistic" || mode === "pathtraced" || mode === "ai";
 }
 
 /** What draws the Realistic and Path Traced modes (features/render), with the view's renderer and camera. */
@@ -79,6 +82,9 @@ export interface FaceHit {
   readonly normal: Vec3;
   readonly objectId: string | null;
 }
+
+/** What a tool does with a click on the model in place of picking (View3D.onFacePick). */
+export type FacePick = (hit: FaceHit | null, shift: boolean, e: MouseEvent) => void;
 
 /** One merged face group of the model, as a renderer of its own takes it (modelFaces). */
 export interface ModelFace {
@@ -195,6 +201,11 @@ const EMPTY = new Float32Array(0);
 const PLANE_GRID_COLOR = 0x7f8a99;
 /** the edges and faces a tool has chosen */
 const HIGHLIGHT_LINE_COLOR = 0xff6a00;
+/** how strongly the selection's colour tints its faces, and shows its edges where faces hide them */
+const SELECTION_TINT = 0.18;
+const SELECTION_THROUGH = 0.35;
+/** past this many triangles (or edge segments) the selection's faces go untinted (its edges unmarked), so selecting all of a huge model stays quick */
+const SELECTION_CAP = 1_000_000;
 const PLANE_X_COLOR = 0xe5484d;
 const PLANE_Y_COLOR = 0x30a46c;
 
@@ -222,6 +233,8 @@ interface Run {
   readonly start: number;
   readonly end: number;
   readonly obj: number;
+  /** the object inside a top-level group they belong to (Mesh3D.partId), as an index into partIds; -1 for none */
+  readonly part: number;
 }
 
 /** One merged shaded mesh: every triangle of one colour, opacity and texture. */
@@ -274,8 +287,15 @@ interface EdgeBuild {
 export class View3D {
   /** Called on a click: the object under the pointer (null for empty space) and whether Shift was held. */
   onPick: ((objectId: string | null, additive: boolean) => void) | null = null;
-  /** While set, a click on the model calls this with the face under it (null over empty space) instead of picking. */
-  onFacePick: ((hit: FaceHit | null, shift: boolean, e: MouseEvent) => void) | null = null;
+  /** While set, a click on the model calls this with the face under it (null over empty space) instead of picking; the cursor is a crosshair. */
+  get onFacePick(): FacePick | null {
+    return this.facePick;
+  }
+  set onFacePick(pick: FacePick | null) {
+    this.facePick = pick;
+    this.canvas.classList.toggle("picking", pick !== null);
+  }
+  private facePick: FacePick | null = null;
   /** the working plane's grid and axes, when one is shown */
   private planeGrid: THREE.Group | null = null;
 
@@ -346,9 +366,27 @@ export class View3D {
   private faces: FaceGroup[] = [];
   private edges: EdgeGroup[] = [];
   private objectIds: string[] = [];
+  /** the objects inside top-level groups the model draws (Mesh3D.partId), numbered as Run.part numbers them */
+  private partIds: string[] = [];
   private highlightLines: THREE.LineSegments[] = [];
   private objectLayer: string[] = [];
   private objectVisible = new Uint8Array(0);
+  /** the objects selected, with the objects inside them (setSelected) */
+  private selected: ReadonlySet<string> = new Set();
+  /** the highlight is to be gathered again before it is drawn: the selection, the model or the layers shown have changed */
+  private selectionStale = false;
+  /** whether the highlight has faces to tint, and edges to draw */
+  private selectionHasFaces = false;
+  private selectionHasEdges = false;
+  /** the selection's highlight, drawn after the model in every mode: its faces tinted, its edges faint where faces hide them, its edges */
+  private readonly selectionScene = new THREE.Scene();
+  private readonly selectionFaces = new THREE.MeshBasicMaterial({ transparent: true, opacity: SELECTION_TINT, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  private readonly selectionThrough = new THREE.LineBasicMaterial({ transparent: true, opacity: SELECTION_THROUGH, depthTest: false, depthWrite: false, toneMapped: false });
+  private readonly selectionLines = new THREE.LineBasicMaterial({ transparent: true, toneMapped: false });
+  private readonly selectionTint = new THREE.Mesh(new THREE.BufferGeometry(), this.selectionFaces);
+  private readonly selectionEdges = new THREE.LineSegments(new THREE.BufferGeometry(), this.selectionLines);
+  /** the same segments as selectionEdges, drawn through the faces */
+  private readonly selectionHidden = new THREE.LineSegments(this.selectionEdges.geometry, this.selectionThrough);
   /** the visible layers; null until setVisibleLayers is called, meaning all of them */
   private visibleLayers: ReadonlySet<string> | null = null;
   private renderer: THREE.WebGLRenderer | null = null;
@@ -393,6 +431,12 @@ export class View3D {
     this.ground.receiveShadow = true;
     this.ground.visible = false;
     this.scene.add(this.sky, this.sun, this.sun.target, this.lamps, this.beams, this.clipHelper, this.ground);
+    // the selection's highlight: tint, then the faint edges, then the edges; never culled, as its geometry is swapped
+    this.selectionTint.renderOrder = 0;
+    this.selectionHidden.renderOrder = 1;
+    this.selectionEdges.renderOrder = 2;
+    for (const o of [this.selectionTint, this.selectionHidden, this.selectionEdges]) o.frustumCulled = false;
+    this.selectionScene.add(this.selectionTint, this.selectionHidden, this.selectionEdges);
     this.dashedMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.dashes = this.dashUniforms.dashes;
       shader.uniforms.dashCount = this.dashUniforms.dashCount;
@@ -415,6 +459,8 @@ export class View3D {
     this.controls.addEventListener("change", () => {
       this.requestRender();
       this.queueLamps();
+      // a drag that moves the view closes the hand; a click that picks leaves the arrow
+      if (this.down.size > 0) this.canvas.classList.add("moving");
     });
     this.canvas.addEventListener("pointerdown", (e) => {
       if (this.down.size === 0) {
@@ -446,6 +492,7 @@ export class View3D {
       this.steerBy(e.clientX - steer.x, e.clientY - steer.y);
       steer.x = e.clientX;
       steer.y = e.clientY;
+      this.canvas.classList.add("moving");
     });
     this.canvas.addEventListener("pointerup", (e) => this.release(e, false));
     this.canvas.addEventListener("pointercancel", (e) => this.release(e, true));
@@ -508,6 +555,7 @@ export class View3D {
     this.applyVisibility();
     this.loadTextures();
     this.applyMode();
+    this.selectionStale = true;
   }
 
   /** Hides the objects on layers that are not in `ids`. */
@@ -673,6 +721,18 @@ export class View3D {
   /** Where the camera would stand for a standard view framing the visible model in a picture `width` × `height`; the view stays as it is. */
   presetState(preset: ViewPreset, width: number, height: number): CameraState {
     return this.framedState(VIEW_DIRS[preset], width, height);
+  }
+
+  /** The standard view `state` looks from: its eye in that view's direction from the point it orbits, within a hair; null when it is in none. */
+  standardViewOf(state: CameraState): ViewPreset | null {
+    const toward = new THREE.Vector3(...state.position).sub(new THREE.Vector3(...state.target));
+    if (!(toward.lengthSq() > 0)) return null;
+    toward.normalize();
+    for (const [preset, dir] of Object.entries(VIEW_DIRS) as [ViewPreset, [number, number, number]][]) {
+      // within about 0.8°
+      if (toward.dot(new THREE.Vector3(...dir).normalize()) > 0.9999) return preset;
+    }
+    return null;
   }
 
   /** Where the camera would stand looking along `toward` (from the model to the eye), framing the visible model in a picture `width` × `height`; the view stays as it is. */
@@ -964,6 +1024,9 @@ export class View3D {
     this.edgeMaterial.dispose();
     this.dashedMaterial.dispose();
     for (const m of [...this.hiddenFaces, ...this.paperFaces, ...this.sketchMaterials]) m.dispose();
+    this.selectionTint.geometry.dispose();
+    this.selectionEdges.geometry.dispose();
+    for (const m of [this.selectionFaces, this.selectionThrough, this.selectionLines]) m.dispose();
     if (this.renderer) {
       this.renderer.dispose();
       this.renderer.forceContextLoss();
@@ -1125,6 +1188,15 @@ export class View3D {
   }
 
   /** The insets to keep clear, or none when the palettes would leave too little of a narrow canvas. */
+  /**
+   * The part of the view the picture is centred in, CSS px from the view's left and right edges (both 0
+   * unless palettes cover its sides): the camera's axis meets the middle of what is left. Render
+   * Studio's frame is laid out from it.
+   */
+  get clearSides(): { left: number; right: number } {
+    return this.clearInsets(this.host.clientWidth);
+  }
+
   private clearInsets(w: number): { left: number; right: number } {
     const { left, right } = this.insets;
     return left + right < w * 0.6 ? { left, right } : { left: 0, right: 0 };
@@ -1139,7 +1211,8 @@ export class View3D {
     });
   }
 
-  private draw(): void {
+  /** Draws the view: the model, then (unless `selection` is false: a capture) the selection's highlight over it. */
+  private draw(selection = true): void {
     if (!this.renderer || !this.shown) return;
     this.shearOblique();
     this.renderer.setClearColor(this.background());
@@ -1151,6 +1224,7 @@ export class View3D {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    if (selection) this.drawSelection(this.renderer);
     if (this.pictureWaits) {
       // the render feature drew this frame because it is further along: the panes try again
       this.pictureWaits = false;
@@ -1232,9 +1306,10 @@ export class View3D {
     this.applyVisibility();
   }
 
-  /** Draws now, so the canvas can be read straight after (image and video capture). */
+  /** Draws now, so the canvas can be read straight after (image and video capture): the model without the selection's highlight, which the next frame puts back. */
   renderNow(): void {
-    this.draw();
+    this.draw(false);
+    if (this.selected.size > 0) this.requestRender();
   }
 
   /** Puts the camera at `position` looking at `target` (following a collaborator's view). */
@@ -1296,6 +1371,70 @@ export class View3D {
     add(chosen, HIGHLIGHT_LINE_COLOR, 10);
     for (const c of coloured ?? []) add(c.segments, c.color, 11);
     this.requestRender();
+  }
+
+  /** The objects selected, with the objects inside them (ids of top-level objects and of objects in groups): drawn over the model in the selection's colour. */
+  setSelected(ids: ReadonlySet<string>): void {
+    this.selected = ids;
+    this.selectionStale = true;
+    this.requestRender();
+  }
+
+  /** Gathers the selected objects' visible triangles and edge segments into the highlight's geometry. */
+  private buildSelection(): void {
+    this.selectionStale = false;
+    const ids = this.selected;
+    const chosen = new Uint8Array(this.objectIds.length);
+    for (let o = 0; o < chosen.length && ids.size > 0; o++) chosen[o] = this.objectVisible[o] === 1 && ids.has(this.objectIds[o]) ? 1 : 0;
+    const parts = this.partIds.map((id) => ids.has(id));
+    const picked = (run: Run): boolean => this.objectVisible[run.obj] === 1 && (chosen[run.obj] === 1 || (run.part >= 0 && parts[run.part]));
+    // the picked runs' items (9 floats a triangle, 6 a segment), copied out of each merged array; none past the cap
+    const gather = (sets: readonly (readonly [readonly Run[], Float32Array])[], width: number): Float32Array => {
+      if (ids.size === 0) return EMPTY;
+      let count = 0;
+      for (const [runs] of sets) for (const run of runs) if (picked(run)) count += run.end - run.start;
+      if (count === 0 || count > SELECTION_CAP) return EMPTY;
+      const out = new Float32Array(count * width);
+      let at = 0;
+      for (const [runs, xyz] of sets) {
+        for (const run of runs) {
+          if (!picked(run)) continue;
+          out.set(xyz.subarray(run.start * width, run.end * width), at);
+          at += (run.end - run.start) * width;
+        }
+      }
+      return out;
+    };
+    const faces = gather(this.faces.map((g) => [g.runs, g.mesh.geometry.getAttribute("position").array as Float32Array] as const), 9);
+    const edges = gather(this.edges.map((e) => [e.runs, e.lines.geometry.getAttribute("position").array as Float32Array] as const), 6);
+    this.selectionHasFaces = faces.length > 0;
+    this.selectionHasEdges = edges.length > 0;
+    this.selectionTint.geometry.dispose();
+    this.selectionTint.geometry = pointsGeometry(faces);
+    // the faint edges share the edges' geometry, so it is disposed once
+    this.selectionEdges.geometry.dispose();
+    this.selectionEdges.geometry = this.selectionHidden.geometry = pointsGeometry(edges);
+  }
+
+  /**
+   * Draws the selection's highlight over the frame just drawn: its edges in the selection's colour,
+   * fainter where faces hide them, and its faces tinted where faces are drawn. Over a Realistic or
+   * Path Traced picture, whose depths are the render feature's own, its edges alone, all of them.
+   */
+  private drawSelection(renderer: THREE.WebGLRenderer): void {
+    if (this.selectionStale) this.buildSelection();
+    if (!this.selectionHasFaces && !this.selectionHasEdges) return;
+    const rendered = this.hook !== null && isRealistic(this.mode);
+    this.selectionTint.visible = this.selectionHasFaces && !rendered && this.mode !== "wireframe";
+    this.selectionHidden.visible = this.selectionHasEdges && !rendered;
+    this.selectionEdges.visible = this.selectionHasEdges;
+    this.selectionLines.depthTest = !rendered;
+    for (const m of [this.selectionFaces, this.selectionThrough, this.selectionLines]) m.color.set(ACCENT);
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(null);
+    renderer.render(this.selectionScene, this.camera);
+    renderer.autoClear = autoClear;
   }
 
   /** Where the pointer of `e` meets the level plane at height `z`; null when it looks away from that plane. */
@@ -1518,7 +1657,10 @@ export class View3D {
   private release(e: PointerEvent, cancelled: boolean): void {
     const press = this.press;
     this.down.delete(e.pointerId);
-    if (this.down.size === 0) this.press = null;
+    if (this.down.size === 0) {
+      this.press = null;
+      this.canvas.classList.remove("moving");
+    }
     if (this.steer?.id === e.pointerId) this.steer = null;
     if (!press || cancelled || press.id !== e.pointerId || press.more) return;
     if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > (press.touch ? TAP_SLOP : CLICK_SLOP)) return;
@@ -1541,11 +1683,13 @@ export class View3D {
 
   /**
    * What a left drag does from now on (Navigation); `sensitivity` scales how far a drag turns the
-   * view. The middle button still zooms and the right pans, whatever the left does.
+   * view. The middle button still zooms and the right pans, whatever the left does. `viewing`: the
+   * drag is the tool (a viewing tool), so the cursor is an open hand rather than the arrow.
    */
-  setNavigation(nav: Navigation, sensitivity = 1): void {
+  setNavigation(nav: Navigation, sensitivity = 1, viewing = false): void {
     this.nav = nav;
     this.steer = null;
+    this.canvas.classList.toggle("viewing", viewing);
     const left = nav === "orbit" || nav === "origin" ? THREE.MOUSE.ROTATE : nav === "pan" ? THREE.MOUSE.PAN : null;
     this.controls.mouseButtons = { LEFT: left, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     this.controls.rotateSpeed = sensitivity;
@@ -1575,6 +1719,27 @@ export class View3D {
   boundsOf(ids: ReadonlySet<string>): { readonly min: Vec3; readonly max: Vec3 } | null {
     const box = this.objectsBox(ids);
     return box.isEmpty() ? null : { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] };
+  }
+
+  /** The box round each of objects `ids` that is drawn, in one pass over the faces (a box per object, as Compare outlines changes). */
+  boundsEach(ids: ReadonlySet<string>): Map<string, { readonly min: Vec3; readonly max: Vec3 }> {
+    const boxes = new Map<string, THREE.Box3>();
+    const p = new THREE.Vector3();
+    if (ids.size) {
+      for (const g of this.faces) {
+        const pos = g.mesh.geometry.getAttribute("position");
+        for (const run of g.runs) {
+          const id = this.objectIds[run.obj];
+          if (!ids.has(id)) continue;
+          let box = boxes.get(id);
+          if (!box) boxes.set(id, (box = new THREE.Box3()));
+          for (let i = run.start * 3; i < run.end * 3; i++) box.expandByPoint(p.fromBufferAttribute(pos, i));
+        }
+      }
+    }
+    const out = new Map<string, { readonly min: Vec3; readonly max: Vec3 }>();
+    for (const [id, box] of boxes) out.set(id, { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] });
+    return out;
   }
 
   /** The box round the faces of objects `ids` (empty when none is drawn). */
@@ -1731,6 +1896,11 @@ export class View3D {
     return this.visibleLayers === null || this.visibleLayers.has(layer);
   }
 
+  /** The layers the view shows (setVisibleLayers), or null for all of them. */
+  get shownLayers(): ReadonlySet<string> | null {
+    return this.visibleLayers;
+  }
+
   /** Points the camera at the visible geometry from `dir`, sized to fit whatever the window's shape. */
   private frameView(dir: THREE.Vector3, fitted?: THREE.Box3): void {
     this.framed = true;
@@ -1827,6 +1997,7 @@ export class View3D {
     this.textures.clear();
     this.loading.clear();
     this.objectIds = [];
+    this.partIds = [];
     this.objectLayer = [];
     this.objectVisible = new Uint8Array(0);
     this.layerBoxes.clear();
@@ -1876,13 +2047,15 @@ export class View3D {
     }
     for (const eb of edgeBuilds.values()) eb.positions = new Float32Array(eb.segs * 6);
 
-    // pass 2: copy the geometry in, recording which object each run belongs to
+    // pass 2: copy the geometry in, recording which object (and which object inside a group) each run belongs to
     const objects = new Map<string, number>();
+    const parts = new Map<string, number>();
     for (const m of meshes) {
       const tris = Math.floor(m.triangles.length / 9);
       const segs = Math.floor(m.edges.length / 6);
       if (tris === 0 && segs === 0) continue;
       const obj = this.objectOf(m, objects);
+      const part = this.partOf(m, parts);
       if (tris > 0) {
         const fb = faceBuilds.get(this.faceKey(m).key)!;
         const src = m.triangles.subarray(0, tris * 9);
@@ -1891,7 +2064,7 @@ export class View3D {
         if (fb.uvs && m.uvs?.length === tris * 6) ownUvs(m.uvs, fb.uvs.subarray(t0 * 6, (t0 + tris) * 6));
         else if (fb.uvs) boxUvs(src, fb.uvs.subarray(t0 * 6, (t0 + tris) * 6), fb.imageSize);
         fb.fill += tris;
-        fb.runs.push({ start: t0, end: fb.fill, obj });
+        fb.runs.push({ start: t0, end: fb.fill, obj, part });
         this.extendBounds(m.layerId, src);
       }
       if (segs > 0) {
@@ -1900,7 +2073,7 @@ export class View3D {
         const s0 = eb.fill;
         eb.positions.set(src, s0 * 6);
         eb.fill += segs;
-        eb.runs.push({ start: s0, end: eb.fill, obj });
+        eb.runs.push({ start: s0, end: eb.fill, obj, part });
         this.extendBounds(m.layerId, src);
       }
     }
@@ -1974,6 +2147,18 @@ export class View3D {
     return obj;
   }
 
+  /** Index of the object inside a top-level group a mesh belongs to (Mesh3D.partId), numbering new ones as they come; -1 for none. */
+  private partOf(m: Mesh3D, parts: Map<string, number>): number {
+    if (m.partId === undefined) return -1;
+    let part = parts.get(m.partId);
+    if (part === undefined) {
+      part = this.partIds.length;
+      parts.set(m.partId, part);
+      this.partIds.push(m.partId);
+    }
+    return part;
+  }
+
   /** Grows the bounding box of a layer by the points of `xyz` (3 floats per point). */
   private extendBounds(layer: string, xyz: Float32Array): void {
     if (xyz.length < 3) return;
@@ -2006,11 +2191,12 @@ export class View3D {
   /** Rewrites every index buffer to the objects on visible layers and sets the draw ranges. */
   /** The light objects' shadows are drawn again at the next frame: what the model shows has changed. */
   private staleShadows(): void {
-    for (const c of this.lamps.children) if (c instanceof THREE.Light && c.castShadow && c.shadow) c.shadow.needsUpdate = true;
+    for (const c of this.lamps.children) if (c instanceof THREE.Light && c.castShadow && "shadow" in c && c.shadow instanceof THREE.LightShadow) c.shadow.needsUpdate = true;
   }
 
   private applyVisibility(): void {
     this.modelSerial++;
+    this.selectionStale = true;
     for (let o = 0; o < this.objectLayer.length; o++) {
       this.objectVisible[o] = this.isLayerVisible(this.objectLayer[o]) ? 1 : 0;
     }
@@ -2082,9 +2268,9 @@ export class View3D {
     this.staleShadows();
   }
 
-  /** Every material the model is drawn with, for the clip planes. */
+  /** Every material the model and the selection's highlight are drawn with, for the clip planes. */
   private materials(): THREE.Material[] {
-    const out: THREE.Material[] = [...this.hiddenFaces, ...this.paperFaces, ...this.sketchMaterials, this.edgeMaterial, this.dashedMaterial];
+    const out: THREE.Material[] = [...this.hiddenFaces, ...this.paperFaces, ...this.sketchMaterials, this.edgeMaterial, this.dashedMaterial, this.selectionFaces, this.selectionThrough, this.selectionLines];
     for (const g of this.faces) {
       out.push(g.shaded);
       if (g.textured) out.push(g.textured);
@@ -2481,6 +2667,13 @@ void main() {`,
       .replace("#include <project_vertex>", "#include <project_vertex>\n\tgl_Position.xy += sketchHash(position * 0.37) * sketchWobble * sketchPx * gl_Position.w;");
   };
   return m;
+}
+
+/** Points (3 floats each) as a geometry to draw, as triangles or as line segments. */
+function pointsGeometry(xyz: Float32Array): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(xyz, 3));
+  return geometry;
 }
 
 /** Writes the vertices of the runs whose object is visible into `index`; returns how many were written. */

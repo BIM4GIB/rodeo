@@ -3,7 +3,7 @@
 // can place a 3D locus at the centre of mass, the list as text where the 2D drawing is clicked next,
 // and save it as a text file (engineeringProperties.ts has the shared parts). A volume needs faces
 // that close round it: when the faces' outward areas don't cancel out, the volume and centre of mass
-// are left out. AEC > Machine Design > 3D Properties… (threeDProperties.ts) measures the same way.
+// are left out. Tools > Machine Design > 3D Properties… (threeDProperties.ts) measures the same way.
 
 import type { Mesh3D } from "../core/index.ts";
 import { attempt, setSelection } from "./commands.ts";

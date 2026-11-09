@@ -1,7 +1,7 @@
 /* openvwx editor shell, after Spline's editor: dark chrome round an inset
    drawing card. Colours are tokens on :root (dark); [data-theme="light"] and
    [data-theme="system"] (theme.ts) swap them. The drawing keeps its own paper
-   colour in every theme, unless View > Dark Canvas inverts it. */
+   colour in every theme, unless View > Appearance > Dark Canvas inverts it. */
 
 @import "./tokens.css";
 
@@ -79,7 +79,7 @@ code {
 }
 
 /* Both ends are never narrower than their buttons (the file name stops at .file-info's
-   max-width): past the dock's width when they must be, and .tb-center scrolls instead. */
+   max-width): past the dock's width when they must be, and the tool row scrolls instead. */
 .tb-left {
   width: var(--dock-left, auto);
   min-width: max-content;
@@ -103,6 +103,8 @@ code {
   border-bottom: 1px solid var(--chrome-border);
 }
 
+/* The bar's middle: 2D and 3D with the view buttons at its start, and Undo and Redo at its end, stay
+   where they are; only the tool row between them scrolls, so neither end ever leaves the window. */
 .tb-center {
   display: flex;
   align-items: center;
@@ -110,8 +112,6 @@ code {
   flex: 1 1 auto;
   min-width: 0;
   padding: 0 12px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
 .tb-group {
@@ -121,14 +121,88 @@ code {
   flex: none;
 }
 
-/* the tools sit in the middle of the bar */
-.tb-tools {
+/* the tool row, its scroll buttons and the Tool sets button, in the middle of the room the ends leave;
+   hidden with the tools (Window > Top Bar > Tools) */
+.tb-tools-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  flex: 1 1 auto;
-  min-width: max-content;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.tb-tools-wrap:has(> .tb-tools[hidden]) {
+  display: none;
+}
+
+/* the tools: as wide as they are where they fit, else scrolled sideways, their edges fading where more
+   tools lie beyond them (toolbar.ts sets the classes that set the fades' widths) */
+.tb-tools {
+  --fade-start: 0px;
+  --fade-end: 0px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 4px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
+}
+
+.tb-tools::-webkit-scrollbar {
+  display: none;
+}
+
+.tb-tools.more-start {
+  --fade-start: 24px;
+}
+
+.tb-tools.more-end {
+  --fade-end: 24px;
+}
+
+.tb-tools .tb-tool {
+  scroll-snap-align: start;
+}
+
+/* the row's scroll buttons, shown while it overflows (toolbar.ts): narrower than the bar's other
+   buttons, and left out for a finger, which swipes the row instead */
+#topbar .tb-scroll {
+  width: 20px;
+  min-width: 20px;
+  padding: 0;
+}
+
+#topbar .tb-scroll svg {
+  width: 12px;
+  height: 12px;
+}
+
+@media (pointer: coarse), (max-width: 560px) {
+  #topbar .tb-scroll {
+    display: none;
+  }
+}
+
+/* Undo and Redo keep to the right, by the bar's right end, even with the tools hidden */
+#tb-undo {
+  margin-left: auto;
+}
+
+/* a finger has the quick bar's Undo and Redo and the round mic over the drawing (features/touch,
+   features/voice), so the bar leaves its room to the tools */
+@media (pointer: coarse) {
+  #tb-undo,
+  #topbar .voice-mic {
+    display: none;
+  }
 }
 
 .tb-sep {
@@ -336,6 +410,11 @@ code {
   color: var(--danger);
 }
 
+/* a destructive button that can't act looks like any other disabled button, not like a warning */
+.btn.danger:disabled {
+  color: var(--text);
+}
+
 .btn.small {
   height: 24px;
   padding: 0 8px;
@@ -502,7 +581,7 @@ code {
   visibility: hidden;
 }
 
-/* View > Dark Canvas: the drawing's ink and paper swap, its colours keep their hue */
+/* View > Appearance > Dark Canvas: the drawing's ink and paper swap, its colours keep their hue */
 .dark-canvas .canvas-wrap {
   background: #0f0f0f;
 }
@@ -929,8 +1008,14 @@ code {
   overflow: hidden;
 }
 
+/* the step gives way last: the key chips after it go first (mountModeBar), then a step too long for
+   the hint (a long one, a wordier language) ends in "…" rather than cut */
 .mode-step {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
 }
 
@@ -940,13 +1025,6 @@ code {
   border-radius: 5px;
   background: var(--fill);
   color: var(--text-2);
-}
-
-.mode-hint > :last-child {
-  flex-shrink: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 
@@ -1371,7 +1449,7 @@ code {
   border: 1px solid var(--chrome-border);
   border-radius: 6px;
   background: var(--fill);
-  cursor: pointer;
+  cursor: default;
 }
 
 .class-style {
@@ -1644,45 +1722,9 @@ code {
   }
 }
 
-/* a tablet or a landscape phone: the tool row scrolls inside the top bar, its edges fading where more
-   tools lie beyond them (toolbar.ts sets the classes that set the fades' widths) */
-@media (max-width: 899px) {
-  #tb-tools {
-    --fade-start: 0px;
-    --fade-end: 0px;
-    min-width: 0;
-    flex: 1 1 0;
-    justify-content: flex-start;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x proximity;
-    scroll-padding-inline: 4px;
-    scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%);
-  }
-
-  #tb-tools::-webkit-scrollbar {
-    display: none;
-  }
-
-  #tb-tools.more-start {
-    --fade-start: 24px;
-  }
-
-  #tb-tools.more-end {
-    --fade-end: 24px;
-  }
-
-  #tb-tools .tb-tool {
-    scroll-snap-align: start;
-  }
-}
-
-/* a phone: the tool row is a bar along the bottom, in the strip that the drawing leaves for it above
-   the home indicator (touch.css pads the app by the safe area); the top bar keeps the Menu, search,
-   2D or 3D, Palettes and Save. Each tool is a 44 px target. */
+/* a phone: the tool row and the Tool sets button are a bar along the bottom, in the strip that the
+   drawing leaves for it above the home indicator (touch.css pads the app by the safe area); the top
+   bar keeps the Menu, search, 2D, 3D and Split, Palettes and Save. Each tool is a 44 px target. */
 @media (max-width: 560px) {
   /* a phone's bars stay where they are */
   .hud-grip {
@@ -1699,7 +1741,7 @@ code {
   }
 
   /* the start hub has nothing to draw on: the tool bar waits for a drawing, and the hub takes its strip */
-  body:has(.stage.no-doc) #tb-tools {
+  body:has(.stage.no-doc) .tb-tools-wrap {
     display: none;
   }
 
@@ -1707,23 +1749,35 @@ code {
     margin-bottom: 0;
   }
 
-  /* the top bar's centre holds 2D or 3D alone: the quick bar beside the drawing has Undo and Redo, and
-     the bar's right end keeps room for Palettes and Save */
+  /* the top bar's centre holds 2D, 3D and Split alone, and is never narrower than they are: the quick
+     bar beside the drawing has Undo and Redo, View > Crit Mode and the Crit palette stand in for the
+     comment button, and Save leaves its menu to File (Save As, Export and Print are there) */
   .tb-center {
+    flex: 1 0 auto;
     justify-content: center;
   }
 
-  .tb-center > .tb-group:has(#btn-undo) {
+  .tb-center > .tb-group:has(#btn-undo),
+  #topbar .crit-top,
+  #btn-save-menu {
     display: none;
   }
 
-  #tb-tools {
+  html #topbar .tb-split-main {
+    border-radius: 6px;
+  }
+
+  .tb-tools-wrap {
     position: fixed;
     left: max(8px, env(safe-area-inset-left, 0px));
     right: max(8px, env(safe-area-inset-right, 0px));
     bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     height: 44px;
     padding: 0 2px;
+  }
+
+  #tb-tools {
+    flex: 1 1 0;
   }
 
   #tb-tools .tb-tool {
@@ -1749,10 +1803,15 @@ code {
     height: 44px;
   }
 
-  #tb-tools .tb-sep {
+  .tb-tools-wrap .tb-sep {
     align-self: center;
     height: 22px;
     margin: 0 4px;
+  }
+
+  #btn-toolsets {
+    min-width: 44px;
+    height: 44px;
   }
 
   /* the View bar and the status pills keep to the phone's width */
@@ -1789,8 +1848,7 @@ code {
   }
 }
 
-/* the narrowest phones: the top bar's buttons close up, and Save leaves its menu to File (Save As,
-   Export and Print are there) */
+/* the narrowest phones: the top bar's buttons close up */
 @media (max-width: 389px) {
   html #topbar .tb-icon {
     width: 34px;
@@ -1803,17 +1861,12 @@ code {
 
   html #topbar .tb-split-main {
     padding: 0 10px;
-    border-radius: 6px;
-  }
-
-  #btn-save-menu {
-    display: none;
   }
 }
 
-/* narrower still, the comment button goes: the Crit palette holds the comments */
+/* narrower still, the search button goes: Edit > Search Everything… has it */
 @media (max-width: 349px) {
-  #topbar .crit-top {
+  #topbar .tb-left > .tb-icon:not(#btn-menu) {
     display: none;
   }
 }

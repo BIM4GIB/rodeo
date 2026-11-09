@@ -75,7 +75,7 @@ function setsRow(names: () => string[], load: (name: string) => void, save: (nam
   const pick = h("select", { cls: "menu-dialog-input menu-dialog-select", attrs: { "aria-label": "Saved sets" } });
   const name = h("input", { cls: "menu-dialog-input", attrs: { "aria-label": "Name of the set to save", placeholder: "Name" } });
   const fill = (): void => {
-    pick.replaceChildren(h("option", { text: names().length ? "Load a saved set…" : "No saved sets", attrs: { value: "" } }), ...names().map((n) => h("option", { text: n, attrs: { value: n } })));
+    pick.replaceChildren(h("option", { text: names().length ? "Load a saved set…" : "No saved sets", attrs: { value: "" } }), ...names().map((n) => h("option", { text: n, attrs: { translate: "no", value: n } })));
     pick.disabled = !names().length;
   };
   pick.addEventListener("change", () => {
@@ -227,7 +227,7 @@ export async function importDeviceDataDialog(): Promise<void> {
     refreshSummary();
   };
   const drawKeys = (): void => {
-    keyPick.replaceChildren(...table.headings.map((name, i) => h("option", { text: name, attrs: { value: String(i) } })));
+    keyPick.replaceChildren(...table.headings.map((name, i) => h("option", { text: name, attrs: { translate: "no", value: String(i) } })));
     keyPick.value = String(key);
   };
   const reread = (): void => {

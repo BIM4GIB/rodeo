@@ -65,7 +65,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 .sl-remove:hover {
