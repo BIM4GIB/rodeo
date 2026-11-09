@@ -21,3 +21,5 @@ await assert.rejects(readContainerStream({ size: good.length, read: async () => 
 assert.ok(readContainer(good).raw.length > 0);
 assert.ok((await readContainerStream(bytesSource(good))).records.length > 0);
 console.log("container bounds checks passed");
+
+assert.throws(() => readContainer(new Uint8Array(0x94)), /missing VectorWorks signature/);

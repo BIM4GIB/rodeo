@@ -21,6 +21,8 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 });
 
 export const RELEASES: readonly Release[] = [
+  release("2026-11-09T12:07:00Z", "container-layers", "Clearer checks when opening drawings",
+    `Truncated drawing settings are refused. The Python reader recognizes shifted layer names and sheet titles.`, "announce"),
   release(
     "2026-11-09T12:03:00Z",
     "revit-top-rails",

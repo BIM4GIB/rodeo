@@ -1,6 +1,7 @@
 """High-level document model: layers, classes, geometry, edits, save."""
 
 import struct
+from functools import cached_property
 
 from . import container, geometry, records
 
@@ -40,7 +41,7 @@ def _layer_shift(data):
                 return shift
         except (ValueError, UnicodeError):
             continue
-    raise ValueError("unsupported or truncated layer layout")
+    return 0  # Match the web reader when no shifted layout is recognized.
 
 
 def _pack_str(s):
@@ -53,6 +54,10 @@ def _set_size(rec):
 
 
 class Layer:
+    @cached_property
+    def _shift(self):
+        return _layer_shift(self.record.data)
+
     def __init__(self, doc, rec):
         self.doc, self.record = doc, rec
 
@@ -62,17 +67,17 @@ class Layer:
 
     @property
     def kind(self):
-        return "sheet" if self.record.data[LAYER_KIND_OFFSET + _layer_shift(self.record.data)] == 2 else "design"
+        return "sheet" if self.record.data[LAYER_KIND_OFFSET + self._shift] == 2 else "design"
 
     @property
     def name(self):
         """Design layers: the layer name. Sheet layers: the sheet number."""
-        return _read_str(self.record.data, LAYER_NAME_OFFSET + _layer_shift(self.record.data))[0]
+        return _read_str(self.record.data, LAYER_NAME_OFFSET + self._shift)[0]
 
     @property
     def title(self):
         """Sheet title (empty for design layers)."""
-        _, off = _read_str(self.record.data, LAYER_NAME_OFFSET + _layer_shift(self.record.data))
+        _, off = _read_str(self.record.data, LAYER_NAME_OFFSET + self._shift)
         return _read_str(self.record.data, off)[0]
 
     @property
@@ -207,9 +212,11 @@ class Document:
 
     def rename_layer(self, layer, name=None, title=None):
         rec = layer.record
-        name_at = LAYER_NAME_OFFSET + _layer_shift(rec.data)
+        name_at = LAYER_NAME_OFFSET + layer._shift
         old_name, off = _read_str(rec.data, name_at)
         old_title, end = _read_str(rec.data, off)
+        if not old_name:
+            raise ValueError("unsupported or truncated layer layout")
         name = old_name if name is None else name
         title = old_title if title is None else title
         if not name:

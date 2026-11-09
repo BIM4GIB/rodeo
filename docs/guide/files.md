@@ -6,6 +6,8 @@ This page covers opening and saving drawings, autosave, working with several dra
 
 ### Open, Save and Open Recent
 
+A drawing whose settings extend beyond its available bytes is refused when opening.
+
 Open a `.vwx` file with **Open** or by dropping it on the window. **Open** also opens DWG files and Revit and Archicad projects as new drawings, as described in [Importing, exporting and printing](import-export.md). **Save** writes back to the same file where the browser allows it (Chrome/Edge File System Access API); otherwise it downloads a copy.
 
 Files saved by Vectorworks 2018 or later open as they are. A file saved by Vectorworks 2013 opens converted to the current format, its 2D only: lines, shapes, text, symbols, plug-in objects as drawn, layers, sheets and classes. Its 3D objects, images, worksheets, textures and plug-ins' data come in empty or are left out, and **Save** asks where to write, so the 2013 file stays as it was. Files from Vectorworks 2014 to 2017 are untested, and older ones are refused with the year they were saved in.

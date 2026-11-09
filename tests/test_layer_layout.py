@@ -2,7 +2,8 @@
 import struct
 import unittest
 from openvwx import Document, container
-from openvwx.document import _pack_str
+from openvwx.document import _pack_str, _layer_shift
+from unittest.mock import patch
 
 
 def drawing():
@@ -25,6 +26,15 @@ def drawing():
 
 
 class LayerLayoutTest(unittest.TestCase):
+    def test_fallback_and_cached_layout(self):
+        self.assertEqual(_layer_shift(bytearray(0x300)), 0)
+        layer = Document(drawing()).layers[1]
+        with patch("openvwx.document._layer_shift", wraps=_layer_shift) as find:
+            self.assertEqual(layer.name, "Étage")
+            self.assertEqual(layer.kind, "design")
+            self.assertEqual(layer.title, "")
+            self.assertEqual(find.call_count, 1)
+
     def test_read_rename_reorder(self):
         doc = Document(drawing())
         self.assertEqual([l.name for l in doc.layers], ["Legacy", "Étage", "A-01"])
