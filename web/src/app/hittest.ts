@@ -225,7 +225,8 @@ export function boundsInFrame(scene: Scene, layerId: string, id: string, frame: 
     if (o.shape) pts.push(...outlineOf(o.shape, scene.geometry(o)?.bbox ?? null));
     if (o.bounds) pts.push(...corners(o.bounds));
     const kids = idx.children.get(o.id);
-    if (kids) stack.push(...kids);
+    // one at a time: an imported drawing's group can hold too many for a spread
+    if (kids) for (const k of kids) stack.push(k);
   }
   return bboxOfPoints(pts.map(frame));
 }

@@ -28,7 +28,7 @@ import {
   type XrefSource,
 } from "../import/dxf.ts";
 import { attempt, setEditGroup, zoomToSelection } from "./commands.ts";
-import { h } from "./dom.ts";
+import { h, nextPaint } from "./dom.ts";
 import { fileIn } from "./ext.ts";
 import { pickDrawingFiles, pickDwg, pickDxf, readDxfText, type PickedDxf, type PickedFile } from "./fileio.ts";
 import { lineTypePreviews } from "./lineTypeEditor.ts";
@@ -112,10 +112,10 @@ export async function importDroppedDwg(file: File, scene: Scene, view: View, opt
 /** Imports a DWG file's bytes into the active layer, with the external references it needs; the outcome is shown in the selection and a toast. */
 export async function importDwgBytes(bytes: Uint8Array, name: string, scene: Scene, view: View, options: ImportOptions = {}): Promise<void> {
   if (!readyToImport("DWG")) return;
-  const drawing = readDwg(bytes, name);
+  const drawing = await readDwg(bytes, name);
   if (!drawing) return;
   const read = await withXrefs(drawing, name, (xrefs) => parseDwg(bytes, xrefs), options);
-  if (read) placeDwg(await withSolids(read.drawing, name), bytes, name, scene, view, read.missing);
+  if (read) await placeDwg(await withSolids(read.drawing, name), bytes, name, scene, view, read.missing);
 }
 
 /**
@@ -123,7 +123,7 @@ export async function importDwgBytes(bytes: Uint8Array, name: string, scene: Sce
  * read leaves no empty drawing behind, then imported into the new drawing `fresh` opens.
  */
 export async function openDwgBytes(bytes: Uint8Array, name: string, fresh: () => Promise<void>, scene: Scene, view: View, options: ImportOptions = {}): Promise<void> {
-  const drawing = readDwg(bytes, name);
+  const drawing = await readDwg(bytes, name);
   if (!drawing) return;
   // the references are asked for before the new drawing opens, so Cancel opens nothing
   const read = await withXrefs(drawing, name, (xrefs) => parseDwg(bytes, xrefs), options);
@@ -132,13 +132,13 @@ export async function openDwgBytes(bytes: Uint8Array, name: string, fresh: () =>
   const before = store.session;
   await fresh();
   if (!store.session || store.session === before) return;
-  if (readyToImport("DWG")) placeDwg(meshed, bytes, name, scene, view, read.missing);
+  if (readyToImport("DWG")) await placeDwg(meshed, bytes, name, scene, view, read.missing);
 }
 
 /** A DWG file's bytes read, or null when they cannot be (and a toast says why). */
-function readDwg(bytes: Uint8Array, name: string): DwgDrawing | null {
+async function readDwg(bytes: Uint8Array, name: string): Promise<DwgDrawing | null> {
   try {
-    return parseDwg(bytes);
+    return await whileShown(name, bytes.length, () => parseDwg(bytes));
   } catch (err) {
     toast(`Could not read ${name}: ${errorMessage(err)}`);
     fileIn(bytes, name, errorMessage(err));
@@ -146,9 +146,28 @@ function readDwg(bytes: Uint8Array, name: string): DwgDrawing | null {
   }
 }
 
-function placeDwg(drawing: DwgDrawing, bytes: Uint8Array, name: string, scene: Scene, view: View, missing: readonly string[]): void {
+async function placeDwg(drawing: DwgDrawing, bytes: Uint8Array, name: string, scene: Scene, view: View, missing: readonly string[]): Promise<void> {
   // a sheet with nothing in model space is read from its paper space, and the toast says so
-  if (placeDrawing(drawing, name, "Import DWG", scene, view, drawing.space === "paper" ? " from its paper space" : "", missing)) fileIn(bytes, name);
+  const from = drawing.space === "paper" ? " from its paper space" : "";
+  if (await whileShown(name, bytes.length, () => placeDrawing(drawing, name, "Import DWG", scene, view, from, missing))) fileIn(bytes, name);
+}
+
+/** Files from this many bytes up show the loading bar while they are read and while they are placed. */
+const SLOW_BYTES = 2_000_000;
+
+/**
+ * `work`'s result, the loading bar showing over the drawing meanwhile when the file of `bytes` is
+ * big enough for the wait to be noticed. The work is synchronous, so the bar is painted first.
+ */
+async function whileShown<T>(name: string, bytes: number, work: () => T): Promise<T> {
+  if (bytes < SLOW_BYTES) return work();
+  const done = showLoading(`Reading ${name}…`);
+  try {
+    await nextPaint();
+    return work();
+  } finally {
+    done();
+  }
 }
 
 /** True when there is a drawing and an active layer to import into; otherwise says why. */
@@ -168,7 +187,7 @@ function readyToImport(kind: "DXF" | "DWG"): boolean {
 async function importDxfText(file: Blob, text: string, name: string, scene: Scene, view: View, options: ImportOptions): Promise<void> {
   let drawing: DxfDrawing;
   try {
-    drawing = parseDxf(text);
+    drawing = await whileShown(name, file.size, () => parseDxf(text));
   } catch (err) {
     toast(`Could not read ${name}: ${errorMessage(err)}`);
     fileIn(file, name, errorMessage(err));
@@ -176,7 +195,8 @@ async function importDxfText(file: Blob, text: string, name: string, scene: Scen
   }
   const read = await withXrefs(drawing, name, (xrefs) => parseDxf(text, xrefs), options);
   if (!read) return;
-  if (placeDrawing(await withSolids(read.drawing, name), name, "Import DXF", scene, view, "", read.missing)) fileIn(file, name);
+  const meshed = await withSolids(read.drawing, name);
+  if (await whileShown(name, file.size, () => placeDrawing(meshed, name, "Import DXF", scene, view, "", read.missing))) fileIn(file, name);
 }
 
 /**
@@ -255,34 +275,27 @@ function placeDrawing(drawing: DxfDrawing, name: string, undo: string, scene: Sc
       const leftOut = (p: DxfPlacement): void => {
         skipped[p.type] = (skipped[p.type] ?? 0) + 1;
       };
-      const one = (p: DxfPlacement, shape: NewShape, cls: number, attrs: Partial<Attributes>): void => {
+      type Item = { p: DxfPlacement; shape: NewShape; cls: number; attrs: Partial<Attributes> };
+      // each add rebuilds the document, so the objects go in as one add, each with its class and
+      // attributes, in the file's order; when the document refuses an add, its two halves go in
+      // apart, down to the one object it cannot hold, which is left out
+      const place = (items: readonly Item[]): void => {
+        if (items.length === 0) return;
         try {
-          const id = s.addObject(layerId, shape, cls, attrs);
-          if (p.text) {
-            // turning or justifying text moves its origin, so it goes back on the anchor after
-            s.setTextStyle([id], p.text);
-            s.setGeometry(id, shape);
-          }
-          ids.push(id);
-          added(p, 1);
-        } catch {
-          leftOut(p);
-        }
-      };
-      // each add rebuilds the document, so a run of objects in one class goes in as one add; a run
-      // holding an object the document cannot hold goes in one by one to leave out just that one
-      let run: { cls: number; items: { p: DxfPlacement; shape: NewShape; attrs: Partial<Attributes> }[] } | null = null;
-      const flush = (): void => {
-        if (!run) return;
-        const { cls, items } = run;
-        run = null;
-        try {
-          ids.push(...s.addObjects(layerId, items.map((it) => it.shape), cls, items.map((it) => it.attrs)));
+          // one at a time: a drawing's ids can be too many arguments for a spread
+          for (const id of s.addObjects(layerId, items.map((it) => it.shape), items.map((it) => it.cls), items.map((it) => it.attrs))) ids.push(id);
           for (const it of items) added(it.p, 1);
         } catch {
-          for (const it of items) one(it.p, it.shape, cls, it.attrs);
+          if (items.length === 1) {
+            leftOut(items[0].p);
+            return;
+          }
+          const half = items.length >> 1;
+          place(items.slice(0, half));
+          place(items.slice(half));
         }
       };
+      const items: Item[] = [];
       for (const p of placements) {
         let cls: number;
         let attrs: Partial<Attributes>;
@@ -293,18 +306,16 @@ function placeDrawing(drawing: DxfDrawing, name: string, undo: string, scene: Sc
           leftOut(p);
           continue;
         }
-        // a fill with holes is one polygon a ring, each joined to the holes inside it
-        const shapes: NewShape[] = p.rings ? fillShapes(p.rings).map((f) => ({ kind: "polygon", points: f.points, closed: true })) : [p.shape];
-        if (p.text) {
-          flush();
-          for (const shape of shapes) one(p, shape, cls, attrs);
+        // a text is made turned and justified about its anchor
+        if (p.shape.kind === "text" && p.text) {
+          items.push({ p, shape: { ...p.shape, hAlign: p.text.hAlign, vAlign: p.text.vAlign, angle: p.text.angle }, cls, attrs });
           continue;
         }
-        if (run && run.cls !== cls) flush();
-        run ??= { cls, items: [] };
-        for (const shape of shapes) run.items.push({ p, shape, attrs });
+        // a fill with holes is one polygon a ring, each joined to the holes inside it
+        const shapes: NewShape[] = p.rings ? fillShapes(p.rings).map((f) => ({ kind: "polygon", points: f.points, closed: true })) : [p.shape];
+        for (const shape of shapes) items.push({ p, shape, cls, attrs });
       }
-      flush();
+      place(items);
       // the 3D surfaces (3DFACE, polyface and polygon meshes, MESH, solids) are meshes, one per entity, filled in
       // their colour; they go in as one add, as the objects do, and a surface the document cannot hold
       // is left out

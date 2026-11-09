@@ -531,7 +531,8 @@ export class Scene {
       // a 3D object covers its stored plan bounds, whatever plan draws of it
       if (o.bounds) box = unionBBox(box, o.bounds);
       const kids = idx.children.get(o.id);
-      if (kids) stack.push(...kids);
+      // one at a time: an imported drawing's group can hold too many for a spread
+      if (kids) for (const k of kids) stack.push(k);
     }
     return box;
   }
@@ -558,7 +559,8 @@ export class Scene {
       for (let o = stack.pop(); o !== undefined; o = stack.pop()) {
         if (o.shape) out.push({ obj: o, top });
         const kids = idx.children.get(o.id);
-        if (kids) stack.push(...kids);
+        // one at a time: an imported drawing's group can hold too many for a spread
+        if (kids) for (const k of kids) stack.push(k);
       }
     }
     return out;

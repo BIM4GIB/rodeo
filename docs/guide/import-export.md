@@ -60,10 +60,12 @@ Drawings export as DXF (R12, in the document's units) and SVG, and with **Export
 - Objects keep their colour (the nearest in your palette) and line weight. Solid and gradient hatches come in filled, patterned ones as their lines, and layers that are off or frozen become hidden classes.
 - Dashed line types come across when your drawing already has a line type to copy.
 - A drawing with nothing in model space comes in from its paper space.
+- An arc so shallow it looks straight (it bulges less than a ten-thousandth of its length) comes in as a line, so its circle, which can be kilometres across, doesn't pull the view away from the drawing.
+- A big drawing shows a bar while it is read, and one of 300,000 objects comes in within a few seconds.
 - 3D faces, polyface and polygon meshes, MESH objects, and 3D solids, regions and bodies come in as meshes in their colour, and Top/Plan shows them from above. They go in a group of their own beside the 2D objects'. The solids are meshed through [OpenCascade](#step-and-iges), which loads the first time a drawing has one.
 - External references (xrefs) are drawn from their own files, their layers coming in as classes named like AutoCAD's, `SITEPLAN|WALLS`. Drop the files with the drawing to use them straight away; otherwise the import lists the ones it needs and asks for them, and **Import Without Them** leaves them out. An overlay isn't drawn inside another xref, as in AutoCAD.
 
-**Limits:** images, underlays, wipeouts and objects of AutoCAD's vertical apps are left out, and the import says how many. Faces of a solid on a spline surface (a loft, or a blend between curved faces) and elliptical cones are left out of its mesh.
+**Limits:** images, underlays, wipeouts and objects of AutoCAD's vertical apps are left out, and the import says how many. A drawing that comes to more than 500,000 objects, counting every copy of a block, isn't read. Faces of a solid on a spline surface (a loft, or a blend between curved faces) and elliptical cones are left out of its mesh.
 
 ### Import Image File(s)… and Paste as Bitmap
 

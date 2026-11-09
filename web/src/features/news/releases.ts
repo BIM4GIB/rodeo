@@ -22,6 +22,16 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-09T12:04:00Z",
+    "dwg-big-drawings",
+    "Big DWG drawings come in, and fast",
+    `DWG and DXF drawings of up to 500,000 objects now come in, where the import stopped at 100,000, and big ones come in many times faster.
+- A drawing of 300,000 objects opens in a few seconds, and a drawing of 57,000 that held the page for 15 seconds opens in about one. A bar shows while a big file is read.
+- An arc so shallow it looks straight, drawn round a centre kilometres away, comes in as a line, so the view no longer zooms out until the drawing disappears.
+- Ungrouping a group of hundreds of thousands of objects takes seconds rather than most of a minute.`,
+    "speed",
+  ),
+  release(
     "2026-11-09T12:03:00Z",
     "revit-top-rails",
     "Revit railings come in with their top rails",

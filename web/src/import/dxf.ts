@@ -7,12 +7,21 @@
 
 import type { Affine, NewShape, Pt } from "../core/types.ts";
 
-/** Most objects one drawing may expand to, blocks and arrays included. */
-const MAX_OBJECTS = 100_000;
+/**
+ * Most objects one drawing may expand to, blocks and arrays included. A drawing of 300,000
+ * places in about 2 s and holds about 1.4 GB, so this keeps a drawing well inside a tab's memory.
+ */
+const MAX_OBJECTS = 500_000;
 /** Deepest block nesting that is expanded; deeper inserts are skipped. */
 const MAX_DEPTH = 8;
 /** Angle step when a bulge or an ellipse is sampled into a polyline, in degrees. */
 const STEP_DEG = 8;
+/**
+ * An arc that bulges from its chord by less than this share of the chord's length is drawn as the
+ * chord: it looks straight at any zoom, and as an arc it would be sized by its whole circle, which
+ * for an arc of under a degree can be kilometres across and pull the view far from the drawing.
+ */
+const FLAT_BULGE = 1e-4;
 const DEG = Math.PI / 180;
 const TWO_PI = 2 * Math.PI;
 /** A DXF text height is the cap height, about 0.72 of the em that openvwx stores as text size (see export/dxf.ts). */
@@ -1816,6 +1825,16 @@ function curveShape(c: Pt, u: Pt, v: Pt, t0: number, span: number): DxfShape | n
   const lv = Math.hypot(v.x, v.y);
   if (!(lu > 0) || !(lv > 0) || !(span > 0)) return null;
   const full = span >= TWO_PI - 1e-6;
+  if (!full) {
+    const at = (t: number): Pt => ({ x: c.x + u.x * Math.cos(t) + v.x * Math.sin(t), y: c.y + u.y * Math.cos(t) + v.y * Math.sin(t) });
+    const a = at(t0);
+    const b = at(t0 + span);
+    const mid = at(t0 + span / 2);
+    const chord = Math.hypot(b.x - a.x, b.y - a.y);
+    // how far the arc's middle stands off its chord
+    const bulge = chord > 0 ? Math.abs((b.x - a.x) * (mid.y - a.y) - (b.y - a.y) * (mid.x - a.x)) / chord : Infinity;
+    if (bulge <= FLAT_BULGE * chord) return same(a, b) ? null : { kind: "line", a, b };
+  }
   const dot = u.x * v.x + u.y * v.y;
   if (Math.abs(dot) <= 1e-9 * lu * lv) {
     // the ellipse is the arc shape turned by phi: its x radius runs along u, its y radius across it
