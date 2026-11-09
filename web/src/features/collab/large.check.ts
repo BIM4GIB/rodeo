@@ -34,3 +34,16 @@ assert.equal(r.ack(1, 5), false); assert.equal(r.applied, 0);
 assert.throws(() => r.remote(2, { runs: [{ start: 0, del: 0, add: [] }], kind: "all", ids: [] }), /reopened/);
 r.stop();
 console.log("large collaboration checks passed");
+
+// Current main batches clash recovery. A rebuild failure must restore that batch too.
+const batched = openVwx(bytes);
+const original = batched.doc.toBytes();
+const doc = batched.doc as typeof batched.doc & { rebuild(): void };
+const rebuild = doc.rebuild.bind(doc);
+let fail = true;
+doc.rebuild = () => {
+  if (fail) { fail = false; throw new Error("injected rebuild failure"); }
+  rebuild();
+};
+assert.throws(() => batched.remoteBatch(() => batched.applyRemote(op)), /injected rebuild/);
+assert.deepEqual(batched.doc.toBytes(), original);

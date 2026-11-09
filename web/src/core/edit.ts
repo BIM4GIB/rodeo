@@ -1011,10 +1011,13 @@ export class Session implements EditSession {
   remoteBatch<T>(fn: () => T): T {
     if (this.remoteHeld) return fn();
     const held = { kinds: new Set<ChangeKind>(), ids: [] as string[], unnamed: false };
+    const before = this.doc.datas;
+    const header = this.doc.header;
+    const undo = this.undoStack.map(step => ({ step, start: step.start }));
+    const redo = this.redoStack;
     this.remoteHeld = held;
     try {
-      return fn();
-    } finally {
+      const result = fn();
       this.remoteHeld = null;
       if (held.kinds.size) {
         this.doc.rebuild();
@@ -1022,6 +1025,20 @@ export class Session implements EditSession {
         const objects = held.kinds.size === 1 && held.kinds.has("objects") && !held.unnamed;
         this.emit(objects ? "objects" : "all", objects ? held.ids : [], "remote");
       }
+      return result;
+    } catch (err) {
+      this.doc.datas = before;
+      this.doc.patchHeader(0, header);
+      this.undoStack = undo.map(({ step, start }) => {
+        step.start = start;
+        return step;
+      });
+      this.redoStack = redo;
+      this.doc.rebuild();
+      this.reseat();
+      throw err;
+    } finally {
+      this.remoteHeld = null;
     }
   }
 
