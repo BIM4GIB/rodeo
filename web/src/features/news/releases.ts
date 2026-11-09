@@ -22,6 +22,17 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-09T12:02:00Z",
+    "revit-curved-parts",
+    "Curved stairs and fittings from Revit drawn in full",
+    `More of a Revit model comes in as Revit draws it the moment it opens, rather than as see-through boxes: curved stairs, fittings with curved shells, and windows turned on plan.
+- Curved and spiral stair runs, their stringers and the railings that follow them are drawn from the stair's own faces.
+- Toilets, taps, a vase, a dryer and other fittings whose shells curve into fillets are drawn from the mesh Revit saved for them.
+- A window turned on plan is checked against its own lines in its own direction, so frames with deep head mouldings come in.
+- The note after opening counts boxes exactly: a stair drawn by its runs isn't counted, and parts already drawn in full aren't counted again by the slower pass that follows.`,
+    "furniture",
+  ),
+  release(
     "2026-11-09T12:01:00Z",
     "cad-parts",
     "Import SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo parts",

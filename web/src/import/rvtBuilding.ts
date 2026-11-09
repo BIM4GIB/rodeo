@@ -263,6 +263,8 @@ export function revitBuilding(read: RvtRead, fileName: string): BuildingModel {
     }
     const own = stood ?? (boxed ? bodies.get(i)?.map((b) => ({ ...b, box: true })) : bodies.get(i));
     if (!own?.length) {
+      // nothing is drawn for it, so no box either
+      if (boxed) boxes--;
       // curtain walls are drawn by their panels and mullions, and a stair by its flights and landings
       if (e.ifc_type !== "IFCCURTAINWALL" && !(e.ifc_type === "IFCSTAIR" && flights)) skip(`${categories[base.category].name.toLowerCase()} without a body`);
       return;

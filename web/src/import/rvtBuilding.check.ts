@@ -290,6 +290,22 @@ for (const [what, bodies, [w, d, h]] of [
   check(inside && fills && bodies.every((b) => b.faces.every((f) => f.length >= 9 && f.length % 3 === 0)), `an RPC ${what} stands in its box, from its foot to its top (${lo.map(Math.round)} to ${hi.map(Math.round)})`);
 }
 
+// a stair drawn by its flight: the stair's own record, with no body, isn't a box drawn
+{
+  const record = (BodySource: string) => ({ name: "Revit", properties: [text("BodySource", BodySource)] });
+  const stairs = {
+    ...model,
+    entities: [
+      { kind: "BuildingElement", ifc_type: "IFCSTAIR", name: "Stair:Straight:2001", storey_index: 0, location_feet: [0, 0, 0], property_set: record("partition_element_record_bbox") },
+      { kind: "BuildingElement", ifc_type: "IFCSTAIRFLIGHT", name: "Run:Straight:2002", storey_index: 0, location_feet: [0, 0, 0], extrusion: { width_feet: 3, depth_feet: 10, height_feet: 5 }, property_set: record("saved_graphics_mesh") },
+      { kind: "BuildingElement", ifc_type: "IFCFURNITURE", name: "Chest:Low:2003", storey_index: 0, location_feet: [6, 0, 0], extrusion: { width_feet: 2, depth_feet: 2, height_feet: 3 }, property_set: record("partition_element_record_bbox") },
+    ],
+  } as unknown as RvtModel;
+  const s = revitBuilding({ model: stairs, diagnostics: {}, glb: rvt.modelToGlb(stairs) }, "Stairs.rvt");
+  const note = s.notes.find((n) => n.includes("bounding box"));
+  check(note?.startsWith("1 element is drawn as its bounding box") === true, `a stair drawn by its flight isn't counted as a box, a chest known by its box is (${note})`);
+}
+
 // ---- Revit's own projects ----------------------------------------------------------------------------
 
 const samples = process.env.RVT_SAMPLES;

@@ -110,7 +110,9 @@ export function readDetailWith(rvt: Rvt, bytes: Uint8Array, read: RvtRead): { re
   const better = new Map(result.replaced.map((r) => [r.element_id, r.entity]));
   let count = 0;
   const entities = read.model.entities.map((e) => {
-    const b = e.type_guid ? better.get(e.type_guid) : undefined;
+    // only in place of a box: an element the opening build already drew in full keeps its body
+    const boxed = /box/.test(String(e.property_set?.properties.find((p) => p.name === "BodySource")?.value.value ?? ""));
+    const b = e.type_guid && boxed ? better.get(e.type_guid) : undefined;
     if (b) count++;
     return b ?? e;
   });
