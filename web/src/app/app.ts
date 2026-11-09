@@ -98,6 +98,7 @@ import { PanTool, ToolController, type ToolEnv, type ToolOverlay } from "./tools
 import { SelectTool, forceSelect, forceSelectTarget, selectForMenu } from "./tools/select.ts";
 import { hiddenObjects, onHiddenChange, withoutHidden } from "./hiddenObjects.ts";
 import { mountUnhideButton } from "./objectVisibility.ts";
+import { decodeWaitingXt, stopDecodingXt } from "./parasolidDecode.ts";
 import { CircleTool, LineTool, RectTool, RoundRectTool } from "./tools/draw.ts";
 import { ParkingAlongPathTool, ParkingAreaTool, RailingTool, StakeTool } from "./tools/paths.ts";
 import { FenceTool } from "./tools/fence.ts";
@@ -1541,7 +1542,7 @@ export class App {
     }
   }
 
-  /** A file dropped on the window: a .dxf, .dwg, .pdf, .emf or 3D model (.obj, .glb, .gltf, .3ds, .stl, .ifc, .usd, .3dm, .stp, .step, .igs, .iges, .fbx, .dae, .kmz, .blend, .ply, .skp) is imported into the open drawing (a DWG or model into a new one when none is open), a .csv, .tsv, .dif, .slk or .xlsx as a worksheet, a Revit project opens as a drawing of its model (a family's or template's details are shown), anything else is opened (with its handle, when the browser gave one). */
+  /** A file dropped on the window: a .dxf, .dwg, .pdf, .emf or 3D model (.obj, .glb, .gltf, .3ds, .stl, .ifc, .usd, .3dm, .stp, .step, .igs, .iges, .sldprt, .ipt, .fcstd, .f3d, .prt, .fbx, .dae, .kmz, .blend, .ply, .skp) is imported into the open drawing (a DWG or model into a new one when none is open), a .csv, .tsv, .dif, .slk or .xlsx as a worksheet, a Revit project opens as a drawing of its model (a family's or template's details are shown), anything else is opened (with its handle, when the browser gave one). */
   private async openFile(file: File, handle: Promise<FileSystemFileHandle | null>, all: readonly File[] = []): Promise<void> {
     // the other files dropped with it may be the external references it needs
     const siblings = all.filter((f) => f !== file);
@@ -2299,6 +2300,12 @@ export class App {
     }
   }
 
+  /** Draws the 3D view again as Parasolid faces arrive from the worker (parasolidDecode.ts). */
+  private readonly redraw3dFaces = (): void => {
+    this.stale3d = true;
+    if (this.seen3d) this.update3d();
+  };
+
   /** Gives the 3D view the current document's model when it is out of date. */
   private update3d(): void {
     const session = store.session;
@@ -2314,6 +2321,8 @@ export class App {
     this.stale3d = false;
     if (!this.view3d.visible) this.unframed3d = true;
     if (floating3d()) redrawFloating("3d");
+    // the solids this build left with their edges' faces go to the worker for their Parasolid ones
+    decodeWaitingXt(this.redraw3dFaces);
   }
 
   /** Design layers the 3D view shows: those the plan shows, or every visible one while a sheet layer is active. */
@@ -2560,6 +2569,8 @@ export class App {
     this.drawings.splice(i, 1);
     d.unlisten();
     drawingClosed(d.ref, null);
+    // its bodies still waiting for Parasolid faces are not wanted
+    stopDecodingXt(d.session.doc);
     if (d !== this.shown) {
       this.redrawTabs();
       return;

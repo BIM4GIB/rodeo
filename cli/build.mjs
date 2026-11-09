@@ -59,6 +59,10 @@ const wasm = [
   [join(web, "node_modules/rhino3dm/rhino3dm.wasm"), "rhino3dm.wasm"],
   [join(web, "node_modules/occt-import-js/dist/occt-import-js.wasm"), "occt-import-js.wasm"],
   [join(web, "vendor/rvt-rs/rvt_bg.wasm"), "rvt_bg.wasm"],
+  // the Parasolid mesher (1.6 MB). The CAD part readers (cadmpeg, about 72 MB in all) are not bundled: each
+  // is read only where its WebAssembly is beside the bundle in cadmpeg/<format>/, else the command says the
+  // file needs the full Rodeo build.
+  [join(web, "vendor/cadmpeg-xt/cadmpeg_xt_bg.wasm"), "cadmpeg_xt_bg.wasm"],
 ];
 for (const [from, name] of wasm) {
   if (!existsSync(from)) {
@@ -102,6 +106,7 @@ for (const [dir, name] of [...packages].sort((a, b) => a[1].localeCompare(b[1]))
   sections.push(`== ${name} ${meta.version} (${licenceName(meta)}) ==\n${licenceText(dir, meta)}`);
 }
 sections.push(`== rvt-rs (Apache-2.0) ==\n${readFileSync(join(web, "public/licences/rvt-rs.txt"), "utf8").trimEnd()}`);
+sections.push(`== cadmpeg (Apache-2.0) ==\n${readFileSync(join(web, "public/licences/cadmpeg.txt"), "utf8").trimEnd()}`);
 writeFileSync(
   join(here, "THIRD-PARTY-NOTICES.txt"),
   `Rodeo's command line bundles these packages. Their licences follow.\n\n${sections.join("\n\n")}\n`,

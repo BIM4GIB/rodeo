@@ -11,6 +11,7 @@ Open the 3D view with **View › 3D View**, the 3D button or key <kbd>3</kbd>. *
 The 3D view shows the visible design layers as a shaded model at their elevations:
 
 - walls, slabs, roofs, extrudes and other solids, rebuilt from their cached edges
+- solids whose edges don't make their faces (curved, free-form faces, from imported or Parasolid-modelled parts), drawn from the Parasolid data saved with them a moment after the 3D view shows (see below)
 - extrudes saved without cached edges (most plug-in objects' parts), swept from their profile, holes included
 - multiple extrudes saved without them, lofted through their profiles
 - solids Rodeo makes, drawn from their operands (a subtraction cut)
@@ -21,6 +22,18 @@ The 3D view shows the visible design layers as a shaded model at their elevation
 It shows RenderWorks textures. Image textures are mapped at their real size, and others are shown in their preview's colour; "by class" textures come from the class. Untextured faces take their fill colour as the plan paints it.
 
 Large models (3–4 million triangles) build in a few seconds.
+
+### Solids drawn from their Parasolid data
+
+Vectorworks saves a solid's faces as Parasolid data beside its edges. Most solids' faces are made from their edges alone, but a curved or free-form face isn't, so the 3D view first shows such a solid with only the faces its edges make. [cadmpeg](https://github.com/cadmpeg/cadmpeg) (Apache-2.0) then reads the Parasolid data beside the page and gives the solid its real faces, a batch of solids at a time, and the view fills them in as they come. The reader (under 1 MB to download) loads only when a drawing has such solids. The drawing stays usable meanwhile: the Dover Dam demo's 450 such solids take about a minute, and the view is drawn again every few seconds while they arrive. On that demo, chairs, sofas, lamps and appliances that showed only their edges are drawn solid. The file converter, on the web and `rodeo convert`, waits for them, so its 3D formats include them.
+
+**Limits:**
+- A solid's faces are used only when they fill the same box as its edges, so a face cadmpeg reads wrong never moves the solid; such a solid keeps its edges' faces.
+- They are used only where they cover more than the faces its edges make. Where they cover the same, they are those faces made finer; where they cover less, cadmpeg left faces out. Either way the solid keeps its edges' faces.
+- A solid with more than 50,000 triangles of faces keeps its edges' faces.
+- Solids in the symbol library are read only when a symbol is placed.
+- If cadmpeg stops on a solid, or takes more than two minutes over a batch, the solids sent with it keep their edges' faces until the drawing is opened again.
+- The real faces take more triangles: Dover Dam's 3D grows from 2.3 to 3.8 million.
 
 ### The layer's saved view
 

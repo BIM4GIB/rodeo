@@ -299,6 +299,11 @@ function readToken(d: Uint8Array, at: number): HeldRef {
   return { table: u32(d, at + 8), index: u32(d, at + 12), length: u32(d, at + 16) + u32(d, at + 20) * 2 ** 32, mime: u32(d, at + 24) };
 }
 
+/** What `part` names when it is exactly a token (a held section's bytes as its record has them); null otherwise. */
+export function tokenOf(part: Uint8Array): HeldRef | null {
+  return part.length === TOKEN && isToken(part, 0) ? readToken(part, 0) : null;
+}
+
 function writeToken(d: Uint8Array, at: number, ref: HeldRef): void {
   d.set(MAGIC, at);
   setU32(d, at + 8, ref.table);

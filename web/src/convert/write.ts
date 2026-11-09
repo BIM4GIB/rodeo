@@ -8,6 +8,7 @@ import { pageEps } from "../export/eps.ts";
 import { layersPage, exportPdf, paperScale } from "../export/pdf.ts";
 import { exportSvg } from "../export/svg.ts";
 import type { VwxDocument } from "../core/types.ts";
+import { cancelXt, drainXt, waitingXt } from "../core/parasolid.ts";
 import { formatById, formats, outputFormat } from "./formats.ts";
 import { libraries } from "./libs.ts";
 import type { HeadlessDrawing, WrittenFile, WriteOptions } from "./types.ts";
@@ -99,11 +100,39 @@ async function writeBytes(
   }
 }
 
+/**
+ * Gives the solids whose edges don't make their faces the faces of their Parasolid data, where the
+ * reader has cadmpeg (the command line and a page's converter do). Without it they keep the faces
+ * their edges make, and notes says how many.
+ */
+async function parasolidFaces(doc: VwxDocument, notes: string[]): Promise<void> {
+  // building the 3D is what finds the solids waiting
+  doc.model3d();
+  const waiting = waitingXt();
+  if (!waiting) return;
+  const solids = (n: number): string => `${n} ${n === 1 ? "solid shows" : "solids show"} the faces their edges make`;
+  const load = libraries().xt;
+  if (!load) {
+    cancelXt();
+    notes.push(`${solids(waiting)}: the Parasolid reader is not available`);
+    return;
+  }
+  try {
+    drainXt(await load());
+  } catch (err) {
+    // cadmpeg failed to load, or trapped on a body and can't go on: the bodies not yet meshed keep their edges' faces
+    const left = waitingXt() || waiting;
+    cancelXt();
+    notes.push(`${solids(left)}: the Parasolid reader stopped (${err instanceof Error ? err.message : String(err)})`);
+  }
+}
+
 /** The bytes of a 3D format's file, from the model on the layers `layers`; notes gets what was left out. */
 async function model3dBytes(id: string, drawing: HeadlessDrawing, layers: readonly string[], name: string, base: string, notes: string[]): Promise<Uint8Array> {
   const doc = drawing.session.doc;
   const set = new Set(layers);
   const scene3d = await import("../export/scene3d.ts");
+  await parasolidFaces(doc, notes);
   // 2D linework goes to a Rhino file as curves; every other 3D format needs a solid or a mesh
   const flat = id === "3dm" ? scene3d.flatOf(doc, set) : [];
   const has3d = doc.model3d().some((m) => set.has(m.layerId) && m.triangles.length >= 9);

@@ -69,6 +69,7 @@ import { buildLights3d, buildModel3d, buildModelTree, buildSymbolModel3d, isPath
 import { readNameTable } from "./names.ts";
 import { type AddObject, type Index, ObjectIndex } from "./objectIndex.ts";
 import { type FormatDef, RECORD, RECORD_FORMAT, readFormat, readValues, recordFormat } from "./params.ts";
+import { parasolidGeneration } from "./parasolid.ts";
 import { readResources } from "./resources.ts";
 import { isStory, readStory } from "./stories.ts";
 import { HELIODON, readHeliodonSun } from "./sun.ts";
@@ -861,6 +862,8 @@ export class Model implements VwxDocument {
   private meshes: Mesh3D[] | null = null;
   /** the 3D conversion resolution the meshes were built at (turnStepsGeneration) */
   private meshesAt = 0;
+  /** the Parasolid generation the meshes were built at (parasolidGeneration) */
+  private meshesXt = 0;
   private lights: Light3D[] | null = null;
   nameTable: Rec | null = null;
   classList: Rec | null = null;
@@ -1918,9 +1921,10 @@ export class Model implements VwxDocument {
   }
 
   model3d(): Mesh3D[] {
-    // built again when Preferences change the 3D conversion resolution
-    if (this.meshesAt !== turnStepsGeneration()) this.meshes = null;
+    // built again when Preferences change the 3D conversion resolution, or Parasolid faces arrive
+    if (this.meshesAt !== turnStepsGeneration() || this.meshesXt !== parasolidGeneration()) this.meshes = null;
     this.meshesAt = turnStepsGeneration();
+    this.meshesXt = parasolidGeneration();
     this.meshes ??= buildModel3d(this);
     return this.meshes;
   }

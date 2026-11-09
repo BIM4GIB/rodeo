@@ -22,6 +22,25 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 
 export const RELEASES: readonly Release[] = [
   release(
+    "2026-11-09T12:01:00Z",
+    "cad-parts",
+    "Import SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo parts",
+    `Parts from six mechanical CAD apps come in from their own files, without exporting STEP first: File > Import > Import CAD Parts…, or drop a .sldprt, .ipt, .FCStd, .f3d or .prt on the window.
+- The part comes in as a STEP model does: in millimetres, as a group named after the file and its app.
+- Each app's reader downloads only when you import its first file, and the drawing stays usable while it reads.
+- Assemblies and CATIA files aren't read yet: Rodeo says to export STEP from the app instead.`,
+    "gears",
+  ),
+  release(
+    "2026-11-09T12:00:00Z",
+    "parasolid-faces",
+    "Curved solids drawn in full in 3D",
+    `Solids with curved or free-form faces, which the 3D view showed with faces missing, are now drawn whole. Rodeo reads the Parasolid data Vectorworks saves with them.
+- The view shows them at once with the faces their edges make, and fills in the rest a moment later, a batch of solids at a time, while you keep working.
+- The file converter, on the web and the rodeo command line, waits for them, so its 3D exports include them.`,
+    "solids",
+  ),
+  release(
     "2026-11-08T12:04:00Z",
     "revit-detail",
     "More of a Revit model drawn in full",

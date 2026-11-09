@@ -321,7 +321,7 @@ export interface MenuActions extends View3dActions {
   importPdf(): void;
   /** File > Import > Import Metafile… */
   importMetafile(): void;
-  /** File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, STEP…, IGES…, FBX…, Collada (SketchUp)…, Blender…, PLY… and SketchUp… */
+  /** File > Import OBJ…, glTF…, 3DS…, STL…, IFC…, USD…, Rhino 3DM…, STEP…, IGES…, CAD Parts…, FBX…, Collada (SketchUp)…, Blender…, PLY… and SketchUp… */
   importMesh(format: MeshImportFormat): void;
   /** File > Import Shapefile… */
   importShapefile(): void;
@@ -585,6 +585,7 @@ function menuDefinitions(deps: MenuDeps): MenuDef[] {
             { label: "Import Rhino 3DM…", enabled: hasLayer, run: () => actions.importMesh("3dm") },
             { label: "Import STEP…", enabled: hasLayer, run: () => actions.importMesh("step") },
             { label: "Import IGES…", enabled: hasLayer, run: () => actions.importMesh("iges") },
+            { label: "Import CAD Parts…", enabled: hasLayer, run: () => actions.importMesh("native") },
             { label: "Import FBX…", enabled: hasLayer, run: () => actions.importMesh("fbx") },
             { label: "Import Collada (SketchUp)…", enabled: hasLayer, run: () => actions.importMesh("dae") },
             { label: "Import Blender…", enabled: hasLayer, run: () => actions.importMesh("blend") },

@@ -14,6 +14,8 @@ import {
   type Unit,
 } from "../index.ts";
 import { ifcReader } from "../../import/ifc.ts";
+import { convertInWorker } from "../../app/nativeImport.ts";
+import { cancelXt, stopsAfterTrap } from "../../core/parasolid.ts";
 import { occtLib } from "../../import/occt.ts";
 import { rhinoLib } from "../../import/rhino3dm.ts";
 import type { PreviewMesh } from "./preview3d.ts";
@@ -53,6 +55,12 @@ useLibraries({
   ifc: ifcReader,
   rhino: rhinoLib,
   occt: occtLib,
+  convertCad: convertInWorker,
+  xt: once(async () => {
+    const xt = await import("../../../vendor/cadmpeg-xt/cadmpeg_xt.js");
+    await xt.default({ module_or_path: new URL("../../../vendor/cadmpeg-xt/cadmpeg_xt_bg.wasm", import.meta.url) });
+    return stopsAfterTrap({ mesh: xt.xt_mesh, report: xt.xt_last_report });
+  }),
   revit: once(async () => {
     const rvt = await import("../../../vendor/rvt-rs/rvt.js");
     await rvt.default({ module_or_path: new URL("../../../vendor/rvt-rs/rvt_bg.wasm", import.meta.url) });
@@ -76,6 +84,9 @@ function post(m: FromWorker, transfer: Transferable[] = []): void {
 /** Runs one request. */
 async function handle(m: ToWorker): Promise<void> {
   if (m.type === "drop") {
+    // its solids still waiting for their Parasolid faces go with it
+    const drawing = drawings.get(m.id);
+    if (drawing) cancelXt(drawing.session.doc);
     drawings.delete(m.id);
   } else if (m.type === "read") {
     await read(m);

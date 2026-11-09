@@ -12,7 +12,8 @@
 //               sweeps, in its parent's for multiple extrudes and solid additions
 //   section 13  curves: 6-byte entries (u16 point count, u32 first point)
 //   section 14  straight edges: same layout, two points each
-//   section 19  the Parasolid transmit file (binary XT), not read here
+//   section 19  the Parasolid transmit file (binary XT); read only where the
+//               edges don't make all the faces, and then meshed by cadmpeg (parasolid.ts)
 // Faces are not cached, so they are rebuilt from the edges: every plane that
 // two edges at a vertex span collects the edges lying in it, the planar graph
 // of those edges gives its bounded faces, and nesting decides which are solid
@@ -20,7 +21,8 @@
 // curves that are translated copies of each other (extrusions). A round body
 // whose edges are only meridians from one pole to another and rings round them
 // (an existing tree's canopy) is swept round its axis (meridianFaces). Other
-// faces whose boundary is not planar (free-form surfaces) show as edges only.
+// faces whose boundary is not planar (free-form surfaces) come from section 19
+// once it is decoded, and show as edges only until then.
 //
 // Site models (the "DTM6" plug-in) cache only their bounding box as a body;
 // the terrain is in their aux records (76, tag at +0x50 as stored):
@@ -100,6 +102,7 @@ import { BODY_IN_PARENT, LOCUS, bodySections, instanceScale, translateRecord } f
 import { LIGHT, LIGHT_AT, LIGHT_KIND, LIGHT_KINDS, LIGHT_ON, decodeShape, lightAim } from "./geometry.ts";
 import { axisOf, isLightingDevice, readDeviceLight } from "./lightingDevice.ts";
 import { guidOf, layerElevationOf, layerKindAt, objectChildren, type Model } from "./model.ts";
+import { type Box, facesArea, onXtFaces, queueXt, xtFaces } from "./parasolid.ts";
 import type { Rec } from "./records.ts";
 import type { Attributes, Light3D, LightChange, Mesh3D, ModelTree, ModelTreeGroup, ModelTreeNode, ModelTreePiece, ResourceInfo, SymbolPlacement, Vec3 } from "./types.ts";
 
@@ -254,6 +257,8 @@ const bodyCache = new WeakMap<Uint8Array, BodyGeometry | null>();
 const SEC_POINTS = 0;
 const SEC_CURVES = 13;
 const SEC_LINES = 14;
+/** the Parasolid transmit file */
+const SEC_XT = 19;
 
 /** Vertex merge grid, mm. */
 const MERGE = 0.01;
@@ -332,7 +337,13 @@ function readWire(d: Uint8Array): Wire | null {
   return { pts: Float64Array.from(pts), edges: Uint32Array.from(edges), curves, lines };
 }
 
-function bodyGeometry(r: Rec): BodyGeometry | null {
+/**
+ * A body's triangles and edges in its own frame. Its faces come from its edges; where they don't
+ * make every face and the body has Parasolid data, the faces are the decoded ones (when they cover
+ * more than the edges' faces), or the body is queued for decoding (parasolid.ts) and keeps its edge
+ * faces until then. `owner` is the drawing the body is in, null where bodies are not decoded (a sweep's).
+ */
+export function bodyGeometry(r: Rec, owner: Model | null): BodyGeometry | null {
   let g = bodyCache.get(r.data);
   if (g === undefined) {
     g = null;
@@ -340,7 +351,8 @@ function bodyGeometry(r: Rec): BodyGeometry | null {
       const w = readWire(r.data);
       if (w) {
         const tris: number[] = [];
-        if (!meridianFaces(w, tris)) {
+        const round = meridianFaces(w, tris);
+        if (!round) {
           planarFaces(w, tris);
           ruledFaces(w, tris);
         }
@@ -352,6 +364,18 @@ function bodyGeometry(r: Rec): BodyGeometry | null {
           edges[3 * i + 2] = w.pts[3 * v + 2];
         }
         g = { triangles: Float64Array.from(tris), edges };
+        // a round body (meridians and rings) is swept whole, so its edges make all its faces
+        if (owner && !round) {
+          const xt = sectionOf(r.data, SEC_XT);
+          if (xt && !edgesCovered(w, tris)) {
+            const decoded = xtFaces(r.data);
+            if (decoded) g.triangles = decoded;
+            else if (decoded === undefined) {
+              const box = pointsBox(r.data);
+              if (box) queueXt(r.data, xt, box, facesArea(tris), owner);
+            }
+          }
+        }
       }
     } catch {
       g = null;
@@ -360,6 +384,74 @@ function bodyGeometry(r: Rec): BodyGeometry | null {
   }
   return g;
 }
+
+/** The bytes of a body's section `id`, or null when it has none. */
+function sectionOf(d: Uint8Array, id: number): Uint8Array | null {
+  const at = bodySections(d)?.get(id);
+  return at && at[1] > at[0] ? d.subarray(at[0], at[1]) : null;
+}
+
+/** The box of a body's section-0 points in its own frame, or null without any. */
+function pointsBox(d: Uint8Array): Box | null {
+  const at = bodySections(d)?.get(SEC_POINTS);
+  if (!at) return null;
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (let o = at[0]; o + 24 <= at[1]; o += 24) {
+    for (let k = 0; k < 3; k++) {
+      const v = f64(d, o + 8 * k);
+      min[k] = Math.min(min[k], v);
+      max[k] = Math.max(max[k], v);
+    }
+  }
+  return min[0] <= max[0] ? { min, max } : null;
+}
+
+/**
+ * Whether every edge of the wire is a side of some triangle built from it (planarFaces and
+ * ruledFaces take their corners from the wire's own points, so the corners key back to them).
+ */
+function edgesCovered(w: Wire, tris: number[]): boolean {
+  if (!tris.length) return false;
+  const { pts, edges } = w;
+  const nv = pts.length / 3;
+  // the wire's points by their x, then matched on y and z: corners are exact copies of them
+  const byX = new Map<number, number | number[]>();
+  for (let v = 0; v < nv; v++) {
+    const x = pts[3 * v];
+    const had = byX.get(x);
+    if (had === undefined) byX.set(x, v);
+    else if (typeof had === "number") byX.set(x, [had, v]);
+    else had.push(v);
+  }
+  const vertexAt = (i: number): number => {
+    const had = byX.get(tris[i]);
+    if (had === undefined) return -1;
+    if (typeof had === "number") return pts[3 * had + 1] === tris[i + 1] && pts[3 * had + 2] === tris[i + 2] ? had : -1;
+    for (const v of had) if (pts[3 * v + 1] === tris[i + 1] && pts[3 * v + 2] === tris[i + 2]) return v;
+    return -1;
+  };
+  const side = (p: number, q: number): number => Math.min(p, q) * nv + Math.max(p, q);
+  const sides = new Set<number>();
+  for (let i = 0; i + 8 < tris.length; i += 9) {
+    const a = vertexAt(i);
+    const b = vertexAt(i + 3);
+    const c = vertexAt(i + 6);
+    if (a >= 0 && b >= 0) sides.add(side(a, b));
+    if (b >= 0 && c >= 0) sides.add(side(b, c));
+    if (c >= 0 && a >= 0) sides.add(side(c, a));
+  }
+  for (let i = 0; i < edges.length; i += 2) if (!sides.has(side(edges[i], edges[i + 1]))) return false;
+  return true;
+}
+
+// Faces decoded from Parasolid data replace the edge faces of their bodies: what was built from the
+// edges alone goes, and so does the work that depends on the bodies' faces.
+onXtFaces((bodies) => {
+  for (const d of bodies) bodyCache.delete(d);
+  subtractionCache = new WeakMap();
+  simplerCache = new WeakMap();
+});
 
 // ---- faces from edges ----------------------------------------------------------
 
@@ -1654,7 +1746,7 @@ function placementsOf(doc: Model): Map<Rec, number> {
 }
 
 /** simpler geometry by the record it belongs to and which of its geometries it is */
-const simplerCache = new WeakMap<Uint8Array, Map<string, BodyGeometry>>();
+let simplerCache = new WeakMap<Uint8Array, Map<string, BodyGeometry>>();
 
 /** `g` as drawn where it is placed `ctx.repeat` times: itself, or simpler when that would take too many triangles. */
 function forRepeat(ctx: Ctx, g: BodyGeometry, owner: Rec): BodyGeometry {
@@ -1904,8 +1996,9 @@ function walkChildren(ctx: Ctx, parent: Rec, m: Xf, topId: string | null): void 
       // additions in their parent's (FORMAT.md §3D)
       const own = MATRIX_OWNERS.has(c.type) && !BODY_IN_PARENT.has(c.type) ? readXf(c.data, OWNER_MATRIX, OWNER_OFFSET) : null;
       const mm = own ? compose(at, own) : at;
+      // a sweep is left as its profile draws it, so its body is not decoded
       for (const b of bodies) {
-        const g = bodyGeometry(b);
+        const g = bodyGeometry(b, c.type === SWEEP ? null : ctx.doc);
         if (g) emit(ctx, g, mm, c, top);
       }
       // a body is the owner's whole result; only groups also hold further objects

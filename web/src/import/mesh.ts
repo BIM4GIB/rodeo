@@ -72,6 +72,10 @@ export interface MeshFile {
   textures?: MeshTexture[];
   /** the tags the file hides, whose classes come in hidden */
   hiddenTags?: string[];
+  /** the name the group holding the whole model takes, in place of the file's name (a CAD part's file and app) */
+  title?: string;
+  /** what the reader could not convert or is unsure of, as the reader gives it; logged, not drawn */
+  warnings?: string[];
 }
 
 /** What one container holds in a MeshTree: its own faces, by tag and colour, its groups and the symbols it places. */

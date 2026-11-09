@@ -154,9 +154,9 @@ async function mesh(id: string, bytes: Uint8Array, name: string, options: ReadOp
   const model = await readModel(id, name, base, bytes, progress);
   const s = openVwx(blankDrawing("mm"));
   progress("Placing the objects");
-  const placed = placeMesh(s, designLayer(s), model, settingsOf(id, model, options), base, id !== "skp");
+  const placed = placeMesh(s, designLayer(s), model, settingsOf(id, model, options), model.title ?? base, id !== "skp");
   if (placed.count === 0) throw nothingDrawn(placed.skipped);
-  return { session: s, name, from: id, skipped: placed.skipped, notes: [] };
+  return { session: s, name, from: id, skipped: placed.skipped, notes: model.warnings ?? [] };
 }
 
 /** The file read as `id` by the reader the editor uses for it (meshImport.ts readModel); the WebAssembly readers load when first needed. */
@@ -197,6 +197,11 @@ async function readModel(id: string, name: string, base: string, bytes: Uint8Arr
       progress("Loading the STEP and IGES reader");
       const [{ readStep, readIges }, occt] = await Promise.all([import("../import/step.ts"), libraries().occt()]);
       return id === "step" ? readStep(bytes, occt) : readIges(bytes, occt);
+    }
+    case "cad": {
+      progress("Loading the CAD reader");
+      const [{ readNative }, occt] = await Promise.all([import("../import/native.ts"), libraries().occt()]);
+      return readNative(bytes, name, libraries().convertCad, occt);
     }
     default:
       throw new Error(`Rodeo doesn't read ${id}`);

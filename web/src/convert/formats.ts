@@ -29,6 +29,7 @@ export const FORMATS: readonly FormatInfo[] = [
   { id: "blend", name: "Blender", long: "Blender file", readExtensions: ["blend"], writeExtensions: [], kind: "3d", mime: "application/octet-stream" },
   { id: "step", name: "STEP", long: "STEP (AP214)", readExtensions: ["stp", "step"], writeExtensions: ["stp", "step"], kind: "3d", mime: "model/step" },
   { id: "iges", name: "IGES", long: "IGES", readExtensions: ["igs", "iges"], writeExtensions: ["igs", "iges"], kind: "3d", mime: "model/iges" },
+  { id: "cad", name: "CAD", long: "CAD part (SolidWorks, Inventor, FreeCAD, Fusion 360, NX or Creo)", readExtensions: ["sldprt", "ipt", "fcstd", "f3d", "prt"], writeExtensions: [], kind: "3d", mime: "application/octet-stream" },
 ];
 
 /** The ids of the formats that can be read and written, in table order. */

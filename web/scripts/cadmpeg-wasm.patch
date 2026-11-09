@@ -1,0 +1,78 @@
+diff --git a/crates/cadmpeg-codec-sldprt/src/bare_parasolid.rs b/crates/cadmpeg-codec-sldprt/src/bare_parasolid.rs
+new file mode 100644
+index 0000000000..0a3af95470
+--- /dev/null
++++ b/crates/cadmpeg-codec-sldprt/src/bare_parasolid.rs
+@@ -0,0 +1,60 @@
++// SPDX-License-Identifier: Apache-2.0
++//! The B-rep of a bare Parasolid transmit stream.
++//!
++//! A `.x_t`-style stream is a Parasolid transmit file on its own: it starts
++//! with the `PS` signature, not with a SolidWorks container around it. The
++//! same record decoder reads the partition and deltas streams of a `.sldprt`;
++//! this module hands it one stream and moves its arenas into an empty model.
++
++use cadmpeg_core::decode::{DecodeArena, DecodeContext, DecodePolicy};
++use cadmpeg_core::CodecError;
++use cadmpeg_ir::document::CadIr;
++
++use crate::brep::graph::decode_bodies;
++use crate::parasolid::stream_header;
++
++/// Transfers the B-rep of one bare Parasolid stream into an empty model.
++///
++/// The stream is framed by its own header, read with the same parser as the
++/// streams of a `.sldprt`, and decoded with the desktop resource profile. The
++/// model is in millimetres, the document's length unit: the decoder converts
++/// the stream's metres as it reads them.
++///
++/// # Errors
++///
++/// Returns [`CodecError::Malformed`] when the bytes carry no Parasolid transmit
++/// header, and the decoder's error when the record graph does not resolve.
++pub fn transfer_bare_parasolid(bytes: &[u8]) -> Result<CadIr, CodecError> {
++    let header = stream_header(bytes)?
++        .ok_or_else(|| CodecError::Malformed("bytes carry no Parasolid transmit header".into()))?;
++    let arena = DecodeArena::new();
++    let policy = DecodePolicy::desktop();
++    let ctx = DecodeContext::for_loaded_input(
++        &arena,
++        &policy,
++        cadmpeg_core::decode::u64_from_index(bytes.len()),
++    )?;
++    let brep = decode_bodies(
++        &ctx,
++        &[(bytes, &header)],
++        &cadmpeg_ir::stream_name!("bare-parasolid"),
++    )?;
++    ctx.finish_session()?;
++
++    let mut ir = CadIr::empty();
++    ir.model.bodies = brep.bodies;
++    ir.model.regions = brep.regions;
++    ir.model.shells = brep.shells;
++    ir.model.faces = brep.faces;
++    ir.model.loops = brep.loops;
++    ir.model.coedges = brep.coedges;
++    ir.model.edges = brep.edges;
++    ir.model.vertices = brep.vertices;
++    ir.model.points = brep.points;
++    ir.model.surfaces = brep.surfaces;
++    ir.model.procedural_surfaces = brep.procedural_surfaces;
++    ir.model.curves = brep.curves;
++    ir.model.procedural_curves = brep.procedural_curves;
++    ir.model.pcurves = brep.pcurves;
++    Ok(ir)
++}
+diff --git a/crates/cadmpeg-codec-sldprt/src/lib.rs b/crates/cadmpeg-codec-sldprt/src/lib.rs
+index ed8572da3c..69ea3c062e 100644
+--- a/crates/cadmpeg-codec-sldprt/src/lib.rs
++++ b/crates/cadmpeg-codec-sldprt/src/lib.rs
+@@ -105,6 +105,7 @@ mod annotations;
+ mod appearance;
+ mod archive;
+ mod assembly;
++pub mod bare_parasolid;
+ mod brep;
+ mod carchive;
+ mod classification;

@@ -169,6 +169,20 @@ Each pen is coloured as Rhino shows it, and everything is grouped by Rhino layer
 
 **Limits:** at most 250,000 triangles come in at once, so a model that would make more is triangulated coarser to fit; a file with no shapes in it (wires only) is refused with that said.
 
+### SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo parts
+
+**File › Import › Import CAD Parts…** (or dropping a `.sldprt`, `.ipt`, `.FCStd`, `.f3d` or `.prt`) reads a part from these apps' own files, without exporting it first. [cadmpeg](https://github.com/cadmpeg/cadmpeg) (Apache-2.0), as WebAssembly, turns the part into STEP, which then comes in as a STEP import does: in millimetres, z up, triangulated the same way. Each app's reader (3 to 6 MB to download) loads only when its first file is imported, and the conversion runs beside the page, so the drawing stays usable meanwhile.
+
+- The group holding the part is named after the file and its app: "Bracket (SolidWorks part)".
+- A `.prt` is an NX or a Creo part; Rodeo tries NX's reader, then Creo's.
+- **File › Open** takes them too, as a drop does: into a new drawing when none is open.
+
+**Limits:**
+- Colours mostly don't come through, so most parts come in grey.
+- Assemblies (`.sldasm`, `.iam`, `.asm`) point at their part files, which don't come with them, and CATIA files don't come in reliably yet. For these Rodeo says to export STEP from the app instead.
+- A file holding only sketches or drawings has nothing to import, and is refused with that said.
+- cadmpeg is young: it reads most parts whole, but some come in missing faces. Check a part against its app before relying on it.
+
 ### FBX
 
 **Import FBX…** reads binary and ASCII FBX (Blender, 3ds Max, Maya, Revit, Unity, Unreal), each model through its full transform chain, split by material.

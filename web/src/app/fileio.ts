@@ -36,9 +36,10 @@ const REVIT_TYPES: FilePickerType[] = [
   { description: "Revit project or family", accept: { "application/octet-stream": [".rvt", ".rfa", ".rte", ".rft"] } },
   { description: "Archicad project", accept: { "application/octet-stream": [".pln", ".pla", ".tpl"] } },
 ];
-/** File > Open also takes STEP and IGES models, which come in as a drop of one does (meshImport.ts). */
+/** File > Open also takes STEP, IGES and CAD part models, which come in as a drop of one does (meshImport.ts). */
 const MODEL_TYPES: FilePickerType[] = [
   { description: "STEP or IGES model", accept: { "model/step": [".stp", ".step"], "model/iges": [".igs", ".iges"] } },
+  { description: "CAD part", accept: { "application/octet-stream": [".sldprt", ".ipt", ".fcstd", ".f3d", ".prt"] } },
 ];
 
 function pickers(): FileSystemPickers {
@@ -82,7 +83,7 @@ function pickWithInput(accept: string): Promise<PickedFile | null> {
  */
 export async function pickFile(template = false, revit = false): Promise<PickedFile | null> {
   const open = pickers().showOpenFilePicker?.bind(window);
-  if (!open) return pickWithInput(template ? ".sta,.vwx" : revit ? ".vwx,.sta,.dwg,.rvt,.rfa,.rte,.rft,.pln,.pla,.tpl,.stp,.step,.igs,.iges" : ".vwx,.sta,.dwg");
+  if (!open) return pickWithInput(template ? ".sta,.vwx" : revit ? ".vwx,.sta,.dwg,.rvt,.rfa,.rte,.rft,.pln,.pla,.tpl,.stp,.step,.igs,.iges,.sldprt,.ipt,.fcstd,.f3d,.prt" : ".vwx,.sta,.dwg");
   try {
     const [handle] = await open({ types: template ? TEMPLATE_TYPES : [...VWX_TYPES, ...DWG_TYPES, ...(revit ? [...REVIT_TYPES, ...MODEL_TYPES] : [])], multiple: false });
     if (!handle) return null;

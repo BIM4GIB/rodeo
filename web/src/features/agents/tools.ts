@@ -466,7 +466,7 @@ async function importFile(tc: ToolContext, file: File, o: ImportOptions): Promis
     } else {
       const { meshFormat, importMesh } = await import("../../app/meshImport.ts");
       const format = meshFormat(name);
-      if (!format) throw new Error(`${name}: Rodeo opens .vwx and imports .dxf, .dwg, .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp, .3dm, .stp/.step, .igs/.iges, .fbx, .dae/.kmz, .blend and .ply; a picture the user attaches is seen, not imported`);
+      if (!format) throw new Error(`${name}: Rodeo opens .vwx and imports .dxf, .dwg, .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp, .3dm, .stp/.step, .igs/.iges, .sldprt/.ipt/.fcstd/.f3d/.prt (CAD parts), .fbx, .dae/.kmz, .blend and .ply; a picture the user attaches is seen, not imported`);
       // what the dialog would default to: metres, y up for OBJ and z up for 3DS and PLY (the formats that say their units ignore it)
       await importMesh(file, ctx.scene, ctx.view, { mm: MESH_UNITS[o.units ?? (format === "stl" ? "mm" : "m")] ?? 1000, yUp: o.yUp ?? format === "obj" });
     }
@@ -991,7 +991,7 @@ const TOOLS: Tool[] = [
   {
     spec: spec(
       "import_file",
-      "Imports a file the user attached to the chat, by its name: .vwx opens in a tab of its own, in front, and you go on working in it; .dxf, .dwg (AutoCAD R13 to 2018 and later), .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp (SketchUp), .3dm (Rhino), .stp/.step (STEP), .igs/.iges (IGES), .fbx, .dae/.kmz (SketchUp's Collada), .blend (Blender) and .ply come into the active layer, selected. OBJ, 3DS, STL and PLY files don't say their units: give units and yUp (default metres, millimetres for STL; y up for OBJ, z up for 3DS, STL and PLY); the others say their own. A PDF imports one page (default 1) at a scale (default the layer's).",
+      "Imports a file the user attached to the chat, by its name: .vwx opens in a tab of its own, in front, and you go on working in it; .dxf, .dwg (AutoCAD R13 to 2018 and later), .pdf, .obj, .gltf/.glb, .3ds, .stl, .ifc, .usd, .skp (SketchUp), .3dm (Rhino), .stp/.step (STEP), .igs/.iges (IGES), .sldprt, .ipt, .fcstd, .f3d and .prt (CAD parts from SolidWorks, Inventor, FreeCAD, Fusion 360, NX and Creo), .fbx, .dae/.kmz (SketchUp's Collada), .blend (Blender) and .ply come into the active layer, selected. OBJ, 3DS, STL and PLY files don't say their units: give units and yUp (default metres, millimetres for STL; y up for OBJ, z up for 3DS, STL and PLY); the others say their own. A PDF imports one page (default 1) at a scale (default the layer's).",
       {
         name: { type: "string" },
         units: { type: "string", enum: Object.keys(MESH_UNITS), description: "OBJ and 3DS" },
