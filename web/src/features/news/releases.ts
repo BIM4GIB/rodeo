@@ -21,6 +21,8 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 });
 
 export const RELEASES: readonly Release[] = [
+  release("2026-11-09T12:05:00Z", "server-correctness", "Safer shared uploads and credit holds",
+    `Uploads are refused if live edits arrive while they are uploading. Credit reserved for agents and renders is counted once. Cached assets update reliably on Windows servers.`, "cloud"),
   release(
     "2026-11-09T12:03:00Z",
     "revit-top-rails",

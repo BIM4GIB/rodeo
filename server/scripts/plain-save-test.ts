@@ -1,3 +1,4 @@
+import { COLLAB_PROTOCOL } from "../../web/src/platform/protocol.ts";
 // node scripts/plain-save-test.ts — pause real uploads across acknowledged edits and saves.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -55,7 +56,7 @@ try {
     sockets.push(ws);
     const seen: ServerMessage[] = [];
     ws.on("message", b => seen.push(JSON.parse(b.toString()) as ServerMessage));
-    await once(ws, "open"); ws.send(JSON.stringify({ t: "hello", versionId: f.headVersionId }));
+    await once(ws, "open"); ws.send(JSON.stringify({ t: "hello", proto: COLLAB_PROTOCOL, versionId: f.headVersionId }));
     await until(() => seen.some(m => m.t === "welcome"));
     const finish = await paused(f, withBase);
     ws.send(JSON.stringify({ t: "op", id: 1, base: 0, op: { start: 0, del: 0, kind: "objects", ids: ["test"], add: ["AQID"] } }));
