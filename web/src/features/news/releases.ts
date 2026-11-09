@@ -21,6 +21,8 @@ const release = (date: string, id: string, title: string, body: string, art: Art
 });
 
 export const RELEASES: readonly Release[] = [
+  release("2026-11-09T12:09:00Z", "per-drawing-recovery", "Recovery for every open drawing",
+    `Background drawings keep separate recovery copies. Copies are spread across timer ticks, saved drawings remove only their own copy, and abandoned copies expire after seven days.`, "announce"),
   release(
     "2026-11-09T12:03:00Z",
     "revit-top-rails",

@@ -3,7 +3,7 @@
 // Refuses to run if the origin already has backups; never run on a production origin.
 import { blankDrawing } from "../core/blank.ts";
 import { openVwx } from "../core/index.ts";
-import { backupKeys, deleteBackup, readBackup, Recovery, withRecovery, writeBackup } from "./recovery.ts";
+import { backupKeys, deleteBackup, deleteBackupIfUnchanged, expireBackups, RECOVERY_MAX_AGE, readBackup, Recovery, withRecovery, writeBackup } from "./recovery.ts";
 
 function check(ok: boolean, why: string): void { if (!ok) throw new Error(why); }
 export async function checkRecovery(): Promise<void> {
@@ -19,12 +19,30 @@ export async function checkRecovery(): Promise<void> {
     // Drawing A remains tracked when B becomes active before the first tick.
     recovery.track(b, () => ({ name: "same.vwx", size: 6000 })); add(b);
     await advance();
+    check((await backupKeys()).length === 1, "one drawing is serialized per tick");
+    await recovery.tick();
     const keys = await backupKeys(); check(keys.length === 2, "same-name sessions need separate backups");
     let offered = 0;
     for (const key of keys) await withRecovery(key, async () => { offered++; });
     check(offered === 0, "active sessions must not be offered to another window");
     b.markSaved(); await recovery.settled();
     check((await backupKeys()).length === 1 && a.dirty, "saving B must preserve A");
+    const remove = IDBObjectStore.prototype.delete;
+    let deletes = 0;
+    IDBObjectStore.prototype.delete = function (...args: Parameters<IDBObjectStore["delete"]>) {
+      deletes++;
+      return remove.apply(this, args);
+    };
+    try {
+      b.applyRemote({ start: 0, del: 0, add: [], kind: "all", ids: [] });
+      b.markSaved();
+      await recovery.settled();
+      check(deletes === 0, "clean remote changes do not queue storage deletions");
+    } finally {
+      IDBObjectStore.prototype.delete = remove;
+    }
+    await expireBackups(now + RECOVERY_MAX_AGE + 1);
+    check((await backupKeys()).length === 1, "expiry protects active locked copies");
     a.undo(); await recovery.settled(); check((await backupKeys()).length === 0, "undo to saved clears only that backup");
     a.redo(); await advance(); check((await backupKeys()).length === 1, "redo schedules a new copy");
 
@@ -86,6 +104,31 @@ export async function checkRecovery(): Promise<void> {
       await recovery.forget(recovered);
     });
     check(await readBackup("latest") === null, "legacy entry removed only after successful transfer");
+    const old = { name: "old", bytes: blankDrawing("mm"), savedAt: 0 };
+    await writeBackup("expired", old);
+    await writeBackup("recent", { ...old, savedAt: now + RECOVERY_MAX_AGE });
+    await expireBackups(now + RECOVERY_MAX_AGE);
+    check(await readBackup("expired") === null, "abandoned copies expire after seven days");
+    check(await readBackup("recent") !== null, "recent copies survive expiry");
+    await deleteBackup("recent");
+    const locks = Object.getOwnPropertyDescriptor(navigator, "locks");
+    Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+    try {
+      await writeBackup("fallback", old);
+      await withRecovery("fallback", async (backup, exclusive) => {
+        check(!exclusive, "exercise the no-lock fallback");
+        await deleteBackupIfUnchanged("fallback", backup);
+      });
+      check(await readBackup("fallback") === null, "no-lock recovery can remove the original");
+      await writeBackup("fallback", old);
+      await writeBackup("fallback", { ...old, savedAt: 1 });
+      await deleteBackupIfUnchanged("fallback", old);
+      check((await readBackup("fallback"))?.savedAt === 1, "a newer copy survives stale cleanup");
+    } finally {
+      if (locks) Object.defineProperty(navigator, "locks", locks);
+      else delete (navigator as unknown as { locks?: LockManager }).locks;
+      await deleteBackup("fallback");
+    }
   } finally {
     IDBObjectStore.prototype.put = put;
     await recovery.forget(a); await recovery.forget(b);

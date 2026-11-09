@@ -16,7 +16,11 @@ export interface AutosaveDeps {
 }
 
 export function installAutosave(deps: AutosaveDeps): Recovery {
-  const recovery = new Recovery(() => ({ enabled: prefs().autosave, minutes: prefs().autosaveMinutes, maxBytes: AUTOSAVE_MAX_BYTES }));
+  const recovery = new Recovery(() => ({
+    enabled: prefs().autosave,
+    minutes: prefs().autosaveMinutes,
+    maxBytes: AUTOSAVE_MAX_BYTES,
+  }));
   window.setInterval(() => void recovery.tick(), 15_000);
   if (!new URLSearchParams(location.search).has("embed")) {
     void offerRecovery(deps, recovery).catch(() => {});
@@ -30,7 +34,8 @@ async function offerRecovery(deps: AutosaveDeps, recovery: Recovery): Promise<vo
   for (const key of await backupKeys()) await withRecovery(key, async (b) => {
     const discard = h("input", { attrs: { type: "checkbox" } });
     const open = await showDialog<true>({
-      title: "Recover Drawing", okLabel: "Open Copy",
+      title: "Recover Drawing",
+      okLabel: "Open Copy",
       body: [
         h("p", { cls: "menu-dialog-text", text: `Rodeo kept a copy of "${b.name}" with changes that were not saved (${new Date(b.savedAt).toLocaleString()}).` }),
         h("p", { cls: "muted", text: "Open it, then save it to keep the changes." }),

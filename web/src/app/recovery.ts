@@ -1,7 +1,11 @@
 // Recovery storage and per-session scheduling, independent of the active drawing and UI.
 import type { EditSession } from "../core/index.ts";
 
-export interface Backup { name: string; bytes: Uint8Array; savedAt: number }
+export interface Backup {
+  name: string;
+  bytes: Uint8Array;
+  savedAt: number;
+}
 const DB = "openvwx-autosave";
 const STORE = "backups";
 export const RECOVERY_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -43,7 +47,9 @@ export async function withRecovery(key: IDBValidKey, use: (b: Backup, exclusive:
     if (b) await use(b, exclusive);
   };
   if (!navigator.locks) return read(false); // cleanup compares the offered snapshot atomically
-  await navigator.locks.request(lockName(key), { ifAvailable: true }, async lock => { if (lock) await read(true); });
+  await navigator.locks.request(lockName(key), { ifAvailable: true }, async lock => {
+    if (lock) await read(true);
+  });
 }
 
 interface Entry {
@@ -76,10 +82,23 @@ export class Recovery {
     const key = crypto.randomUUID();
     const ready = navigator.locks ? new Promise<void>((resolve, reject) => {
       const held = new Promise<void>(done => release = done);
-      void navigator.locks.request(lockName(key), async () => { resolve(); await held; }).catch(reject);
+      void navigator.locks.request(lockName(key), async () => {
+        resolve();
+        await held;
+      }).catch(reject);
     }) : Promise.resolve();
-    const e: Entry = { key, session, info, ready, release, chain: Promise.resolve(), active: true, pending: session.dirty,
-      wasDirty: session.dirty, writing: false, revision: 0, lastEdit: this.now(), lastCopy: this.now(), off: () => {} };
+    const e: Entry = {
+      key, session, info, ready, release,
+      chain: Promise.resolve(),
+      active: true,
+      pending: session.dirty,
+      wasDirty: session.dirty,
+      writing: false,
+      revision: 0,
+      lastEdit: this.now(),
+      lastCopy: this.now(),
+      off: () => {},
+    };
     this.entries.set(session, e);
     e.off = session.onChange(() => {
       e.revision++;

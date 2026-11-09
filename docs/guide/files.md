@@ -20,7 +20,9 @@ Files saved by Vectorworks 2018 or later open as they are. A file saved by Vecto
 
 ### Autosave
 
-While a drawing has unsaved changes, a copy is kept in the browser every 5 minutes, and offered back when Rodeo starts after a crash or a closed tab. **Edit › Preferences…** sets how often, or turns it off.
+While a drawing has unsaved changes, its own copy is kept in the browser every 5 minutes (including background drawing tabs), and offered back when Rodeo starts after a crash or a closed tab. **Edit › Preferences…** sets how often, or turns it off.
+
+Saving or discarding a drawing removes only its copy. Recovered copies open unsaved. Abandoned copies expire after seven days; save recovered work to keep it. One drawing is copied per timer tick. Active windows are protected where browser locks are available; cleanup always preserves a copy updated after its recovery dialog opened.
 
 **Limits:** drawings over 150 MB are not copied, since writing one out takes as much memory again.
 
